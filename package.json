@@ -1,0 +1,16 @@
+{
+  "name": "cooperative-milk-platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --workspace apps/api run build",
+    "build:web": "npm --workspace apps/web run build",
+    "db:generate": "npm --workspace apps/api run prisma:generate",
+    "db:migrate": "npm --workspace apps/api run prisma:migrate"
+  },
+  "workspaces": ["apps/*", "packages/*"],
+  "devDependencies": { "concurrently": "^9.0.0", "typescript": "^5.6.0" }
+}

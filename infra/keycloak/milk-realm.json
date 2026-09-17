@@ -1,0 +1,27 @@
+{
+  "realm": "milk",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "roles": { "realm": [
+    {"name":"PLATFORM_SUPER_ADMIN"},
+    {"name":"COOPERATIVE_MANAGER"},
+    {"name":"COLLECTOR"},
+    {"name":"FARMER"}
+  ]},
+  "clients": [{
+    "clientId":"milk-web",
+    "publicClient":true,
+    "standardFlowEnabled":true,
+    "directAccessGrantsEnabled":false,
+    "redirectUris":["http://localhost:3000/*"],
+    "webOrigins":["http://localhost:3000"]
+  }]
+}

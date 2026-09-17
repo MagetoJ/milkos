@@ -1,0 +1,268 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum CooperativeStatus { PENDING UNDER_REVIEW MORE_INFORMATION_REQUIRED APPROVED REJECTED SUSPENDED }
+enum MembershipRole { COOPERATIVE_MANAGER COLLECTOR FARMER }
+enum MembershipStatus { INVITED ACTIVE SUSPENDED REVOKED }
+enum VerificationChannel { PHONE GOOGLE EMAIL }
+enum VerificationStatus { PENDING VERIFIED EXPIRED LOCKED }
+enum CollectionStatus { CONFIRMED SYNC_PENDING SYNCED CORRECTION_REQUESTED CORRECTED REVERSAL_REQUESTED REVERSED }
+enum ApprovalStatus { PENDING APPROVED REJECTED }
+enum NotificationStatus { QUEUED PROCESSING SENT FAILED MANUAL_RETRY }
+enum MeasurementUnit { KG LITRES BOTH }
+
+a model User {
+  id String @id @default(uuid())
+  keycloakId String @unique
+  email String?
+  phone String?
+  displayName String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships Membership[]
+  auditEvents AuditEvent[] @relation("ActorAudit")
+}
+
+model Cooperative {
+  id String @id @default(uuid())
+  name String
+  registrationNumber String?
+  status CooperativeStatus @default(PENDING)
+  currency String @default("KES")
+  measurementUnit MeasurementUnit @default(KG)
+  logoUrl String?
+  primaryColor String?
+  secondaryColor String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships Membership[]
+  farmers Farmer[]
+  centres CollectionCentre[]
+  collections MilkCollection[]
+  notifications Notification[]
+  auditEvents AuditEvent[]
+  priceTables PriceTable[]
+  applications CooperativeApplication[]
+}
+
+model Membership {
+  id String @id @default(uuid())
+  userId String
+  cooperativeId String
+  role MembershipRole
+  status MembershipStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  user User @relation(fields:[userId], references:[id])
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  @@unique([userId, cooperativeId, role])
+  @@index([cooperativeId, status])
+}
+
+model RegistrationVerification {
+  id String @id @default(uuid())
+  channel VerificationChannel
+  destination String
+  status VerificationStatus @default(PENDING)
+  codeHash String?
+  attempts Int @default(0)
+  expiresAt DateTime
+  verifiedAt DateTime?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  @@index([destination, channel, status])
+}
+
+model CooperativeApplication {
+  id String @id @default(uuid())
+  cooperativeId String @unique
+  applicantUserId String
+  status CooperativeStatus @default(PENDING)
+  reference String @unique
+  notes String?
+  requestedInformation String?
+  submittedAt DateTime @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+}
+
+model Farmer {
+  id String @id @default(uuid())
+  cooperativeId String
+  memberNumber String
+  fullName String
+  phone String
+  smartRunFarmUserId String?
+  centreId String?
+  active Boolean @default(true)
+  deletedAt DateTime?
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  centre CollectionCentre? @relation(fields:[centreId], references:[id])
+  collections MilkCollection[]
+  @@unique([cooperativeId, memberNumber])
+  @@index([cooperativeId, fullName])
+}
+
+model CollectionCentre {
+  id String @id @default(uuid())
+  cooperativeId String
+  name String
+  active Boolean @default(true)
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  farmers Farmer[]
+  collections MilkCollection[]
+  @@unique([cooperativeId, name])
+}
+
+model ScaleDevice {
+  id String @id @default(uuid())
+  deviceIdentifier String @unique
+  cooperativeId String
+  centreId String?
+  active Boolean @default(true)
+  lastSeenAt DateTime?
+}
+
+model MilkCollection {
+  id String @id @default(uuid())
+  cooperativeId String
+  farmerId String
+  collectorUserId String
+  centreId String
+  quantityKg Decimal @db.Decimal(12,3)
+  quantityLitres Decimal? @db.Decimal(12,3)
+  unit MeasurementUnit @default(KG)
+  collectedAt DateTime
+  offlineCreatedAt DateTime?
+  scaleDeviceId String?
+  status CollectionStatus @default(CONFIRMED)
+  syncStatus String @default("SYNCED")
+  idempotencyKey String
+  referenceNumber String @unique
+  pricePerKg Decimal? @db.Decimal(12,2)
+  amount Decimal? @db.Decimal(14,2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  farmer Farmer @relation(fields:[farmerId], references:[id])
+  centre CollectionCentre @relation(fields:[centreId], references:[id])
+  correctionRequests CorrectionRequest[]
+  reversalRequests ReversalRequest[]
+  notifications Notification[]
+  @@unique([cooperativeId, idempotencyKey])
+  @@index([cooperativeId, collectedAt])
+  @@index([cooperativeId, farmerId, collectedAt])
+}
+
+model CorrectionRequest {
+  id String @id @default(uuid())
+  collectionId String
+  requestedBy String
+  approvedBy String?
+  requestedQuantityKg Decimal @db.Decimal(12,3)
+  reason String
+  status ApprovalStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  collection MilkCollection @relation(fields:[collectionId], references:[id])
+}
+
+model ReversalRequest {
+  id String @id @default(uuid())
+  collectionId String
+  requestedBy String
+  approvedBy String?
+  reason String
+  status ApprovalStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  collection MilkCollection @relation(fields:[collectionId], references:[id])
+  @@index([collectionId, status])
+}
+
+model PriceTable {
+  id String @id @default(uuid())
+  cooperativeId String
+  effectiveMonth DateTime
+  pricePerKg Decimal @db.Decimal(12,2)
+  currency String @default("KES")
+  status String @default("ACTIVE")
+  createdBy String
+  approvedBy String?
+  createdAt DateTime @default(now())
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  @@unique([cooperativeId, effectiveMonth])
+}
+
+model Notification {
+  id String @id @default(uuid())
+  cooperativeId String
+  collectionId String?
+  channel String @default("SMS")
+  recipient String
+  message String
+  status NotificationStatus @default(QUEUED)
+  attempts Int @default(0)
+  lastError String?
+  nextAttemptAt DateTime?
+  providerMessageId String?
+  createdAt DateTime @default(now())
+  sentAt DateTime?
+  cooperative Cooperative @relation(fields:[cooperativeId], references:[id])
+  collection MilkCollection? @relation(fields:[collectionId], references:[id])
+  attemptsLog NotificationAttempt[]
+  @@index([cooperativeId, status])
+}
+
+model NotificationAttempt {
+  id String @id @default(uuid())
+  notificationId String
+  attemptNumber Int
+  status String
+  errorCode String?
+  errorMessage String?
+  providerResponse String?
+  attemptedAt DateTime @default(now())
+  notification Notification @relation(fields:[notificationId], references:[id])
+}
+
+model AuditEvent {
+  id String @id @default(uuid())
+  cooperativeId String?
+  actorUserId String?
+  action String
+  entityType String?
+  entityId String?
+  result String
+  ipAddress String?
+  userAgent String?
+  requestId String?
+  correlationId String?
+  beforeState Json?
+  afterState Json?
+  metadata Json?
+  createdAt DateTime @default(now())
+  cooperative Cooperative? @relation(fields:[cooperativeId], references:[id])
+  actor User? @relation("ActorAudit", fields:[actorUserId], references:[id])
+  @@index([cooperativeId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+model SecurityEvent {
+  id String @id @default(uuid())
+  userId String?
+  cooperativeId String?
+  event String
+  result String
+  reason String?
+  ipAddress String
+  userAgent String?
+  requestId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([ipAddress, createdAt])
+  @@index([event, createdAt])
+}

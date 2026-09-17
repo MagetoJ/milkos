@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function Home() { return <main className="landing"><div className="card"><div className="eyebrow">COOPERATIVE MILK PLATFORM</div><h1>Milk collection, controlled.</h1><p>Multi-tenant operations, offline collection, audit trails and resilient notifications in one management platform.</p><div className="actions"><Link href="/dashboard">Open dashboard</Link><Link className="secondary" href="/cooperatives/register">Register cooperative</Link></div></div></main>; }
