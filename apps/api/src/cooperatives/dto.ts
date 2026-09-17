@@ -14,7 +14,7 @@ export class SubmitApplicationDto {
   @IsString() @MinLength(2) name!: string;
   @IsOptional() @IsString() registrationNumber?: string;
   @IsOptional() @IsEmail() email?: string;
-  @IsString() @Matches(/^\\+?[1-9]\\d{7,14}$/) phone!: string;
+  @IsString() @Matches(/^\+?[1-9]\d{7,14}$/) phone!: string;
   @IsOptional() @IsString() location?: string;
 }
 
