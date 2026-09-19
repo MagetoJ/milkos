@@ -21,6 +21,6 @@ async function bootstrap() {
   }));
   app.enableCors({ origin: process.env.WEB_URL, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  await app.listen(process.env.API_PORT || 4000);
+  await app.listen(process.env.API_PORT || 4000, '0.0.0.0');
 }
 bootstrap();

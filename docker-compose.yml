@@ -1,18 +1,4 @@
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: milk_platform
-      POSTGRES_USER: milk
-      POSTGRES_PASSWORD: milk
-    ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U milk -d milk_platform"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
@@ -31,9 +17,24 @@ services:
     ports: ["8080:8080"]
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports: ["4000:4000"]
+    env_file:
+      - .env
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
 
-volumes:
-  pgdata:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports: ["3000:3000"]
+    env_file:
+      - .env
+    depends_on:
+      - api
