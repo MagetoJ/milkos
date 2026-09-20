@@ -36,10 +36,11 @@ RUN pnpm install --prod --frozen-lockfile
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 
 WORKDIR /app/apps/api
 
+RUN pnpm exec prisma generate
+
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/main.js"]
