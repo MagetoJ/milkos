@@ -1,40 +1,97 @@
 services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: maziwa-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: milk
+      POSTGRES_PASSWORD: milk
+      POSTGRES_DB: milk_platform
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U milk -d milk_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    container_name: maziwa-redis
+    restart: unless-stopped
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
 
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
+    container_name: maziwa-keycloak
+    restart: unless-stopped
+
     command: start-dev --import-realm
+
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: change-me
-    ports: ["8080:8080"]
+
+    ports:
+      - "8080:8080"
+
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import
+
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    ports: ["4000:4000"]
+
+    container_name: maziwa-api
+    restart: unless-stopped
+
+    ports:
+      - "4000:4000"
+
     env_file:
       - .env
+
     depends_on:
+      postgres:
+        condition: service_healthy
+
       redis:
         condition: service_healthy
+
+      keycloak:
+        condition: service_started
+
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    ports: ["3000:3000"]
+
+    container_name: maziwa-web
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
     env_file:
       - .env
+
     depends_on:
       - api
+
+
+volumes:
+  postgres_data:
