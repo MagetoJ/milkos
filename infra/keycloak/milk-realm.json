@@ -16,12 +16,28 @@
     {"name":"COLLECTOR"},
     {"name":"FARMER"}
   ]},
-  "clients": [{
-    "clientId":"milk-web",
-    "publicClient":true,
-    "standardFlowEnabled":true,
-    "directAccessGrantsEnabled":false,
-    "redirectUris":["http://localhost:3000/*"],
-    "webOrigins":["http://localhost:3000"]
-  }]
+ "clients": [{
+  "clientId": "milk-web",
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "directAccessGrantsEnabled": false,
+  "redirectUris": [
+    "http://localhost:3000/*"
+  ],
+  "webOrigins": [
+    "http://localhost:3000"
+  ],
+  "protocolMappers": [
+    {
+      "name": "milk-api-audience",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.client.audience": "milk-api",
+        "id.token.claim": "false",
+        "access.token.claim": "true"
+      }
+    }
+  ]
+}]
 }

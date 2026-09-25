@@ -1,28 +1,194 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+
+type Farmer = Record<string, unknown>;
+type TabId = 'overview' | 'collections' | 'farmers' | 'centres' | 'devices' | 'milk-loss' | 'audit';
+
+function TabHeading({ title, description }: { title: string; description: string }) {
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <h1 style={{ margin: 0, color: '#0f172a', fontSize: '2rem' }}>{title}</h1>
+      <p style={{ margin: '0.5rem 0 0', color: '#64748b' }}>{description}</p>
+    </div>
+  );
+}
+
+function Panel({ children }: { children: ReactNode }) {
+  return (
+    <section
+      style={{
+        padding: '1.5rem',
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '0.5rem',
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+function OverviewTab() {
+  return (
+    <>
+      <TabHeading title="Overview" description="Monitor your cooperative's daily operations." />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '1rem',
+        }}
+      >
+        <Panel>
+          <strong>0 L</strong>
+          <div style={{ color: '#64748b' }}>Today's collection</div>
+        </Panel>
+        <Panel>
+          <strong>0</strong>
+          <div style={{ color: '#64748b' }}>Active farmers</div>
+        </Panel>
+        <Panel>
+          <strong>0</strong>
+          <div style={{ color: '#64748b' }}>Collection centres</div>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function CollectionsTab() {
+  return (
+    <>
+      <TabHeading title="Collections" description="Review milk collection activity and records." />
+      <Panel>
+        <p style={{ margin: 0, color: '#64748b' }}>No collection records yet.</p>
+      </Panel>
+    </>
+  );
+}
+
+function FarmersTab({ farmers, loading }: { farmers: Farmer[]; loading: boolean }) {
+  return (
+    <>
+      <TabHeading title="Farmers" description="Manage farmers connected to this cooperative." />
+      <Panel>
+        {loading ? (
+          <p style={{ margin: 0, color: '#64748b' }}>Loading farmers...</p>
+        ) : farmers.length === 0 ? (
+          <p style={{ margin: 0, color: '#64748b' }}>No farmers found.</p>
+        ) : (
+          <p style={{ margin: 0 }}>{farmers.length} farmer(s) registered.</p>
+        )}
+      </Panel>
+    </>
+  );
+}
+
+function CentresTab() {
+  return (
+    <>
+      <TabHeading title="Centres" description="Manage milk collection centres." />
+      <Panel>
+        <p style={{ margin: 0, color: '#64748b' }}>No collection centres yet.</p>
+      </Panel>
+    </>
+  );
+}
+
+function DevicesTab() {
+  return (
+    <>
+      <TabHeading title="Devices" description="Track registered collection devices." />
+      <Panel>
+        <p style={{ margin: 0, color: '#64748b' }}>No devices registered.</p>
+      </Panel>
+    </>
+  );
+}
+
+function MilkLossTab() {
+  return (
+    <>
+      <TabHeading title="Milk Loss" description="Review quality and loss trends." />
+      <Panel>
+        <p style={{ margin: 0, color: '#64748b' }}>No milk loss data yet.</p>
+      </Panel>
+    </>
+  );
+}
+
+function AuditTab() {
+  return (
+    <>
+      <TabHeading title="Audit" description="Review activity and system events." />
+      <Panel>
+        <p style={{ margin: 0, color: '#64748b' }}>No audit events yet.</p>
+      </Panel>
+    </>
+  );
+}
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'collections' | 'farmers' | 'centres' | 'devices' | 'milk-loss' | 'audit'>('overview');
-  
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-  const cooperativeId = '13da2e35-25c2-4f1b-96ea-ac0170ff7e12'; // Mogor Smart Dairy Cooperative ID
-
-  const [farmers, setFarmers] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [apiStatus, setApiStatus] = useState('Checking API...');
+  const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [loadingFarmers, setLoadingFarmers] = useState(false);
 
-  useEffect(() => {
-    if (activeTab === 'farmers') {
-      setLoadingFarmers(true);
-      fetch(`${api}/cooperatives/${cooperativeId}/farmers`)
-        .then((res) => (res.ok ? res.json() : []))
-        .then((data) => setFarmers(data))
-        .catch((err) => console.error('Error fetching farmers:', err))
-        .finally(() => setLoadingFarmers(false));
-    }
-  }, [activeTab]);
+  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const cooperativeId = '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
 
-  const navItems = [
+  useEffect(() => {
+    fetch(`${api}/health`)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        setApiStatus(data.status === 'ok' ? 'FastAPI connected' : 'FastAPI responded');
+      })
+      .catch((error) => {
+        console.error('FastAPI connection failed:', error);
+        setApiStatus('FastAPI connection failed');
+      });
+  }, [api]);
+
+  useEffect(() => {
+    if (activeTab !== 'farmers') {
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingFarmers(true);
+
+    fetch(`${api}/cooperatives/${cooperativeId}/farmers`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => {
+        if (isMounted) {
+          setFarmers(Array.isArray(data) ? (data as Farmer[]) : []);
+        }
+      })
+      .catch((error) => {
+        console.error('Error fetching farmers:', error);
+        if (isMounted) {
+          setFarmers([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingFarmers(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, api, cooperativeId]);
+
+  const navItems: Array<{ id: TabId; label: string }> = [
     { id: 'overview', label: 'Overview' },
     { id: 'collections', label: 'Collections' },
     { id: 'farmers', label: 'Farmers' },
@@ -33,19 +199,47 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 60px)', background: '#f8fafc' }}>
-      {/* MilkOS Sidebar */}
-      <aside style={{ width: '220px', background: '#ffffff', borderRight: '1px solid #e2e8f0', padding: '1.5rem 1rem' }}>
-        <div style={{ fontWeight: '700', fontSize: '1.25rem', marginBottom: '1.5rem', color: '#0f172a' }}>
+    <div
+      style={{
+        display: 'flex',
+        minHeight: 'calc(100vh - 60px)',
+        background: '#f8fafc',
+      }}
+    >
+      <aside
+        style={{
+          width: '220px',
+          background: '#ffffff',
+          borderRight: '1px solid #e2e8f0',
+          padding: '1.5rem 1rem',
+        }}
+      >
+        <div
+          style={{
+            fontWeight: '700',
+            fontSize: '1.25rem',
+            marginBottom: '1.5rem',
+            color: '#0f172a',
+          }}
+        >
           MilkOS
         </div>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+
+        <nav
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.375rem',
+          }}
+        >
           {navItems.map((item) => {
             const isActive = activeTab === item.id;
+
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
+                type="button"
+                onClick={() => setActiveTab(item.id)}
                 style={{
                   display: 'block',
                   width: '100%',
@@ -68,9 +262,31 @@ export default function DashboardPage() {
         </nav>
       </aside>
 
-      {/* Dynamic Tab Content */}
       <main style={{ flex: 1, padding: '2rem' }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+        <div
+          style={{
+            marginBottom: '1rem',
+            padding: '0.75rem 1rem',
+            borderRadius: '0.5rem',
+            background: apiStatus === 'FastAPI connected' ? '#ecfdf5' : '#fef3c7',
+            border: apiStatus === 'FastAPI connected' ? '1px solid #a7f3d0' : '1px solid #fcd34d',
+            color: apiStatus === 'FastAPI connected' ? '#065f46' : '#92400e',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+          }}
+        >
+          API Status: {apiStatus}
+        </div>
+
+        <div
+          style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: '#64748b',
+            textTransform: 'uppercase',
+            marginBottom: '0.25rem',
+          }}
+        >
           MOGOR SMART DAIRY
         </div>
 
@@ -82,137 +298,6 @@ export default function DashboardPage() {
         {activeTab === 'milk-loss' && <MilkLossTab />}
         {activeTab === 'audit' && <AuditTab />}
       </main>
-    </div>
-  );
-}
-
-/* ---------------- Sub-views ---------------- */
-
-function OverviewTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1.5rem' }}>Operations Overview</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-        <StatCard title="Total Collected" value="18,420 KG" />
-        <StatCard title="Active Farmers" value="426" />
-        <StatCard title="Intake Records" value="1,248" />
-        <StatCard title="Grade A Quality" value="96.8%" />
-      </div>
-      <div style={{ background: '#ffffff', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem' }}>Daily Collection Trend</h3>
-        <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Intake volume consistent across 12 collection points.</p>
-      </div>
-    </div>
-  );
-}
-
-function CollectionsTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Milk Collections</h1>
-      <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>Live intake records synchronized from mobile scale terminals.</p>
-      <table style={{ width: '100%', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', textAlign: 'left', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-            <th style={{ padding: '0.75rem 1rem' }}>Receipt #</th>
-            <th style={{ padding: '0.75rem 1rem' }}>Farmer</th>
-            <th style={{ padding: '0.75rem 1rem' }}>Centre</th>
-            <th style={{ padding: '0.75rem 1rem' }}>Quantity</th>
-            <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style={{ padding: '0.75rem 1rem' }}>COL-001</td>
-            <td style={{ padding: '0.75rem 1rem' }}>John Kiptoo (MOG-001)</td>
-            <td style={{ padding: '0.75rem 1rem' }}>Mogor Main Centre</td>
-            <td style={{ padding: '0.75rem 1rem' }}>18.5 KG</td>
-            <td style={{ padding: '0.75rem 1rem', color: '#16a34a', fontWeight: '600' }}>Synced</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function FarmersTab({ farmers, loading }: { farmers: any[]; loading: boolean }) {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Registered Farmers</h1>
-      {loading ? (
-        <p>Loading registered farmers...</p>
-      ) : farmers.length === 0 ? (
-        <p style={{ color: '#64748b' }}>No farmers registered yet. Use the API or Mobile app to register members.</p>
-      ) : (
-        <table style={{ width: '100%', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', textAlign: 'left', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '0.75rem 1rem' }}>Member #</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Full Name</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Phone</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Assigned Centre</th>
-            </tr>
-          </thead>
-          <tbody>
-            {farmers.map((f) => (
-              <tr key={f.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '0.75rem 1rem', fontWeight: '600' }}>{f.memberNumber}</td>
-                <td style={{ padding: '0.75rem 1rem' }}>{f.fullName}</td>
-                <td style={{ padding: '0.75rem 1rem' }}>{f.phone}</td>
-                <td style={{ padding: '0.75rem 1rem' }}>{f.centre?.name || 'Main Intake'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-function CentresTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Collection Centres</h1>
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '1rem' }}>
-        <h3>Mogor Main Intake Centre</h3>
-        <p style={{ color: '#64748b', fontSize: '0.875rem' }}>ID: centre_mogor_01 | Status: Active</p>
-      </div>
-    </div>
-  );
-}
-
-function DevicesTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Smart Scales & Terminals</h1>
-      <p style={{ color: '#64748b' }}>Bluetooth scales and Android collection units.</p>
-    </div>
-  );
-}
-
-function MilkLossTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Milk Loss & Rejection Tracking</h1>
-      <p style={{ color: '#64748b' }}>Spillage, transport variance, and temperature rejection logs.</p>
-    </div>
-  );
-}
-
-function AuditTab() {
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a', marginBottom: '1rem' }}>Audit Trail</h1>
-      <p style={{ color: '#64748b' }}>Immutable ledger of administrative actions and record approvals.</p>
-    </div>
-  );
-}
-
-function StatCard({ title, value }: { title: string; value: string }) {
-  return (
-    <div style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
-      <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>{title}</div>
-      <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#0f172a' }}>{value}</div>
     </div>
   );
 }

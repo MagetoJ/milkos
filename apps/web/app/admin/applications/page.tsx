@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 export default function AdminApplicationsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState('');
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
   async function load() {
     try {
