@@ -1,12 +1,10 @@
 import { Controller, Post, Get, Body, Param } from '@nestjs/common';
-import { Public } from '../auth/public.decorator';
 import { FarmersService } from './farmers.service';
 
 @Controller('cooperatives/:cooperativeId/farmers')
 export class FarmersController {
   constructor(private readonly farmersService: FarmersService) {}
 
-  @Public()
   @Post()
   create(
     @Param('cooperativeId') cooperativeId: string,
@@ -15,7 +13,6 @@ export class FarmersController {
     return this.farmersService.createFarmer(cooperativeId, dto);
   }
 
-  @Public()
   @Get()
   list(@Param('cooperativeId') cooperativeId: string) {
     return this.farmersService.getFarmers(cooperativeId);

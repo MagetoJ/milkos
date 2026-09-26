@@ -41,3 +41,9 @@ This is the initial implementation foundation. Provider credentials, production 
 ## Current build stage
 
 The project now includes the cooperative onboarding verification flow, applicant status lookup and Platform Super Admin application review APIs/UI. See `docs/NEXT_STAGE.md` for the implementation boundary and production hardening list.
+
+## SMS verification and tenant context
+
+Phone verification sends through Africa's Talking when `SMS_PROVIDER=africastalking`. Configure `AFRICASTALKING_USERNAME`, `AFRICASTALKING_API_KEY`, and optionally `AFRICASTALKING_SENDER_ID`. The API stores only the SHA-256 code hash and never returns the OTP in a response. `SMS_PROVIDER=dummy` is a non-production simulation; it does not deliver or disclose the code. Production requests fail closed if the real provider is unavailable or credentials are missing.
+
+Tenant-scoped API requests resolve cooperative access from the authenticated Keycloak user and active `Membership` records. Users with one active cooperative use it automatically; users with multiple memberships must send `x-cooperative-id` for tenant-scoped requests. The request interceptor starts a Prisma interactive transaction, sets transaction-local `app.current_cooperative_id`, and routes service queries through that transaction. Public onboarding and health routes do not establish tenant context. PostgreSQL policies are applied by the `tenant_row_level_security` Prisma migration; `docs/RLS.sql` contains the corresponding policy definitions.

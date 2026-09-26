@@ -46,7 +46,7 @@ export class CollectionsService {
     },
     ctx: { ip?: string; requestId?: string; userAgent?: string },
   ) {
-    const existing = await this.prisma.milkCollection.findUnique({
+    const existing = await this.prisma.tenantClient.milkCollection.findUnique({
       where: {
         cooperativeId_idempotencyKey: {
           cooperativeId: input.cooperativeId,
@@ -56,18 +56,18 @@ export class CollectionsService {
     });
     if (existing) return existing;
 
-    const farmer = await this.prisma.farmer.findFirst({
+    const farmer = await this.prisma.tenantClient.farmer.findFirst({
       where: { id: input.farmerId, cooperativeId: input.cooperativeId, active: true, deletedAt: null },
     });
     if (!farmer) throw new NotFoundException('Active farmer not found in cooperative');
 
-    const centre = await this.prisma.collectionCentre.findFirst({
+    const centre = await this.prisma.tenantClient.collectionCentre.findFirst({
       where: { id: input.centreId, cooperativeId: input.cooperativeId, active: true },
     });
     if (!centre) throw new NotFoundException('Collection centre not found in cooperative');
 
     try {
-      const collection = await this.prisma.$transaction(async (tx) => {
+      const collection = await this.prisma.transaction(async (tx) => {
         const record = await tx.milkCollection.create({
           data: {
             cooperativeId: input.cooperativeId,
@@ -115,7 +115,7 @@ export class CollectionsService {
       return collection;
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        const duplicate = await this.prisma.milkCollection.findUnique({
+        const duplicate = await this.prisma.tenantClient.milkCollection.findUnique({
           where: {
             cooperativeId_idempotencyKey: {
               cooperativeId: input.cooperativeId,
@@ -142,10 +142,10 @@ export class CollectionsService {
   }
 
   async requestReversal(collectionId: string, cooperativeId: string, requestedBy: string, reason: string, ctx: any) {
-    const collection = await this.prisma.milkCollection.findFirst({ where: { id: collectionId, cooperativeId } });
+    const collection = await this.prisma.tenantClient.milkCollection.findFirst({ where: { id: collectionId, cooperativeId } });
     if (!collection) throw new NotFoundException('Collection not found');
 
-    const reversal = await this.prisma.reversalRequest.create({ data: { collectionId, requestedBy, reason } });
+    const reversal = await this.prisma.tenantClient.reversalRequest.create({ data: { collectionId, requestedBy, reason } });
     await this.audit.record({
       cooperativeId,
       actorUserId: requestedBy,
@@ -161,7 +161,7 @@ export class CollectionsService {
   }
 
   async approveReversal(reversalId: string, cooperativeId: string, approver: string, ctx: any) {
-    const reversal = await this.prisma.reversalRequest.findFirst({
+    const reversal = await this.prisma.tenantClient.reversalRequest.findFirst({
       where: { id: reversalId, collection: { cooperativeId } },
       include: { collection: true },
     });
@@ -171,7 +171,7 @@ export class CollectionsService {
     }
     if (reversal.status !== 'PENDING') throw new ConflictException('Reversal is no longer pending');
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.transaction(async (tx) => {
       const r = await tx.reversalRequest.update({
         where: { id: reversalId },
         data: { status: 'APPROVED', approvedBy: approver, decidedAt: new Date() },

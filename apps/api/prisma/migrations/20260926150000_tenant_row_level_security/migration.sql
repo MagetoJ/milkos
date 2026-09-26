@@ -1,5 +1,3 @@
--- Apply as the database owner. Runtime requests must set this transaction-local
--- value only after validating the authenticated user's cooperative membership.
 ALTER TABLE "MilkCollection" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "MilkCollection" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "Farmer" ENABLE ROW LEVEL SECURITY;
