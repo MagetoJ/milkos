@@ -42,7 +42,7 @@ export class CooperativesController {
 
   @Public()
   @Post('applications/:id/review')
-  review(@Param('id') id: string, @Body() dto:ReviewApplicationDto, @Req() req: any) {
+  review(@Param('id') id: string, @Body() dto: ReviewApplicationDto, @Req() req: any) {
     return this.service.reviewApplication(id, req.user?.sub || 'DEV_ADMIN', dto, {
       ip: req.ip,
       requestId: req.requestId,

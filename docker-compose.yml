@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: milk
       POSTGRES_PASSWORD: milk
       POSTGRES_DB: milk_platform
-
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
