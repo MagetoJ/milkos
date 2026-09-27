@@ -12,6 +12,14 @@ export default function Navbar() {
     { label: 'Track Application', href: '/applications/status' },
     { label: 'Admin Portal', href: '/admin/applications' },
     { label: 'Co-op Dashboard', href: '/dashboard' },
+    { label: 'New Collection', href: '/collections/new' },
+    { label: 'Coolers', href: '/coolers' },
+    { label: 'Pricing', href: '/pricing' },
+    { label: 'SMS', href: '/sms' },
+    { label: 'Corrections', href: '/corrections' },
+    { label: 'Reversals', href: '/reversals' },
+    { label: 'Reports', href: '/reports' },
+    { label: 'Payments', href: '/admin/payments' },
   ];
 
   return (

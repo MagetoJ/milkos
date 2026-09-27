@@ -1,0 +1,30 @@
+.workspace { min-height: calc(100vh - 60px); max-width: 1440px; margin: 0 auto; padding: 32px clamp(16px, 4vw, 56px) 64px; background: #f5f7f3; color: #203327; }
+.topline { display: flex; justify-content: space-between; margin-bottom: 28px; color: #718075; font-size: 10px; font-weight: 800; }
+.topline a { color: #426249; font-size: 12px; }
+.eyebrow { margin: 0 0 7px; color: #55745d; font-size: 10px; font-weight: 800; }
+.workspace h1 { margin: 0; color: #203327; font-family: Georgia, 'Times New Roman', serif; font-size: 36px; font-weight: 500; }
+.workspace header > p:last-child { margin: 8px 0 24px; color: #718075; font-size: 13px; }
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 16px; border: 1px solid #dce4dc; background: white; }
+.filters label { display: grid; gap: 6px; color: #617063; font-size: 10px; font-weight: 800; }
+.filters input { min-height: 40px; border: 1px solid #d6dfd7; border-radius: 3px; padding: 8px 10px; color: #314636; font: inherit; font-size: 12px; }
+.filters button { min-height: 40px; border: 1px solid transparent; border-radius: 3px; padding: 8px 13px; background: #2f6b4f; color: white; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.filters button:disabled { opacity: .55; cursor: wait; }
+.filters .export { border-color: #d6dfd7; background: white; color: #3f5945; }
+.error { margin: 14px 0; padding: 12px; border-left: 3px solid #a4473d; background: #fbefed; color: #793730; font-size: 12px; }
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 16px 0; border: 1px solid #dce4dc; background: #dce4dc; }
+.summary div { display: grid; gap: 8px; padding: 17px; background: white; }
+.summary span { color: #778479; font-size: 9px; font-weight: 800; }
+.summary strong { color: #2d6740; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 500; }
+.tables { display: grid; gap: 16px; }
+.tableSection { border: 1px solid #dce4dc; background: white; }
+.tableSection h2 { margin: 0; padding: 15px 17px; border-bottom: 1px solid #e5eae5; color: #304534; font-size: 14px; }
+.tableWrap { overflow-x: auto; }
+.tableWrap table { width: 100%; border-collapse: collapse; text-align: left; }
+.tableWrap th { padding: 11px 15px; background: #f7f9f6; color: #7a867c; font-size: 9px; }
+.tableWrap td { padding: 13px 15px; border-top: 1px solid #edf0ed; color: #536256; font-size: 12px; }
+.noRows, .empty, .loading { padding: 22px; color: #788479; font-size: 12px; }
+.empty { margin-top: 16px; border: 1px dashed #dce4dc; background: white; text-align: center; }
+.empty strong { color: #405344; }
+.empty p { margin: 6px 0 0; color: #818c82; }
+.loading { margin-top: 16px; border: 1px solid #dce4dc; background: white; }
+@media (max-width: 560px) { .workspace { padding: 24px 14px 44px; } .workspace h1 { font-size: 30px; } .filters { display: grid; grid-template-columns: 1fr 1fr; } .filters button { grid-column: span 2; } .summary { grid-template-columns: 1fr; } .summary div { padding: 12px 15px; } .summary strong { font-size: 20px; } }

@@ -4,7 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
+  // Supabase: DATABASE_URL is the pooled connection (port 6543, ?pgbouncer=true),
+  // DIRECT_URL the session connection (port 5432) used by migrations.
+  directUrl = env("DIRECT_URL")
 }
 
 enum CooperativeStatus {
@@ -16,8 +19,22 @@ enum CooperativeStatus {
   SUSPENDED
 }
 
+// Platform-wide roles. Never tenant-scoped; granted only by a PLATFORM_SUPER_ADMIN.
+enum PlatformRole {
+  PLATFORM_SUPER_ADMIN
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// Cooperative-scoped roles, granted through Membership.
 enum MembershipRole {
   COOPERATIVE_MANAGER
+  ACCOUNTANT
   COLLECTOR
   FARMER
 }
@@ -72,16 +89,44 @@ enum MeasurementUnit {
   BOTH
 }
 
+enum ScaleConnectionState {
+  UNKNOWN
+  CONNECTED
+  DISCONNECTED
+}
+
+enum SmsLedgerType {
+  PURCHASE
+  RESERVED
+  CONSUMED
+  RELEASED
+  REFUNDED
+}
+
+enum PaymentVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
-  id          String       @id @default(uuid())
-  keycloakId  String       @unique
-  email       String?
-  phone       String?
-  displayName String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  memberships Membership[]
-  auditEvents AuditEvent[] @relation("ActorAudit")
+  id                   String        @id @default(uuid())
+  // Supabase auth.users.id (JWT `sub`). Credentials live in Supabase, never here.
+  authUserId           String        @unique
+  email                String?
+  phone                String?
+  displayName          String
+  platformRole         PlatformRole?
+  status               UserStatus    @default(ACTIVE)
+  defaultCooperativeId String?
+  lastSessionId        String?
+  lastSignInAt         DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  memberships          Membership[]
+  auditEvents          AuditEvent[]  @relation("ActorAudit")
+
+  @@index([email])
 }
 
 model Cooperative {
@@ -103,6 +148,10 @@ model Cooperative {
   notifications      Notification[]
   auditEvents        AuditEvent[]
   priceTables        PriceTable[]
+  milkPricings       MilkPricing[]
+  coolers            Cooler[]
+  smsLedgerEntries   SmsLedgerEntry[]
+  paymentVerifications PaymentVerification[]
   applications       CooperativeApplication[]
 }
 
@@ -112,7 +161,9 @@ model Membership {
   cooperativeId String
   role          MembershipRole
   status        MembershipStatus @default(ACTIVE)
+  invitedBy     String?
   createdAt     DateTime         @default(now())
+  activatedAt   DateTime?
   revokedAt     DateTime?
   user          User             @relation(fields: [userId], references: [id])
   cooperative   Cooperative      @relation(fields: [cooperativeId], references: [id])
@@ -176,6 +227,7 @@ model CollectionCentre {
   cooperative   Cooperative      @relation(fields: [cooperativeId], references: [id])
   farmers       Farmer[]
   collections   MilkCollection[]
+  coolers       Cooler[]
 
   @@unique([cooperativeId, name])
 }
@@ -183,10 +235,33 @@ model CollectionCentre {
 model ScaleDevice {
   id               String    @id @default(uuid())
   deviceIdentifier String    @unique
+  serialNumber     String?   @unique
   cooperativeId    String
   centreId         String?
+  coolerId         String?
   active           Boolean   @default(true)
+  connectionState  ScaleConnectionState @default(UNKNOWN)
+  batteryLevel     Int?
   lastSeenAt       DateTime?
+  cooler           Cooler?   @relation(fields: [coolerId], references: [id])
+}
+
+model Cooler {
+  id            String       @id @default(uuid())
+  cooperativeId String
+  centreId      String?
+  name          String
+  serialNumber  String       @unique
+  locationLabel String?
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  cooperative   Cooperative  @relation(fields: [cooperativeId], references: [id])
+  centre        CollectionCentre? @relation(fields: [centreId], references: [id])
+  scaleDevices  ScaleDevice[]
+  milkPricings  MilkPricing[]
+
+  @@index([cooperativeId, active])
 }
 
 model MilkCollection {
@@ -228,6 +303,7 @@ model CorrectionRequest {
   requestedBy         String
   approvedBy          String?
   requestedQuantityKg Decimal         @db.Decimal(12, 3)
+  originalQuantityKg  Decimal?        @db.Decimal(12, 3)
   reason              String
   status              ApprovalStatus  @default(PENDING)
   createdAt           DateTime        @default(now())
@@ -240,6 +316,8 @@ model ReversalRequest {
   collectionId String
   requestedBy  String
   approvedBy   String?
+  originalQuantityKg Decimal?        @db.Decimal(12, 3)
+  requestedQuantityKg Decimal?       @db.Decimal(12, 3)
   reason       String
   status       ApprovalStatus @default(PENDING)
   createdAt    DateTime       @default(now())
@@ -262,6 +340,81 @@ model PriceTable {
   cooperative    Cooperative @relation(fields: [cooperativeId], references: [id])
 
   @@unique([cooperativeId, effectiveMonth])
+}
+
+model MilkPricing {
+  id            String      @id @default(uuid())
+  cooperativeId String
+  coolerId      String?
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  pricePerKg    Decimal     @db.Decimal(12, 2)
+  currency      String      @default("KES")
+  createdBy     String
+  approvedBy    String?
+  createdAt     DateTime    @default(now())
+  cooperative   Cooperative @relation(fields: [cooperativeId], references: [id])
+  cooler        Cooler?     @relation(fields: [coolerId], references: [id])
+
+  @@unique([cooperativeId, coolerId, effectiveFrom])
+  @@index([cooperativeId, effectiveFrom, effectiveTo])
+}
+
+model SmsPackage {
+  id           String              @id @default(uuid())
+  name         String
+  description  String?
+  smsCount     Int
+  price        Decimal             @db.Decimal(12, 2)
+  currency     String              @default("KES")
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  paymentVerifications PaymentVerification[]
+  ledgerEntries SmsLedgerEntry[]
+
+  @@index([active, price])
+}
+
+model PaymentVerification {
+  id             String                    @id @default(uuid())
+  cooperativeId  String
+  packageId      String
+  mpesaReference String                    @unique
+  amountPaid     Decimal                   @db.Decimal(12, 2)
+  payerPhone     String
+  submittedBy    String
+  status         PaymentVerificationStatus @default(PENDING)
+  verifiedBy     String?
+  rejectionReason String?
+  createdAt      DateTime                  @default(now())
+  decidedAt      DateTime?
+  cooperative    Cooperative               @relation(fields: [cooperativeId], references: [id])
+  smsPackage     SmsPackage                @relation(fields: [packageId], references: [id])
+  ledgerEntries  SmsLedgerEntry[]
+
+  @@index([status, createdAt])
+  @@index([cooperativeId, status, createdAt])
+}
+
+model SmsLedgerEntry {
+  id                   String          @id @default(uuid())
+  cooperativeId        String
+  type                 SmsLedgerType
+  credits              Int
+  amount               Decimal?        @db.Decimal(12, 2)
+  reference            String?
+  idempotencyKey       String
+  packageId            String?
+  paymentVerificationId String?
+  createdBy            String?
+  createdAt            DateTime        @default(now())
+  cooperative          Cooperative     @relation(fields: [cooperativeId], references: [id])
+  smsPackage           SmsPackage?     @relation(fields: [packageId], references: [id])
+  paymentVerification  PaymentVerification? @relation(fields: [paymentVerificationId], references: [id])
+
+  @@unique([cooperativeId, idempotencyKey])
+  @@index([cooperativeId, createdAt])
+  @@index([cooperativeId, type, createdAt])
 }
 
 model Notification {

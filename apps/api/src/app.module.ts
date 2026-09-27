@@ -13,9 +13,10 @@ import { CooperativesService } from './cooperatives/cooperatives.service';
 import { FarmersModule } from './farmers/farmers.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantContextInterceptor } from './common/tenant-context.interceptor';
+import { OperationsModule } from './operations/operations.module';
 
 @Module({
-  imports: [AuthModule, FarmersModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
+  imports: [AuthModule, FarmersModule, OperationsModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
   controllers: [HealthController, CollectionsController, CooperativesController],
   providers: [
     PrismaService,

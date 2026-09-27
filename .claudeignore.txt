@@ -1,20 +1,17 @@
-# Node & Build artifacts
+# Heavy build directories & dependencies
 node_modules/
 .next/
 dist/
 build/
+.turbo/
 coverage/
 
-# Database / Prisma generated files
-/prisma/migrations/
-*.sqlite
-
-# Logs & Environment
+# Generated logs & locks
 *.log
-.env
-.env.*
-
-# Lockfiles (Claude doesn't need to read raw lock files)
-package-lock.json
-yarn.lock
 pnpm-lock.yaml
+package-lock.json
+*.tsbuildinfo
+
+# Database dumps
+*.sqlite
+prisma/migrations/*/migration.sql

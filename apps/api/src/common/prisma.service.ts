@@ -2,18 +2,34 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+/** NOLOGIN, NOBYPASSRLS role created by the supabase_auth_rbac migration. */
+const TENANT_DB_ROLE = 'milkos_app';
+
+interface TenantTransaction {
+  transaction: Prisma.TransactionClient;
+  cooperativeId: string;
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  private readonly transactionContext = new AsyncLocalStorage<{
-    transaction: Prisma.TransactionClient;
-    cooperativeId: string;
-  }>();
+  private readonly transactionContext = new AsyncLocalStorage<TenantTransaction>();
 
+  /** Inside a tenant request this is the RLS-bound transaction; otherwise the owner connection. */
   get tenantClient(): Prisma.TransactionClient | PrismaService {
     return this.transactionContext.getStore()?.transaction || this;
   }
 
-  async withTenantContext<T>(cooperativeId: string, callback: () => Promise<T>): Promise<T> {
+  get currentCooperativeId(): string | undefined {
+    return this.transactionContext.getStore()?.cooperativeId;
+  }
+
+  /**
+   * Runs `callback` in a transaction that has dropped to the tenant role, so
+   * PostgreSQL row-level security applies to every query it makes. The owner
+   * role used for the connection bypasses RLS; the switch is what makes the
+   * policies enforceable.
+   */
+  async withTenantContext<T>(cooperativeId: string, callback: () => Promise<T>, userId = ''): Promise<T> {
     const currentTransaction = this.transactionContext.getStore();
     if (currentTransaction) {
       if (currentTransaction.cooperativeId !== cooperativeId) {
@@ -23,7 +39,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
 
     return this.$transaction(async (transaction) => {
-      await transaction.$queryRaw`SELECT set_config('app.current_cooperative_id', ${cooperativeId}, true)`;
+      await transaction.$executeRawUnsafe(`SET LOCAL ROLE ${TENANT_DB_ROLE}`);
+      await transaction.$queryRaw`SELECT set_config('app.current_cooperative_id', ${cooperativeId}, true), set_config('app.current_user_id', ${userId}, true)`;
       return this.transactionContext.run({ transaction, cooperativeId }, callback);
     }, { maxWait: 5000, timeout: 30000 });
   }
