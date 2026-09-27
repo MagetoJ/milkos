@@ -3,21 +3,20 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import styles from './OperationsConsole.module.css';
+import { apiRequest, toApiError } from '../../lib/api';
+import { NoCooperative, useAuth } from './AuthProvider';
 
 type ConsoleMode = 'coolers' | 'pricing' | 'sms' | 'payments' | 'corrections' | 'reversals';
 type RecordRow = Record<string, unknown>;
 
-const cooperativeId = process.env.NEXT_PUBLIC_COOPERATIVE_ID || '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-
-const config: Record<ConsoleMode, { title: string; subtitle: string; endpoint: string }> = {
+const config = (cooperativeId: string): Record<ConsoleMode, { title: string; subtitle: string; endpoint: string }> => ({
   coolers: { title: 'Cooler directory', subtitle: 'Register collection coolers and pair scale devices.', endpoint: `/cooperatives/${cooperativeId}/coolers` },
   pricing: { title: 'Milk pricing', subtitle: 'Schedule per-kilogram prices by cooperative or cooler.', endpoint: `/cooperatives/${cooperativeId}/pricing` },
   sms: { title: 'SMS credits', subtitle: 'Review ledger-derived credit balance and submit M-Pesa purchases.', endpoint: `/cooperatives/${cooperativeId}/sms/ledger` },
   payments: { title: 'Payment verification', subtitle: 'Review submitted M-Pesa references for this cooperative.', endpoint: `/admin/payments?cooperativeId=${encodeURIComponent(cooperativeId)}` },
   corrections: { title: 'Corrections queue', subtitle: 'Review requests to change recorded milk quantities.', endpoint: `/collections/corrections/pending?cooperativeId=${encodeURIComponent(cooperativeId)}` },
   reversals: { title: 'Reversals queue', subtitle: 'Review requests to reverse confirmed collection records.', endpoint: `/collections/reversals/pending?cooperativeId=${encodeURIComponent(cooperativeId)}` },
-};
+});
 
 function displayValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '—';
@@ -26,6 +25,12 @@ function displayValue(value: unknown) {
 }
 
 export default function OperationsConsole({ mode }: { mode: ConsoleMode }) {
+  const { cooperativeId } = useAuth();
+  if (!cooperativeId) return <NoCooperative />;
+  return <Console key={cooperativeId} mode={mode} cooperativeId={cooperativeId} />;
+}
+
+function Console({ mode, cooperativeId }: { mode: ConsoleMode; cooperativeId: string }) {
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [packages, setPackages] = useState<RecordRow[]>([]);
@@ -33,21 +38,19 @@ export default function OperationsConsole({ mode }: { mode: ConsoleMode }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  const page = config[mode];
+  const page = config(cooperativeId)[mode];
 
   async function load() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${apiUrl}${page.endpoint}`);
-      if (!response.ok) throw new Error(response.status === 401 || response.status === 403
-        ? 'Sign in with the required cooperative or platform-admin account to view these records.'
-        : `Request failed (${response.status}).`);
+      const response = await apiRequest(page.endpoint);
+      if (!response.ok) throw await toApiError(response);
       const data = await response.json();
       if (mode === 'sms') {
         setRows(Array.isArray(data.entries) ? data.entries : []);
         setBalance(Number(data.balance) || 0);
-        const packageResponse = await fetch(`${apiUrl}/sms/packages`);
+        const packageResponse = await apiRequest('/sms/packages');
         if (packageResponse.ok) {
           const available = await packageResponse.json();
           setPackages(Array.isArray(available) ? available : []);
@@ -92,11 +95,8 @@ export default function OperationsConsole({ mode }: { mode: ConsoleMode }) {
 
     const formElement = event.currentTarget;
     try {
-      const response = await fetch(`${apiUrl}${endpoint}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.message || `Request failed (${response.status}).`);
-      }
+      const response = await apiRequest(endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) throw await toApiError(response);
       setMessage(mode === 'sms' ? 'Payment submitted for verification. SMS credits are added after approval.' : mode === 'payments' ? 'Payment decision recorded.' : mode === 'corrections' || mode === 'reversals' ? 'Approval decision recorded.' : 'Changes saved.');
       formElement.reset();
       await load();

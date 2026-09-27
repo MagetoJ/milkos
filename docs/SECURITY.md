@@ -1,7 +1,7 @@
 # Security Design
 
 ## Authentication
-Keycloak is the identity provider. The API validates OIDC access tokens. Platform administrators and cooperative managers require MFA. Password reset is handled by Keycloak with short-lived single-use reset actions and session revocation after sensitive recovery.
+Supabase Auth is the identity provider. The API verifies Supabase access tokens against the project's JWKS and loads roles and memberships from the MilkOS database on every request, so revocations apply immediately. Platform staff, cooperative managers and accountants must hold an authenticator-app (aal2) session. Password reset uses Supabase's single-use recovery links. Suspending a user bans them in Supabase so they cannot refresh their session. See `docs/AUTH.md`.
 
 ## Registration
 A cooperative applicant must verify a phone OTP or authenticate through Google before account/application creation. Registration responses must not disclose whether an email or phone is already registered.

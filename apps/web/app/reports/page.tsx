@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import styles from './page.module.css';
+import { apiRequest, toApiError } from '../../lib/api';
+import { NoCooperative, useAuth } from '../components/AuthProvider';
 
 type Report = {
   totalKg: number;
@@ -12,11 +14,10 @@ type Report = {
   centres: Array<{ centreId: string; centreName: string; quantityKg: number; collections: number }>;
 };
 
-const cooperativeId = process.env.NEXT_PUBLIC_COOPERATIVE_ID || '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 const today = new Date().toISOString().slice(0, 10);
 
 export default function ReportsPage() {
+  const { cooperativeId } = useAuth();
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
   const [report, setReport] = useState<Report | null>(null);
@@ -28,8 +29,8 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ from, to });
-      const response = await fetch(`${apiUrl}/cooperatives/${cooperativeId}/reports/collections?${params}`);
-      if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'Sign in with an active cooperative account to view reports.' : `Report request failed (${response.status}).`);
+      const response = await apiRequest(`/cooperatives/${cooperativeId}/reports/collections?${params}`);
+      if (!response.ok) throw await toApiError(response);
       setReport(await response.json());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Report request failed.');
@@ -42,8 +43,8 @@ export default function ReportsPage() {
     setError('');
     try {
       const params = new URLSearchParams({ from, to });
-      const response = await fetch(`${apiUrl}/cooperatives/${cooperativeId}/reports/collections.csv?${params}`);
-      if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'Sign in with an active cooperative account to export reports.' : `Export failed (${response.status}).`);
+      const response = await apiRequest(`/cooperatives/${cooperativeId}/reports/collections.csv?${params}`);
+      if (!response.ok) throw await toApiError(response);
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
       link.href = url;
@@ -54,6 +55,8 @@ export default function ReportsPage() {
       setError(cause instanceof Error ? cause.message : 'Export failed.');
     }
   }
+
+  if (!cooperativeId) return <NoCooperative />;
 
   return (
     <main className={styles.workspace}>

@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../../../lib/api';
 
 export default function AdminApplicationsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState('');
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const [error, setError] = useState('');
 
   async function load() {
     try {
-      const r = await fetch(`${api}/cooperatives/applications?status=PENDING`);
-      if (r.ok) setItems(await r.json());
+      setItems(await apiFetch<any[]>('/cooperatives/applications?status=PENDING'));
+      setError('');
     } catch (err) {
-      console.error('Failed to connect to API:', err);
+      setError(err instanceof Error ? err.message : 'Could not load applications.');
     }
   }
 
@@ -23,17 +24,13 @@ export default function AdminApplicationsPage() {
   async function review(id: string, status: string) {
     setBusy(id);
     try {
-      await fetch(`${api}/cooperatives/applications/${id}/review`, {
+      await apiFetch(`/cooperatives/applications/${id}/review`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
-        },
         body: JSON.stringify({ status }),
       });
       await load();
     } catch (err) {
-      console.error('Failed to submit review:', err);
+      setError(err instanceof Error ? err.message : 'Could not record the decision.');
     } finally {
       setBusy('');
     }
@@ -48,6 +45,7 @@ export default function AdminApplicationsPage() {
           <p>Review applicants before a cooperative becomes active.</p>
         </div>
       </header>
+      {error && <div className="error" role="alert">{error}</div>}
       <section className="panel table">
         <table>
           <thead>

@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from './page.module.css';
+import { apiRequest } from '../../../lib/api';
+import { useAuth } from '../../components/AuthProvider';
 
 type Farmer = {
   id: string;
@@ -23,14 +25,13 @@ type QueuedBatch = {
 };
 
 const queueStorageKey = 'milkos.collection-queue.v1';
-const cooperativeId = process.env.NEXT_PUBLIC_COOPERATIVE_ID || '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 function makeId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export default function NewCollectionPage() {
+  const { cooperativeId } = useAuth();
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [loadingFarmers, setLoadingFarmers] = useState(true);
   const [farmerError, setFarmerError] = useState('');
@@ -70,13 +71,19 @@ export default function NewCollectionPage() {
   }, [queue]);
 
   const loadFarmers = useCallback(async () => {
+    if (!cooperativeId) {
+      setFarmers([]);
+      setLoadingFarmers(false);
+      setFarmerError('Choose a cooperative from the menu to load its farmer roster.');
+      return;
+    }
     setLoadingFarmers(true);
     setFarmerError('');
     try {
-      const response = await fetch(`${apiUrl}/cooperatives/${cooperativeId}/farmers`);
+      const response = await apiRequest(`/cooperatives/${cooperativeId}/farmers`);
       if (!response.ok) {
         throw new Error(response.status === 401 || response.status === 403
-          ? 'Sign in with an active cooperative account to load its farmer roster.'
+          ? 'Your account does not have access to this cooperative\'s farmer roster.'
           : `Farmer roster could not be loaded (${response.status}).`);
       }
       const result: unknown = await response.json();
@@ -87,7 +94,7 @@ export default function NewCollectionPage() {
     } finally {
       setLoadingFarmers(false);
     }
-  }, []);
+  }, [cooperativeId]);
 
   useEffect(() => {
     void loadFarmers();

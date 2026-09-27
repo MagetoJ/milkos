@@ -51,7 +51,10 @@ export class CooperativesService {
 
   async submitApplication(input:any, ctx:any) {
     const phone=input.phone.trim().toLowerCase();
-    const verified=await this.prisma.tenantClient.registrationVerification.findFirst({where:{channel:'PHONE',destination:phone,status:'VERIFIED'},orderBy:{verifiedAt:'desc'}});
+    // A phone the applicant signed in with was already verified by Supabase; otherwise require our OTP.
+    const digits=(v:string)=>v.replace(/\D/g,'');
+    const verifiedBySignIn=Boolean(input.applicantPhone) && digits(input.applicantPhone)===digits(phone);
+    const verified=verifiedBySignIn || await this.prisma.tenantClient.registrationVerification.findFirst({where:{channel:'PHONE',destination:phone,status:'VERIFIED'},orderBy:{verifiedAt:'desc'}});
     if(!verified) throw new ForbiddenException('Verify the phone number before submitting the application');
     const duplicate=await this.prisma.tenantClient.cooperative.findFirst({where:{OR:[{name:{equals:input.name,mode:'insensitive'}},{registrationNumber:input.registrationNumber||undefined}]}});
     if(duplicate) throw new ConflictException('A cooperative with these details already exists');
