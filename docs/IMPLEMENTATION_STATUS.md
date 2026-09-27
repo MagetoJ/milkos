@@ -5,7 +5,7 @@ Implemented in this starter:
 - Next.js responsive dashboard and cooperative registration UI
 - NestJS API
 - PostgreSQL Prisma domain schema
-- Keycloak realm bootstrap
+- Supabase Auth integration (web sign-in, MFA, API token verification)
 - OIDC JWT validation and global auth guard
 - Role guard foundation
 - Public endpoint metadata
@@ -24,7 +24,7 @@ Implemented in this starter:
 - Security documentation
 
 Before production:
-- Implement the complete Keycloak Google and phone OTP identity flows
+- Configure Google and phone providers in the Supabase project
 - Bind cooperative context to verified membership and set PostgreSQL RLS context per transaction
 - Add the full manager/admin CRUD APIs and UI
 - Add BullMQ workers and Africa's Talking adapter with secret-managed credentials
@@ -32,4 +32,4 @@ Before production:
 - Add CSV/XLSX export workers
 - Add automated unit/integration/e2e/security tests
 - Configure centralized OpenTelemetry/log storage and backups
-- Configure HTTPS, production secrets, domains and Keycloak production mode
+- Configure HTTPS, production secrets, domains and Supabase production project settings

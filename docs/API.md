@@ -10,4 +10,4 @@ Initial endpoints:
 - `POST /collections/reversal-requests`
 - `POST /collections/reversal-approvals`
 
-The production Keycloak guard and permission decorators should be applied before exposing business endpoints beyond the development scaffold.
+Every route requires a Supabase access token unless it is marked `@Public()`, and business routes declare their permissions with `@RequirePermissions(...)`. See `docs/AUTH.md`.

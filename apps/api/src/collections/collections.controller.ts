@@ -1,59 +1,66 @@
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { CollectionsService } from './collections.service';
-import { Roles } from '../auth/roles.decorator';
+import { CurrentTenant, CurrentUser, RequirePermissions } from '../auth/auth.decorators';
+import type { AuthPrincipal, RequestTenant } from '../auth/auth.types';
 
 @Controller('collections')
 export class CollectionsController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
+  @RequirePermissions('collections:create')
   @Post()
-  createCollection(@Body() dto: any, @Req() req: any) {
-    return this.collectionsService.recordCollection(dto, {
+  createCollection(@CurrentUser() user: AuthPrincipal, @CurrentTenant() tenant: RequestTenant, @Body() dto: any, @Req() req: any) {
+    // The collector is always the caller; the cooperative is the one the guard authorized.
+    return this.collectionsService.recordCollection({ ...dto, cooperativeId: tenant.cooperativeId, collectorUserId: user.id }, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       requestId: req.requestId,
     });
   }
 
+  @RequirePermissions('corrections:request')
   @Post(':collectionId/corrections')
-  requestCorrection(@Param('collectionId') collectionId: string, @Body() body: any, @Req() req: any) {
-    return this.collectionsService.requestCorrection(collectionId, body.cooperativeId, req.user?.sub, body.quantityKg, body.reason, {
+  requestCorrection(@CurrentUser() user: AuthPrincipal, @CurrentTenant() tenant: RequestTenant, @Param('collectionId') collectionId: string, @Body() body: any, @Req() req: any) {
+    return this.collectionsService.requestCorrection(collectionId, tenant.cooperativeId, user.id, body.quantityKg, body.reason, {
       ip: req.ip,
       requestId: req.requestId,
     });
   }
 
+  @RequirePermissions('corrections:decide')
   @Get('corrections/pending')
-  listPendingCorrections(@Req() req: any) {
-    return this.collectionsService.listPendingCorrections(req.tenant?.cooperativeId);
+  listPendingCorrections(@CurrentTenant() tenant: RequestTenant) {
+    return this.collectionsService.listPendingCorrections(tenant.cooperativeId);
   }
 
+  @RequirePermissions('corrections:decide')
   @Post('corrections/:requestId/decision')
-  @Roles('COOPERATIVE_MANAGER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN')
-  decideCorrection(@Param('requestId') requestId: string, @Body() body: any, @Req() req: any) {
-    return this.collectionsService.decideCorrection(requestId, req.tenant?.cooperativeId, req.user?.sub, body.status, body.reason, {
+  decideCorrection(@CurrentUser() user: AuthPrincipal, @CurrentTenant() tenant: RequestTenant, @Param('requestId') requestId: string, @Body() body: any, @Req() req: any) {
+    return this.collectionsService.decideCorrection(requestId, tenant.cooperativeId, user.id, body.status, body.reason, {
       ip: req.ip,
       requestId: req.requestId,
     });
   }
 
+  @RequirePermissions('reversals:request')
   @Post(':collectionId/reversals')
-  requestReversal(@Param('collectionId') collectionId: string, @Body() body: any, @Req() req: any) {
-    return this.collectionsService.requestReversal(collectionId, body.cooperativeId, req.user?.sub, body.reason, {
+  requestReversal(@CurrentUser() user: AuthPrincipal, @CurrentTenant() tenant: RequestTenant, @Param('collectionId') collectionId: string, @Body() body: any, @Req() req: any) {
+    return this.collectionsService.requestReversal(collectionId, tenant.cooperativeId, user.id, body.reason, {
       ip: req.ip,
       requestId: req.requestId,
     });
   }
 
+  @RequirePermissions('reversals:decide')
   @Get('reversals/pending')
-  listPendingReversals(@Req() req: any) {
-    return this.collectionsService.listPendingReversals(req.tenant?.cooperativeId);
+  listPendingReversals(@CurrentTenant() tenant: RequestTenant) {
+    return this.collectionsService.listPendingReversals(tenant.cooperativeId);
   }
 
+  @RequirePermissions('reversals:decide')
   @Post('reversals/:requestId/decision')
-  @Roles('COOPERATIVE_MANAGER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN')
-  decideReversal(@Param('requestId') requestId: string, @Body() body: any, @Req() req: any) {
-    return this.collectionsService.decideReversal(requestId, req.tenant?.cooperativeId, req.user?.sub, body.status, body.reason, {
+  decideReversal(@CurrentUser() user: AuthPrincipal, @CurrentTenant() tenant: RequestTenant, @Param('requestId') requestId: string, @Body() body: any, @Req() req: any) {
+    return this.collectionsService.decideReversal(requestId, tenant.cooperativeId, user.id, body.status, body.reason, {
       ip: req.ip,
       requestId: req.requestId,
     });

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { apiFetch, apiUrl } from '../../lib/api';
+import { useAuth } from '../components/AuthProvider';
 
 type Farmer = Record<string, unknown>;
 type TabId = 'overview' | 'collections' | 'farmers' | 'centres' | 'devices' | 'milk-loss' | 'audit';
@@ -135,11 +137,10 @@ export default function DashboardPage() {
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [loadingFarmers, setLoadingFarmers] = useState(false);
 
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const cooperativeId = '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
+  const { cooperative, cooperativeId } = useAuth();
 
   useEffect(() => {
-    fetch(`${api}/health`)
+    fetch(`${apiUrl}/health/live`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`API returned ${response.status}`);
@@ -148,24 +149,23 @@ export default function DashboardPage() {
         return response.json();
       })
       .then((data) => {
-        setApiStatus(data.status === 'ok' ? 'FastAPI connected' : 'FastAPI responded');
+        setApiStatus(data.status === 'ok' ? 'API connected' : 'API responded');
       })
       .catch((error) => {
-        console.error('FastAPI connection failed:', error);
-        setApiStatus('FastAPI connection failed');
+        console.error('API connection failed:', error);
+        setApiStatus('API connection failed');
       });
-  }, [api]);
+  }, []);
 
   useEffect(() => {
-    if (activeTab !== 'farmers') {
+    if (activeTab !== 'farmers' || !cooperativeId) {
       return;
     }
 
     let isMounted = true;
     setLoadingFarmers(true);
 
-    fetch(`${api}/cooperatives/${cooperativeId}/farmers`)
-      .then((response) => (response.ok ? response.json() : []))
+    apiFetch<Farmer[]>(`/cooperatives/${cooperativeId}/farmers`)
       .then((data) => {
         if (isMounted) {
           setFarmers(Array.isArray(data) ? (data as Farmer[]) : []);
@@ -186,7 +186,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, api, cooperativeId]);
+  }, [activeTab, cooperativeId]);
 
   const navItems: Array<{ id: TabId; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -268,9 +268,9 @@ export default function DashboardPage() {
             marginBottom: '1rem',
             padding: '0.75rem 1rem',
             borderRadius: '0.5rem',
-            background: apiStatus === 'FastAPI connected' ? '#ecfdf5' : '#fef3c7',
-            border: apiStatus === 'FastAPI connected' ? '1px solid #a7f3d0' : '1px solid #fcd34d',
-            color: apiStatus === 'FastAPI connected' ? '#065f46' : '#92400e',
+            background: apiStatus === 'API connected' ? '#ecfdf5' : '#fef3c7',
+            border: apiStatus === 'API connected' ? '1px solid #a7f3d0' : '1px solid #fcd34d',
+            color: apiStatus === 'API connected' ? '#065f46' : '#92400e',
             fontSize: '0.875rem',
             fontWeight: 600,
           }}
@@ -287,7 +287,7 @@ export default function DashboardPage() {
             marginBottom: '0.25rem',
           }}
         >
-          MOGOR SMART DAIRY
+          {cooperative?.name || 'NO COOPERATIVE SELECTED'}
         </div>
 
         {activeTab === 'overview' && <OverviewTab />}
