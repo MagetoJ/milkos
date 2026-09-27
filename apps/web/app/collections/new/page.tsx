@@ -1,5 +1,7 @@
 'use client';
 
+import { authFetch } from '@/lib/api/client';
+import { useAuth } from '@/components/features/auth/auth-provider';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from './page.module.css';
@@ -23,14 +25,13 @@ type QueuedBatch = {
 };
 
 const queueStorageKey = 'milkos.collection-queue.v1';
-const cooperativeId = process.env.NEXT_PUBLIC_COOPERATIVE_ID || '13da2e35-25c2-4f1b-96ea-ac0170ff7e12';
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 function makeId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export default function NewCollectionPage() {
+  const cooperativeId = useAuth().activeCooperativeId ?? '';
   const [farmers, setFarmers] = useState<Farmer[]>([]);
   const [loadingFarmers, setLoadingFarmers] = useState(true);
   const [farmerError, setFarmerError] = useState('');
@@ -73,7 +74,7 @@ export default function NewCollectionPage() {
     setLoadingFarmers(true);
     setFarmerError('');
     try {
-      const response = await fetch(`${apiUrl}/cooperatives/${cooperativeId}/farmers`);
+      const response = await authFetch(`/cooperatives/${cooperativeId}/farmers`);
       if (!response.ok) {
         throw new Error(response.status === 401 || response.status === 403
           ? 'Sign in with an active cooperative account to load its farmer roster.'

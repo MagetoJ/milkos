@@ -13,10 +13,21 @@ interface TenantTransaction {
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly transactionContext = new AsyncLocalStorage<TenantTransaction>();
+  /**
+   * PrismaClient's constructor returns a Proxy that carries the model
+   * accessors; inside a getter `this` is the bare target without them, so keep
+   * a reference to the proxied client.
+   */
+  private readonly root: PrismaService;
+
+  constructor() {
+    super();
+    this.root = this;
+  }
 
   /** Inside a tenant request this is the RLS-bound transaction; otherwise the owner connection. */
   get tenantClient(): Prisma.TransactionClient | PrismaService {
-    return this.transactionContext.getStore()?.transaction || this;
+    return this.transactionContext.getStore()?.transaction || this.root;
   }
 
   get currentCooperativeId(): string | undefined {

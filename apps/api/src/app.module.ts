@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { PrismaService } from './common/prisma.service';
-import { AuditService } from './audit/audit.service';
+import { PrismaModule } from './common/prisma.module';
 import { HealthController } from './health/health.controller';
 import { CollectionsController } from './collections/collections.controller';
 import { CollectionsService } from './collections/collections.service';
@@ -16,11 +15,9 @@ import { TenantContextInterceptor } from './common/tenant-context.interceptor';
 import { OperationsModule } from './operations/operations.module';
 
 @Module({
-  imports: [AuthModule, FarmersModule, OperationsModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
+  imports: [PrismaModule, AuthModule, FarmersModule, OperationsModule, ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
   controllers: [HealthController, CollectionsController, CooperativesController],
   providers: [
-    PrismaService,
-    AuditService,
     CollectionsService,
     NotificationsService,
     SmsGatewayService,

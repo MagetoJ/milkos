@@ -1,6 +1,5 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuditService } from '../audit/audit.service';
 import { MembershipsController } from '../memberships/memberships.controller';
 import { MembershipsService } from '../memberships/memberships.service';
@@ -14,7 +13,7 @@ import { IdentityService } from './identity.service';
 import { SupabaseAdminService } from './supabase-admin.service';
 import { SupabaseJwtService } from './supabase-jwt.service';
 
-/** Guard order matters: rate limit → authenticate → authorize (tenant + permissions). */
+/** Guard order matters: authenticate → authorize (tenant + permissions). */
 @Global()
 @Module({
   controllers: [AuthController, AdminUsersController, MembershipsController],
@@ -26,7 +25,6 @@ import { SupabaseJwtService } from './supabase-jwt.service';
     IdentityService,
     AdminUsersService,
     MembershipsService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: AccessGuard },
   ],

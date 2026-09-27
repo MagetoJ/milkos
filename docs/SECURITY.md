@@ -1,13 +1,13 @@
 # Security Design
 
 ## Authentication
-Keycloak is the identity provider. The API validates OIDC access tokens. Platform administrators and cooperative managers require MFA. Password reset is handled by Keycloak with short-lived single-use reset actions and session revocation after sensitive recovery.
+Supabase Auth is the identity provider (Google, email + password, email OTP; phone OTP planned). The API verifies Supabase access tokens (issuer, audience, signature via JWKS) and rejects non-user tokens such as the service role. Platform roles, cooperative managers and accountants must hold an aal2 (TOTP) session. Roles and memberships are read from the database per request, so suspension and revocation are immediate. See `docs/AUTH.md`.
 
 ## Registration
 A cooperative applicant must verify a phone OTP or authenticate through Google before account/application creation. Registration responses must not disclose whether an email or phone is already registered.
 
 ## Tenant isolation
-Every tenant-owned entity carries cooperative_id. The service layer checks membership and role. PostgreSQL RLS policies must be enabled in production and set the current tenant context inside each transaction/request. Never trust a cooperative ID supplied by a client.
+Every tenant-owned entity carries cooperative_id. The service layer checks membership and role. PostgreSQL RLS policies are enforced by running each tenant transaction as the `milkos_app` role (no BYPASSRLS) with the tenant set transaction-locally; the Supabase `anon`/`authenticated` roles have no table access. Never trust a cooperative ID supplied by a client.
 
 ## Audit
 AuditEvent is append-only at the application level. No UPDATE or DELETE endpoint should exist. Audit retention is two years. SecurityEvent is separate from application logging.

@@ -1,0 +1,20 @@
+# Node & Build artifacts
+node_modules/
+.next/
+dist/
+build/
+coverage/
+
+# Database / Prisma generated files
+/prisma/migrations/
+*.sqlite
+
+# Logs & Environment
+*.log
+.env
+.env.*
+
+# Lockfiles (Claude doesn't need to read raw lock files)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

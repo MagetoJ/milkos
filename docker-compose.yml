@@ -33,24 +33,6 @@ services:
       retries: 10
 
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0
-    container_name: maziwa-keycloak
-    restart: unless-stopped
-
-    command: start-dev --import-realm
-
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: change-me
-
-    ports:
-      - "8080:8080"
-
-    volumes:
-      - ./infra/keycloak:/opt/keycloak/data/import
-
-
   api:
     build:
       context: .
@@ -72,8 +54,6 @@ services:
       redis:
         condition: service_healthy
 
-      keycloak:
-        condition: service_started
 
 
   web:

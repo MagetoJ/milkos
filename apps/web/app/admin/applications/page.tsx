@@ -1,15 +1,15 @@
 'use client';
 
+import { authFetch } from '@/lib/api/client';
 import { useEffect, useState } from 'react';
 
 export default function AdminApplicationsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState('');
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
   async function load() {
     try {
-      const r = await fetch(`${api}/cooperatives/applications?status=PENDING`);
+      const r = await authFetch(`/cooperatives/applications?status=PENDING`);
       if (r.ok) setItems(await r.json());
     } catch (err) {
       console.error('Failed to connect to API:', err);
@@ -23,11 +23,10 @@ export default function AdminApplicationsPage() {
   async function review(id: string, status: string) {
     setBusy(id);
     try {
-      await fetch(`${api}/cooperatives/applications/${id}/review`, {
+      await authFetch(`/cooperatives/applications/${id}/review`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
         },
         body: JSON.stringify({ status }),
       });

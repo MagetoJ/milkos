@@ -1,5 +1,6 @@
-import './styles.css';
+import './globals.css';
 import Navbar from './components/Navbar';
+import { Providers } from '@/components/providers';
 
 export const metadata = {
   title: 'MaziwaCollect - Multi-Tenant Milk Platform',
@@ -13,9 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <Navbar />
-        <main className="main-content">{children}</main>
+      <body className="bg-background text-foreground antialiased">
+        <Providers>
+          <Navbar />
+          <main className="main-content">{children}</main>
+        </Providers>
       </body>
     </html>
   );

@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: milkos-backend
+Version: 0.1.0
+Summary: Milkos cooperative milk collection platform backend
+Requires-Python: <3.14,>=3.12
+Requires-Dist: fastapi<1.0,>=0.116
+Requires-Dist: uvicorn[standard]<1.0,>=0.35
+Requires-Dist: pydantic-settings<3.0,>=2.10
+Requires-Dist: sqlalchemy[asyncio]<3.0,>=2.0
+Requires-Dist: asyncpg<1.0,>=0.30
+Requires-Dist: psycopg[binary]<4.0,>=3.2
+Requires-Dist: alembic<2.0,>=1.16
+Requires-Dist: PyJWT[crypto]<3.0,>=2.10
+Requires-Dist: httpx<1.0,>=0.28
+Provides-Extra: dev
+Requires-Dist: pytest<9.0,>=8.4; extra == "dev"
+Requires-Dist: pytest-asyncio<2.0,>=1.1; extra == "dev"
+Requires-Dist: ruff<1.0,>=0.12; extra == "dev"
