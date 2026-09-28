@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from routers import auth, superadmin
+
+
+
 
 app = FastAPI(title="Milkflow API", version="1.0.0")
 
@@ -12,6 +16,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+app.include_router(superadmin.router)
 
 class AuthRequest(BaseModel):
     email: str

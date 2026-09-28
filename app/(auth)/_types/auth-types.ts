@@ -14,9 +14,8 @@ export interface RegisterPayload {
 }
 
 export interface AuthResponse {
-  success: boolean
-  token?: string
-  role?: string
-  message?: string
-  error?: string
+  success: boolean;
+  token?: string;
+  role?: string;
+  message?: string;
 }

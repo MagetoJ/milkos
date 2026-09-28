@@ -1,49 +1,100 @@
-'use client'
+'use client';
 
-import { useState, type FormEvent } from 'react'
-import type { RegisterPayload } from '../_types/auth-types'
-import { AuthCard } from './auth-card'
+import { useState } from 'react';
 
 export function RegisterForm() {
-  const [submittedId, setSubmittedId] = useState('')
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    phone_number: '',
+    role: 'FARMER',
+  });
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const application = Object.fromEntries(formData.entries()) as unknown as RegisterPayload
-    if (Object.values(application).some((value) => !String(value).trim())) return
-    setSubmittedId(`APP-${Math.floor(100000 + Math.random() * 900000)}`)
-  }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
-  if (submittedId) {
-    return (
-      <AuthCard title="Application received" description="A Milkflow administrator will review your cooperative details.">
-        <div className="rounded-lg border border-[#385046] bg-[#17231e] px-4 py-3 text-center font-mono text-lg font-bold text-[#9ed3b7]">{submittedId}</div>
-        <a href="/login" className="mt-5 block text-center text-sm font-semibold text-[#9ed3b7] hover:underline">Return to sign in</a>
-      </AuthCard>
-    )
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+
+    try {
+      const res = await fetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage('Account created successfully! You can now sign in.');
+      } else {
+        setMessage(data.detail || 'Registration failed.');
+      }
+    } catch (err) {
+      setMessage('Network error connecting to backend.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <AuthCard title="Apply as a cooperative" description="Submit your organization details for administrator verification.">
-      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
-        {[
-          ['fullName', 'Applicant full name', 'e.g. Arjun Kapoor'],
-          ['organization', 'Organization name', 'e.g. Green Valley Dairy'],
-          ['email', 'Email address', 'you@company.com'],
-          ['phone', 'SMS phone number', '+254 7XX XXX XXX'],
-          ['nationalId', 'National ID number', 'ID number'],
-          ['kraPin', 'KRA PIN', 'A000000000X'],
-          ['location', 'Location', 'County or town'],
-        ].map(([name, label, placeholder]) => (
-          <label key={name} className="block text-xs font-semibold text-[#d1e1d8]">
-            {label}
-            <input name={name} type={name === 'email' ? 'email' : 'text'} required placeholder={placeholder} className="mt-1.5 h-10 w-full rounded-lg border px-3 text-sm outline-none focus:border-[#65b58a]" />
-          </label>
-        ))}
-        <button type="submit" className="mt-2 h-11 rounded-lg bg-[#176044] text-sm font-bold text-white transition hover:bg-[#207650] sm:col-span-2">Submit application</button>
-      </form>
-      <p className="mt-5 text-center text-sm text-[#d1e1d8]">Already have access? <a href="/login" className="font-semibold text-[#9ed3b7] hover:underline">Sign in</a></p>
-    </AuthCard>
-  )
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <input
+        name="full_name"
+        placeholder="Full Name"
+        onChange={handleChange}
+        required
+        className="w-full p-2 border rounded text-slate-900"
+      />
+      <input
+        name="email"
+        type="email"
+        placeholder="Email Address"
+        onChange={handleChange}
+        required
+        className="w-full p-2 border rounded text-slate-900"
+      />
+      <input
+        name="phone_number"
+        placeholder="Phone Number (e.g., +254712345678)"
+        onChange={handleChange}
+        required
+        className="w-full p-2 border rounded text-slate-900"
+      />
+      <input
+        name="password"
+        type="password"
+        placeholder="Password (Min 8 chars, 1 uppercase, 1 digit)"
+        onChange={handleChange}
+        required
+        className="w-full p-2 border rounded text-slate-900"
+      />
+      <select
+        name="role"
+        value={formData.role}
+        onChange={handleChange}
+        className="w-full p-2 border rounded text-slate-900"
+      >
+        <option value="FARMER">Farmer</option>
+        <option value="COLLECTOR">Milk Collector</option>
+        <option value="MANAGER">Cooperative Manager</option>
+      </select>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full bg-emerald-700 text-white p-2 rounded font-medium disabled:opacity-50"
+      >
+        {loading ? 'Creating Account...' : 'Create Account'}
+      </button>
+
+      {message && <p className="text-xs text-center font-medium mt-2 text-slate-700">{message}</p>}
+    </form>
+  );
 }
