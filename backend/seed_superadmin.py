@@ -23,7 +23,7 @@ def seed_superadmin():
             )
             db.add(admin_user)
             db.commit()
-            print(f"[SUCCESS] Superadmin seeded: {superadmin_email}")
+            print(f"[SUCCESS] Superadmin seeded successfully: {superadmin_email}")
         else:
             print("[INFO] Superadmin account already exists.")
     except Exception as e:

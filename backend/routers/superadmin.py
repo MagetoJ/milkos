@@ -1,12 +1,12 @@
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List
+from sqlalchemy.orm import Session
 
 from db import get_db
 from models.user import User
-from models.admin import CooperativeApplication, SMSCreditPayment, Cooler
+from models.admin import CooperativeApplication, SMSCreditPayment, Cooler, AuditLog
 from schemas.auth import UserRole
 from routers.auth import require_roles, get_current_user
 
@@ -30,20 +30,18 @@ def get_superadmin_stats(db: Session = Depends(get_db)):
         "total_cooperatives": total_cooperatives,
         "total_coolers": total_coolers,
         "total_farmers": total_farmers,
-        "milk_today_kg": 0.0, # Sum from milk_collections table
+        "milk_today_kg": 0.0,
         "pending_applications_count": pending_apps,
         "pending_payments_count": pending_pays,
     }
 
 @router.get("/applications/pending", dependencies=[superadmin_only])
 def get_pending_applications(db: Session = Depends(get_db)):
-    apps = db.query(CooperativeApplication).filter(CooperativeApplication.status == "PENDING").all()
-    return apps
+    return db.query(CooperativeApplication).filter(CooperativeApplication.status == "PENDING").all()
 
 @router.get("/payments/pending", dependencies=[superadmin_only])
 def get_pending_payments(db: Session = Depends(get_db)):
-    payments = db.query(SMSCreditPayment).filter(SMSCreditPayment.status == "PENDING").all()
-    return payments
+    return db.query(SMSCreditPayment).filter(SMSCreditPayment.status == "PENDING").all()
 
 @router.post("/applications/{app_id}/action", dependencies=[superadmin_only])
 def process_application_action(
@@ -83,10 +81,6 @@ def verify_payment_action(
     try:
         if payload.action == "VERIFY":
             payment.status = "VERIFIED"
-            # NOTE: SMSCreditPayment has no `verified_by` column, so assigning it here was silently
-            # discarded. Add `verified_by = Column(UUID(as_uuid=True))` to the model AND the
-            # Supabase table first, then set: payment.verified_by = current_user.get("sub")
-            # Here: Append transaction entry to sms_credit_ledger table to issue credits
         else:
             payment.status = "REJECTED"
 

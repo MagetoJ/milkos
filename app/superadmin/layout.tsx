@@ -1,45 +1,70 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function SuperadminLayout({ children }: { children: React.ReactNode }) {
+export default function SuperadminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('milkflow_token');
-    if (!token) {
-      router.replace('/login');
-      return;
-    }
+    let isMounted = true;
 
-    try {
-      // JWT segments are base64url (RFC 7515): map -/_ back to +/ and restore padding before atob
-      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-      const decodedPayload = JSON.parse(atob(padded));
-      const isExpired = typeof decodedPayload.exp === 'number' && decodedPayload.exp * 1000 < Date.now();
+    async function checkAuth() {
+      try {
+        const res = await fetch("http://localhost:8000/api/v1/auth/me", {
+          method: "GET",
+          credentials: "include", // Send HttpOnly cookies
+        });
 
-      if (decodedPayload.role !== 'SUPER_ADMIN' || isExpired) {
-        localStorage.removeItem('milkflow_token');
-        router.replace('/login');
-      } else {
-        setIsAuthorized(true);
+        if (!res.ok) {
+          if (isMounted) {
+            setChecking(false);
+            router.push("/login");
+          }
+          return;
+        }
+
+        const user = await res.json();
+        if (user.role !== "SUPER_ADMIN") {
+          if (isMounted) {
+            setChecking(false);
+            router.push("/login");
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setAuthorized(true);
+          setChecking(false);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setChecking(false);
+          router.push("/login");
+        }
       }
-    } catch {
-      localStorage.removeItem('milkflow_token');
-      router.replace('/login');
     }
+
+    checkAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
-  if (!isAuthorized) {
+  if (checking || !authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 text-sm font-medium">
-        Verifying platform superadmin credentials...
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">Checking authorization...</p>
       </div>
     );
   }
 
-  return <>{children}</>;
+  return <div className="min-h-screen bg-slate-50">{children}</div>;
 }

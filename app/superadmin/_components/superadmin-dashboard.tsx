@@ -19,7 +19,6 @@ export function SuperadminDashboard() {
 
   const loadData = async () => {
     setLoading(true);
-    // allSettled so one failing endpoint doesn't blank out the whole dashboard
     const [sRes, aRes, pRes] = await Promise.allSettled([
       fetchSuperadminStats(),
       fetchPendingApplications(),
@@ -68,7 +67,7 @@ export function SuperadminDashboard() {
         </div>
       )}
 
-      {/* High-Level Platform Metrics */}
+      {/* Platform Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
           <p className="text-xs font-semibold text-slate-500 uppercase">Cooperatives</p>
@@ -82,7 +81,7 @@ export function SuperadminDashboard() {
 
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
           <p className="text-xs font-semibold text-slate-500 uppercase">Milk Today (KG)</p>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">{stats?.milk_today_kg.toLocaleString() ?? 0} KG</p>
+          <p className="text-2xl font-bold text-emerald-700 mt-1">{stats?.milk_today_kg?.toLocaleString() ?? 0} KG</p>
         </div>
 
         <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
@@ -180,3 +179,5 @@ export function SuperadminDashboard() {
     </div>
   );
 }
+
+export default SuperadminDashboard;

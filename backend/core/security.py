@@ -9,7 +9,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
 
-# Load .env here too, so SECRET_KEY is correct no matter which module is imported first.
+from models.user import User
+from schemas.auth import UserRole
+
 load_dotenv()
 
 logger = logging.getLogger("milkflow.security")
@@ -29,8 +31,6 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
-    """Return False (instead of raising a 500) when the stored hash is missing or not bcrypt,
-    e.g. a row inserted by hand in the Supabase table editor with a plaintext password."""
     if not hashed_password:
         return False
     try:

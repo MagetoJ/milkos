@@ -1,11 +1,10 @@
-from sqlalchemy import Column, String, Numeric, Boolean, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Numeric, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 import datetime
 
 from db import Base
-from schemas.auth import UserRole
 
 class CooperativeApplication(Base):
     __tablename__ = "cooperative_applications"
@@ -40,3 +39,14 @@ class SMSCreditPayment(Base):
     masked_mpesa_ref = Column(String, nullable=False)
     status = Column(String, default="PENDING")
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)
+    target = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    admin = relationship("models.user.User")
