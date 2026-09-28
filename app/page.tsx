@@ -1,17 +1,31 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSession, homeFor, LOGIN_PATH } from '@/lib/auth';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-// `/` has no UI of its own: it forwards to the user's dashboard, or to the one login page.
-export default function Home() {
+export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const session = getSession();
-    router.replace(session ? homeFor(session.role) : LOGIN_PATH);
+    // Check for your stored auth token
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      router.replace("/login");
+    } else {
+      // Decode or fetch user role, then redirect accordingly
+      const userRole = localStorage.getItem("role"); // or parse from JWT
+      if (userRole === "superadmin") {
+        router.replace("/superadmin");
+      } else {
+        router.replace("/cooperatives"); // or your default user route
+      }
+    }
   }, [router]);
 
-  return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">Loading Milkflow…</div>;
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <p>Loading...</p>
+    </div>
+  );
 }

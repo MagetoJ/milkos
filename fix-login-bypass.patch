@@ -1,0 +1,412 @@
+diff --git a/app/(auth)/_api/auth-client.ts b/app/(auth)/_api/auth-client.ts
+index f827181..cb5c085 100644
+--- a/app/(auth)/_api/auth-client.ts
++++ b/app/(auth)/_api/auth-client.ts
+@@ -1,8 +1,7 @@
+ import type { AuthResponse, LoginPayload, UserRole } from '../_types/auth-types'
+-import { saveToken } from '@/lib/auth'
+ 
+ interface LoginApiResponse {
+-  access_token?: string
++  message?: string
+   role?: UserRole
+   user_id?: string
+   detail?: string | { msg: string }[]
+@@ -22,6 +21,7 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
+   try {
+     res = await fetch('/api/v1/auth/login', {
+       method: 'POST',
++      credentials: 'same-origin', // lets the browser store the HttpOnly cookie the backend sets
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify(payload),
+     })
+@@ -29,8 +29,6 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
+     return { success: false, message: 'Network error. Please check your connection and try again.' }
+   }
+ 
+-  // When uvicorn is down, the Next.js rewrite answers with a plain-text 500 page.
+-  // Parsing that with res.json() used to throw and surface as a misleading "Network error".
+   let data: LoginApiResponse = {}
+   try {
+     data = (await res.json()) as LoginApiResponse
+@@ -48,10 +46,10 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
+     return { success: false, message: readDetail(data.detail) || `Login failed (HTTP ${res.status}).` }
+   }
+ 
+-  if (!data.access_token || !data.role || !VALID_ROLES.includes(data.role)) {
++  // The token now lives in an HttpOnly cookie; the body only carries the role.
++  if (!data.role || !VALID_ROLES.includes(data.role)) {
+     return { success: false, message: 'The authentication service returned an invalid response.' }
+   }
+ 
+-  saveToken(data.access_token)
+-  return { success: true, token: data.access_token, role: data.role }
+-}
+\ No newline at end of file
++  return { success: true, role: data.role }
++}
+diff --git a/app/(auth)/_components/login-form.tsx b/app/(auth)/_components/login-form.tsx
+index 7a725c1..92b22eb 100644
+--- a/app/(auth)/_components/login-form.tsx
++++ b/app/(auth)/_components/login-form.tsx
+@@ -3,7 +3,7 @@
+ import { useEffect, useState, type FormEvent } from 'react';
+ import Link from 'next/link';
+ import { loginUser } from '../_api/auth-client';
+-import { getSession, homeFor, postLoginRedirect } from '@/lib/auth';
++import { fetchSession, homeFor, postLoginRedirect } from '@/lib/auth';
+ 
+ export function LoginForm() {
+   const [email, setEmail] = useState('');
+@@ -13,15 +13,23 @@ export function LoginForm() {
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+   useEffect(() => {
+-    // Already signed in? Skip the form and go straight to the right dashboard.
+-    const session = getSession();
+-    if (session) {
+-      window.location.replace(homeFor(session.role));
+-      return;
+-    }
++    let cancelled = false;
++
+     if (new URLSearchParams(window.location.search).get('registered') === '1') {
+       setNotice('Account created. Please sign in.');
+     }
++
++    // Skip the form ONLY if the backend confirms a valid, active session.
++    // (Previously this trusted an unverified token in localStorage.)
++    fetchSession().then((result) => {
++      if (!cancelled && result.status === 'authenticated') {
++        window.location.replace(homeFor(result.session.role));
++      }
++    });
++
++    return () => {
++      cancelled = true;
++    };
+   }, []);
+ 
+   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+diff --git a/app/page.tsx b/app/page.tsx
+index ceb75a1..b23f543 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -2,16 +2,17 @@
+ 
+ import { useEffect } from 'react';
+ import { useRouter } from 'next/navigation';
+-import { getSession, homeFor, LOGIN_PATH } from '@/lib/auth';
++import { fetchSession, homeFor, LOGIN_PATH } from '@/lib/auth';
+ 
+ // `/` has no UI of its own: it forwards to the user's dashboard, or to the one login page.
+ export default function Home() {
+   const router = useRouter();
+ 
+   useEffect(() => {
+-    const session = getSession();
+-    router.replace(session ? homeFor(session.role) : LOGIN_PATH);
++    fetchSession().then((result) => {
++      router.replace(result.status === 'authenticated' ? homeFor(result.session.role) : LOGIN_PATH);
++    });
+   }, [router]);
+ 
+   return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">Loading Milkflow…</div>;
+-}
+\ No newline at end of file
++}
+diff --git a/app/superadmin/_api/superadmin-client.ts b/app/superadmin/_api/superadmin-client.ts
+index 1cea29f..b48dc79 100644
+--- a/app/superadmin/_api/superadmin-client.ts
++++ b/app/superadmin/_api/superadmin-client.ts
+@@ -4,10 +4,11 @@ import {
+   PaymentVerificationItem,
+ } from "../_types/superadmin-types";
+ 
+-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1/superadmin";
++// Relative URL: goes through the Next.js rewrite (same origin), so the HttpOnly cookie is sent.
++const BASE_URL = "/api/v1/superadmin";
+ 
+ const DEFAULT_FETCH_OPTIONS: RequestInit = {
+-  credentials: "include", // Automatically sends HttpOnly cookies with the request
++  credentials: "same-origin",
+   headers: {
+     "Content-Type": "application/json",
+   },
+diff --git a/app/superadmin/layout.tsx b/app/superadmin/layout.tsx
+index 917474d..0e1c901 100644
+--- a/app/superadmin/layout.tsx
++++ b/app/superadmin/layout.tsx
+@@ -1,70 +1,11 @@
+-"use client";
+-
+-import { useEffect, useState } from "react";
+-import { useRouter } from "next/navigation";
+-
+-export default function SuperadminLayout({
+-  children,
+-}: {
+-  children: React.ReactNode;
+-}) {
+-  const router = useRouter();
+-  const [authorized, setAuthorized] = useState(false);
+-  const [checking, setChecking] = useState(true);
+-
+-  useEffect(() => {
+-    let isMounted = true;
+-
+-    async function checkAuth() {
+-      try {
+-        const res = await fetch("http://localhost:8000/api/v1/auth/me", {
+-          method: "GET",
+-          credentials: "include", // Send HttpOnly cookies
+-        });
+-
+-        if (!res.ok) {
+-          if (isMounted) {
+-            setChecking(false);
+-            router.push("/login");
+-          }
+-          return;
+-        }
+-
+-        const user = await res.json();
+-        if (user.role !== "SUPER_ADMIN") {
+-          if (isMounted) {
+-            setChecking(false);
+-            router.push("/login");
+-          }
+-          return;
+-        }
+-
+-        if (isMounted) {
+-          setAuthorized(true);
+-          setChecking(false);
+-        }
+-      } catch (err) {
+-        if (isMounted) {
+-          setChecking(false);
+-          router.push("/login");
+-        }
+-      }
+-    }
+-
+-    checkAuth();
+-
+-    return () => {
+-      isMounted = false;
+-    };
+-  }, [router]);
+-
+-  if (checking || !authorized) {
+-    return (
+-      <div className="flex h-screen items-center justify-center bg-slate-50">
+-        <p className="text-sm text-slate-500">Checking authorization...</p>
+-      </div>
+-    );
+-  }
+-
+-  return <div className="min-h-screen bg-slate-50">{children}</div>;
+-}
+\ No newline at end of file
++import type { ReactNode } from 'react';
++import { RoleGuard } from '@/components/ui/role-guard';
++
++// Same guard as every other dashboard: verified by the backend, SUPER_ADMIN only.
++export default function SuperadminLayout({ children }: { children: ReactNode }) {
++  return (
++    <RoleGuard allowedRoles={['SUPER_ADMIN']}>
++      <div className="min-h-screen bg-slate-50">{children}</div>
++    </RoleGuard>
++  );
++}
+diff --git a/components/ui/role-guard.tsx b/components/ui/role-guard.tsx
+index 0ae191c..26ea19e 100644
+--- a/components/ui/role-guard.tsx
++++ b/components/ui/role-guard.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useEffect, useState, type ReactNode } from 'react';
+ import { usePathname, useRouter } from 'next/navigation';
+-import { clearSession, getSession, homeFor, loginUrl, logout, type UserRole } from '@/lib/auth';
++import { fetchSession, homeFor, loginUrl, logout, type UserRole } from '@/lib/auth';
+ 
+ type GuardState = 'checking' | 'authorized' | 'unavailable';
+ 
+@@ -13,10 +13,9 @@ interface RoleGuardProps {
+ 
+ /**
+  * Client-side route guard used by each dashboard's layout.tsx.
+- *  - no/expired token          -> /login?next=<this page>
+- *  - valid token, wrong role   -> that role's own dashboard (never a login loop)
+- *  - backend rejects token     -> clear it, /login
+- *  - backend unreachable       -> "retry" screen, token kept
++ *  - no/expired/invalid cookie -> /login?next=<this page>
++ *  - valid session, wrong role -> that role's own dashboard (never a login loop)
++ *  - backend unreachable       -> "retry" screen
+  */
+ export function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
+   const router = useRouter();
+@@ -28,32 +27,17 @@ export function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
+     let cancelled = false;
+ 
+     async function verify() {
+-      const session = getSession();
+-      if (!session) return router.replace(loginUrl(pathname));
+-      if (!allowedRoles.includes(session.role)) return router.replace(homeFor(session.role));
++      // Authoritative check against the backend (HttpOnly cookie): signature, expiry,
++      // account still active, current role from the DB.
++      const result = await fetchSession();
++      if (cancelled) return;
+ 
+-      // Authoritative check: signature, account still active, role unchanged in the DB.
+-      try {
+-        const res = await fetch('/api/v1/auth/me', { headers: { Authorization: `Bearer ${session.token}` } });
+-        if (cancelled) return;
+-        if (res.status === 401 || res.status === 403) {
+-          clearSession();
+-          return router.replace(loginUrl(pathname));
+-        }
+-        if (!res.ok) return setState('unavailable');
++      if (result.status === 'unavailable') return setState('unavailable');
++      if (result.status === 'anonymous') return router.replace(loginUrl(pathname));
++      if (!allowedRoles.includes(result.session.role)) return router.replace(homeFor(result.session.role));
+ 
+-        const me = (await res.json()) as { role?: UserRole; email?: string };
+-        if (cancelled) return;
+-        if (!me.role || !allowedRoles.includes(me.role)) {
+-          // Role changed server-side since the token was issued: force a fresh login.
+-          clearSession();
+-          return router.replace(loginUrl());
+-        }
+-        setEmail(me.email);
+-        setState('authorized');
+-      } catch {
+-        if (!cancelled) setState('unavailable');
+-      }
++      setEmail(result.session.email);
++      setState('authorized');
+     }
+ 
+     verify();
+diff --git a/lib/auth.ts b/lib/auth.ts
+index 339d046..c710cd9 100644
+--- a/lib/auth.ts
++++ b/lib/auth.ts
+@@ -1,11 +1,16 @@
+ // Single source of truth for sessions and role-based redirects.
+-// Every redirect in the app (login form, `/`, route guards, logout) goes through here.
++//
++// Auth is cookie-based: the backend sets an HttpOnly `access_token` cookie on login.
++// JavaScript cannot read that cookie, so the ONLY way to know who is signed in is to
++// ask the backend (GET /api/v1/auth/me). Nothing here trusts localStorage.
+ 
+ export type UserRole = 'SUPER_ADMIN' | 'COOP_ADMIN' | 'MANAGER' | 'COLLECTOR' | 'FARMER';
+ 
+-export const TOKEN_KEY = 'milkflow_token';
+ export const LOGIN_PATH = '/login';
+ 
++/** Old key from the localStorage-token era. Cleared on sight so stale tokens can't redirect anyone. */
++const LEGACY_TOKEN_KEY = 'milkflow_token';
++
+ /** Where each role lands after signing in. */
+ export const ROLE_HOME: Record<UserRole, string> = {
+   SUPER_ADMIN: '/superadmin',
+@@ -25,53 +30,42 @@ export const ROUTE_ACCESS: Record<string, UserRole[]> = {
+ const ROLES = Object.keys(ROLE_HOME) as UserRole[];
+ 
+ export interface Session {
+-  token: string;
+   userId: string;
+   email?: string;
++  fullName?: string;
+   role: UserRole;
+-  expiresAt?: number; // ms since epoch
+ }
+ 
+-/** Decode a JWT payload. JWT segments are base64url (RFC 7515), not plain base64. */
+-function decodePayload(token: string): Record<string, unknown> | null {
+-  const segment = token.split('.')[1];
+-  if (!segment) return null;
+-  try {
+-    const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+-    return JSON.parse(atob(padded));
+-  } catch {
+-    return null;
+-  }
++/** Result of asking the backend who we are. */
++export type SessionResult =
++  | { status: 'authenticated'; session: Session }
++  | { status: 'anonymous' }
++  | { status: 'unavailable' };
++
++export function clearLegacyToken() {
++  if (typeof window !== 'undefined') localStorage.removeItem(LEGACY_TOKEN_KEY);
+ }
+ 
+ /**
+- * Read the stored session. Returns null (and clears the token) when it is missing,
+- * malformed, expired or carries an unknown role. This does NOT verify the signature;
+- * guards confirm with the backend via /api/v1/auth/me.
++ * Ask the backend for the current session. The HttpOnly cookie is sent automatically
++ * because the request is same-origin (proxied to FastAPI by the rewrite in next.config.mjs).
+  */
+-export function getSession(): Session | null {
+-  if (typeof window === 'undefined') return null;
+-  const token = localStorage.getItem(TOKEN_KEY);
+-  if (!token) return null;
+-
+-  const payload = decodePayload(token);
+-  const role = payload?.role as UserRole | undefined;
+-  const expiresAt = typeof payload?.exp === 'number' ? payload.exp * 1000 : undefined;
+-
+-  if (!payload || !role || !ROLES.includes(role) || (expiresAt !== undefined && expiresAt < Date.now())) {
+-    localStorage.removeItem(TOKEN_KEY);
+-    return null;
++export async function fetchSession(): Promise<SessionResult> {
++  clearLegacyToken();
++  try {
++    const res = await fetch('/api/v1/auth/me', { credentials: 'same-origin', cache: 'no-store' });
++    if (res.status === 401 || res.status === 403) return { status: 'anonymous' };
++    if (!res.ok) return { status: 'unavailable' };
++
++    const me = (await res.json()) as { user_id?: string; email?: string; full_name?: string; role?: string };
++    if (!me.role || !ROLES.includes(me.role as UserRole)) return { status: 'anonymous' };
++    return {
++      status: 'authenticated',
++      session: { userId: String(me.user_id ?? ''), email: me.email, fullName: me.full_name, role: me.role as UserRole },
++    };
++  } catch {
++    return { status: 'unavailable' };
+   }
+-  return { token, userId: String(payload.sub ?? ''), email: payload.email as string | undefined, role, expiresAt };
+-}
+-
+-export function saveToken(token: string) {
+-  localStorage.setItem(TOKEN_KEY, token);
+-}
+-
+-export function clearSession() {
+-  if (typeof window !== 'undefined') localStorage.removeItem(TOKEN_KEY);
+ }
+ 
+ export function homeFor(role: UserRole): string {
+@@ -99,7 +93,12 @@ export function loginUrl(returnTo?: string): string {
+   return returnTo ? `${LOGIN_PATH}?next=${encodeURIComponent(returnTo)}` : LOGIN_PATH;
+ }
+ 
+-export function logout() {
+-  clearSession();
+-  window.location.assign(LOGIN_PATH);
+-}
+\ No newline at end of file
++/** Sign out: the backend must delete the HttpOnly cookie, since JS can't. */
++export async function logout() {
++  clearLegacyToken();
++  try {
++    await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' });
++  } finally {
++    window.location.assign(LOGIN_PATH);
++  }
++}

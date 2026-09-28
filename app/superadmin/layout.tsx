@@ -2,63 +2,67 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { clearSession, getSession } from "@/lib/auth";
 
-export default function SuperadminLayout({
+export default function SuperAdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [authorized, setAuthorized] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
+  // Step 1: Confirm client mount to prevent hydration mismatch
   useEffect(() => {
-    let isMounted = true;
+    setMounted(true);
+  }, []);
 
-    async function checkAuth() {
+  // Step 2: Run auth checks only after mount & router initialization
+  useEffect(() => {
+    if (!mounted) return;
+
+    const session = getSession();
+
+    if (!session || session.role !== "SUPER_ADMIN") {
+      clearSession();
+      router.replace("/login");
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function verify() {
       try {
-        const res = await fetch("http://localhost:8000/api/v1/auth/me", {
-          method: "GET",
-          credentials: "include", // Send HttpOnly cookies
+        const res = await fetch("/api/v1/auth/me", {
+          headers: { Authorization: `Bearer ${session.token}` },
         });
 
+        if (isCancelled) return;
+
         if (!res.ok) {
-          if (isMounted) {
-            setChecking(false);
-            router.push("/login");
-          }
-          return;
+          clearSession();
+          router.replace("/login");
+        } else {
+          setIsAuthorized(true);
         }
-
-        const user = await res.json();
-        if (user.role !== "SUPER_ADMIN") {
-          if (isMounted) {
-            setChecking(false);
-            router.push("/login");
-          }
-          return;
-        }
-
-        if (isMounted) {
-          setAuthorized(true);
-          setChecking(false);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setChecking(false);
-          router.push("/login");
+      } catch {
+        if (!isCancelled) {
+          clearSession();
+          router.replace("/login");
         }
       }
     }
 
-    checkAuth();
+    verify();
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
     };
-  }, [router]);
+  }, [mounted, router]);
 
-  if (checking || !authorized) {
+  // Render a consistent fallback on both Server and initial Client Hydration
+  if (!mounted || !isAuthorized) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
         <p className="text-sm text-slate-500">Checking authorization...</p>

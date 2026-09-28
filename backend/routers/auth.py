@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from models.user import User
-from schemas.auth import UserLogin, TokenResponse, UserRole
+from schemas.auth import UserLogin, UserRole
 from core.security import hash_password, verify_password, create_access_token, decode_access_token
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
 
-# 1. Custom token extractor that checks Cookies first, then Authorization Header
+# 1. Custom token extractor checking Cookies and Authorization header
 def get_token_from_request(request: Request) -> str:
     token = request.cookies.get("access_token")
     if not token:
@@ -26,7 +26,7 @@ def get_token_from_request(request: Request) -> str:
     return token
 
 
-# 2. Dependency: Get current user payload from token
+# 2. Extract current user payload from token
 def get_current_user(token: str = Depends(get_token_from_request)) -> dict:
     payload = decode_access_token(token)
     if not payload.get("sub"):
@@ -34,7 +34,7 @@ def get_current_user(token: str = Depends(get_token_from_request)) -> dict:
     return payload
 
 
-# 3. Role Checker Dependency
+# 3. Role Checker Dependency (imported by superadmin.py)
 def require_roles(allowed_roles: list[UserRole]):
     allowed_values = {role.value for role in allowed_roles}
 
@@ -60,21 +60,53 @@ def login(credentials: UserLogin, response: Response, db: Session = Depends(get_
     role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
 
-    # Set HTTP-only Cookie
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=False,
         samesite="lax",
-        max_age=86400,  # 24 hours
+        max_age=15 * 60,  # 15 minutes
         path="/"
     )
 
     return {
         "message": "Login successful",
+        "access_token": access_token,
         "role": role,
         "user_id": str(user.id)
+    }
+
+
+@router.post("/refresh")
+def refresh_token(
+    current_user: dict = Depends(get_current_user),
+    response: Response = None,
+    db: Session = Depends(get_db)
+):
+    new_token = create_access_token(
+        data={
+            "sub": current_user["sub"],
+            "email": current_user.get("email"),
+            "role": current_user.get("role"),
+        }
+    )
+
+    if response:
+        response.set_cookie(
+            key="access_token",
+            value=new_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=15 * 60,
+            path="/"
+        )
+
+    return {
+        "access_token": new_token,
+        "role": current_user.get("role"),
+        "user_id": current_user["sub"],
     }
 
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearSession, getSession, homeFor, loginUrl, logout, type UserRole } from '@/lib/auth';
+import { useActiveRefresh } from "@/hooks/use-active-refresh";
 
 type GuardState = 'checking' | 'authorized' | 'unavailable';
 
@@ -19,6 +20,7 @@ interface RoleGuardProps {
  *  - backend unreachable       -> "retry" screen, token kept
  */
 export function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
+    useActiveRefresh(); // Automatically maintains 15-min token while user is active
   const router = useRouter();
   const pathname = usePathname();
   const [state, setState] = useState<GuardState>('checking');

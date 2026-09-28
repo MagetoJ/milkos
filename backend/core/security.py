@@ -9,19 +9,13 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
 
-from models.user import User
-from schemas.auth import UserRole
-
 load_dotenv()
 
 logger = logging.getLogger("milkflow.security")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-production-key-change-this")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
-
-if SECRET_KEY == "super-secret-production-key-change-this":
-    logger.warning("SECRET_KEY is not set in backend/.env; using the insecure default key.")
+ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 15-minute active token window
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -36,7 +30,7 @@ def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except (UnknownHashError, ValueError):
-        logger.error("Stored password_hash is not a valid bcrypt hash; re-seed this user with hash_password().")
+        logger.error("Stored password_hash is not a valid bcrypt hash.")
         return False
 
 
