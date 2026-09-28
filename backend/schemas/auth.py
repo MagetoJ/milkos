@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from enum import Enum
 from typing import Optional
+from uuid import UUID
 
 class UserRole(str, Enum):
     SUPER_ADMIN = "SUPER_ADMIN"
@@ -42,7 +43,7 @@ class TokenResponse(BaseModel):
     user_id: str
 
 class UserResponse(BaseModel):
-    id: str
+    id: UUID
     email: EmailStr
     full_name: str
     phone_number: str

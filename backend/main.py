@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from routers import auth, superadmin
 
 
@@ -20,17 +19,6 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(superadmin.router)
 
-class AuthRequest(BaseModel):
-    email: str
-    password: str
-
 @app.get("/api/v1/health")
 def health_check():
     return {"status": "ok", "service": "Milkflow FastAPI Backend"}
-
-@app.post("/api/v1/auth/login")
-def login(data: AuthRequest):
-    # Replace with actual DB query / hashing logic (e.g. SQLModel / SQLAlchemy)
-    if data.email == "admin@milkflow.com" and data.password == "password123":
-        return {"success": True, "token": "fake-jwt-token", "role": "ADMIN"}
-    return {"success": False, "error": "Invalid credentials"}

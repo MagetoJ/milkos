@@ -15,23 +15,26 @@ export function SuperadminDashboard() {
   const [applications, setApplications] = useState<CooperativeApplication[]>([]);
   const [payments, setPayments] = useState<PaymentVerificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadErrors, setLoadErrors] = useState<string[]>([]);
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      const [sData, aData, pData] = await Promise.all([
-        fetchSuperadminStats(),
-        fetchPendingApplications(),
-        fetchPendingPayments()
-      ]);
-      setStats(sData);
-      setApplications(aData);
-      setPayments(pData);
-    } catch (err) {
-      console.error('Superadmin data load error:', err);
-    } finally {
-      setLoading(false);
-    }
+    // allSettled so one failing endpoint doesn't blank out the whole dashboard
+    const [sRes, aRes, pRes] = await Promise.allSettled([
+      fetchSuperadminStats(),
+      fetchPendingApplications(),
+      fetchPendingPayments()
+    ]);
+    if (sRes.status === 'fulfilled') setStats(sRes.value);
+    if (aRes.status === 'fulfilled') setApplications(aRes.value);
+    if (pRes.status === 'fulfilled') setPayments(pRes.value);
+
+    const errors = [sRes, aRes, pRes]
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
+    errors.forEach((message) => console.error('Superadmin data load error:', message));
+    setLoadErrors(errors);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -58,6 +61,12 @@ export function SuperadminDashboard() {
         <h1 className="text-2xl font-bold text-slate-900">Platform Superadmin Control Center</h1>
         <p className="text-xs text-slate-500">Global multi-tenant governance, onboarding verification, and SMS credit issuing.</p>
       </div>
+
+      {loadErrors.length > 0 && (
+        <div role="alert" className="p-3 border border-red-200 bg-red-50 rounded-lg text-xs text-red-700">
+          {loadErrors.join(' · ')}
+        </div>
+      )}
 
       {/* High-Level Platform Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

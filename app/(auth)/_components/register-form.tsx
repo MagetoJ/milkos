@@ -83,7 +83,6 @@ export function RegisterForm() {
       >
         <option value="FARMER">Farmer</option>
         <option value="COLLECTOR">Milk Collector</option>
-        <option value="MANAGER">Cooperative Manager</option>
       </select>
 
       <button

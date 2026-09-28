@@ -13,6 +13,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)
-    role = Column(SQLEnum(UserRole), default=UserRole.FARMER)
+    role = Column(SQLEnum(UserRole, name="user_role"), default=UserRole.FARMER)
+    cooperative_id = Column(UUID(as_uuid=True), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

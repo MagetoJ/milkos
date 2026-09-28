@@ -4,18 +4,18 @@ export interface LoginPayload {
 }
 
 export interface RegisterPayload {
-  fullName: string
-  organization: string
+  full_name: string
   email: string
-  phone: string
-  nationalId: string
-  kraPin: string
-  location: string
+  phone_number: string
+  password: string
+  role: 'FARMER' | 'COLLECTOR'
 }
 
+export type UserRole = 'SUPER_ADMIN' | 'COOP_ADMIN' | 'MANAGER' | 'COLLECTOR' | 'FARMER'
+
 export interface AuthResponse {
-  success: boolean;
-  token?: string;
-  role?: string;
-  message?: string;
+  success: boolean
+  token?: string
+  role?: UserRole
+  message?: string
 }
