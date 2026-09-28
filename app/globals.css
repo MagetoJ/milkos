@@ -210,6 +210,7 @@
 }
 
 .auth-bg > div,
+.auth-bg > section,
 .auth-bg .bg-white {
   background-color: #111a17 !important;
   border-color: #293b34 !important;
