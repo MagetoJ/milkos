@@ -19,7 +19,7 @@ class ActionPayload(BaseModel):
     action: str  # "APPROVE" | "REJECT" | "VERIFY"
 
 @router.get("/stats", dependencies=[superadmin_only])
-async def get_superadmin_stats(db: Session = Depends(get_db)):
+def get_superadmin_stats(db: Session = Depends(get_db)):
     total_cooperatives = db.query(func.count(User.cooperative_id.distinct())).scalar() or 0
     total_coolers = db.query(Cooler).count()
     total_farmers = db.query(User).filter(User.role == UserRole.FARMER).count()
@@ -36,17 +36,17 @@ async def get_superadmin_stats(db: Session = Depends(get_db)):
     }
 
 @router.get("/applications/pending", dependencies=[superadmin_only])
-async def get_pending_applications(db: Session = Depends(get_db)):
+def get_pending_applications(db: Session = Depends(get_db)):
     apps = db.query(CooperativeApplication).filter(CooperativeApplication.status == "PENDING").all()
     return apps
 
 @router.get("/payments/pending", dependencies=[superadmin_only])
-async def get_pending_payments(db: Session = Depends(get_db)):
+def get_pending_payments(db: Session = Depends(get_db)):
     payments = db.query(SMSCreditPayment).filter(SMSCreditPayment.status == "PENDING").all()
     return payments
 
 @router.post("/applications/{app_id}/action", dependencies=[superadmin_only])
-async def process_application_action(
+def process_application_action(
     app_id: str, 
     payload: ActionPayload, 
     db: Session = Depends(get_db)
@@ -67,7 +67,7 @@ async def process_application_action(
         raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
 
 @router.post("/payments/{payment_id}/action", dependencies=[superadmin_only])
-async def verify_payment_action(
+def verify_payment_action(
     payment_id: str, 
     payload: ActionPayload, 
     current_user: dict = Depends(get_current_user),
@@ -83,7 +83,9 @@ async def verify_payment_action(
     try:
         if payload.action == "VERIFY":
             payment.status = "VERIFIED"
-            payment.verified_by = current_user.get("sub")
+            # NOTE: SMSCreditPayment has no `verified_by` column, so assigning it here was silently
+            # discarded. Add `verified_by = Column(UUID(as_uuid=True))` to the model AND the
+            # Supabase table first, then set: payment.verified_by = current_user.get("sub")
             # Here: Append transaction entry to sms_credit_ledger table to issue credits
         else:
             payment.status = "REJECTED"

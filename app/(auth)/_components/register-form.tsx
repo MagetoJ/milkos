@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 export function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -29,14 +30,18 @@ export function RegisterForm() {
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
-
       if (res.ok) {
-        setMessage('Account created successfully! You can now sign in.');
-      } else {
-        setMessage(data.detail || 'Registration failed.');
+        // Hand off to the single login page.
+        window.location.assign('/login?registered=1');
+        return;
       }
-    } catch (err) {
+
+      const data = await res.json().catch(() => ({}));
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map((d: { msg: string }) => d.msg).join(', ')
+        : data.detail;
+      setMessage(detail || `Registration failed (HTTP ${res.status}).`);
+    } catch {
       setMessage('Network error connecting to backend.');
     } finally {
       setLoading(false);
@@ -93,7 +98,14 @@ export function RegisterForm() {
         {loading ? 'Creating Account...' : 'Create Account'}
       </button>
 
-      {message && <p className="text-xs text-center font-medium mt-2 text-slate-700">{message}</p>}
+      {message && <p role="alert" className="text-xs text-center font-medium mt-2 text-red-600">{message}</p>}
+
+      <p className="text-center text-xs text-slate-500">
+        Already have an account?{' '}
+        <Link href="/login" className="font-semibold text-emerald-800 hover:underline">
+          Sign in
+        </Link>
+      </p>
     </form>
   );
 }
