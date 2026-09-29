@@ -21,8 +21,9 @@ export interface CooperativeApplication {
 
 export interface PaymentVerificationItem {
   id: string;
-  cooperative_name: string;
-  package_name?: string;
+  cooperative_id?: string | null;
+  cooperative_name?: string | null;
+  package_name?: string | null;
   amount_kes: number;
   credits_requested: number;
   masked_mpesa_ref: string;
@@ -30,18 +31,18 @@ export interface PaymentVerificationItem {
   status: 'PENDING' | 'VERIFIED' | 'REJECTED';
 }
 
-export interface SystemSettings {
-  sms_rate_kes: number;
-  mpesa_paybill: string;
-  auto_approve_cooperatives: boolean;
-  maintenance_mode: boolean;
-  system_alert_notice: string;
-}
-
-export interface AuditLogItem {
+export interface AuditEntry {
   id: string;
-  admin_email: string;
   action: string;
   target: string;
+  admin_email?: string | null;
   created_at: string;
 }
+
+/** One thing waiting for a superadmin decision, whatever its source. */
+export type QueueItem =
+  | { kind: 'application'; id: string; title: string; subtitle: string; submittedAt: string; data: CooperativeApplication }
+  | { kind: 'payment'; id: string; title: string; subtitle: string; submittedAt: string; data: PaymentVerificationItem };
+
+export type QueueFilter = 'all' | QueueItem['kind'];
+export type Decision = 'approve' | 'reject';

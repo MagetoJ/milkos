@@ -1,131 +1,204 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Literal, Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db
+from models.admin import AuditLog, CooperativeApplication, Cooler, SMSCreditPayment
 from models.user import User
-from models.admin import CooperativeApplication, SMSCreditPayment, Cooler, AuditLog
+from routers.auth import require_roles
 from schemas.auth import UserRole
-from routers.auth import require_roles, get_current_user
 
 router = APIRouter(prefix="/api/v1/superadmin", tags=["Super Admin"])
 
-superadmin_only = Depends(require_roles([UserRole.SUPER_ADMIN]))
+# Every endpoint below requires a SUPER_ADMIN; the dependency also returns the token payload.
+require_superadmin = require_roles([UserRole.SUPER_ADMIN])
 
-class ActionPayload(BaseModel):
-    action: str  # "APPROVE" | "REJECT" | "VERIFY"
 
-class SystemSettingsPayload(BaseModel):
-    sms_rate_kes: Optional[float] = 1.0
-    mpesa_paybill: Optional[str] = "522522"
-    auto_approve_cooperatives: Optional[bool] = False
-    maintenance_mode: Optional[bool] = False
-    system_alert_notice: Optional[str] = ""
+# ---------- helpers ----------
 
-SYSTEM_SETTINGS_CACHE = {
-    "sms_rate_kes": 1.0,
-    "mpesa_paybill": "522522",
-    "auto_approve_cooperatives": False,
-    "maintenance_mode": False,
-    "system_alert_notice": "Platform systems operating normally."
-}
+class ApplicationAction(BaseModel):
+    action: Literal["APPROVE", "REJECT"]
+    reason: Optional[str] = Field(default=None, max_length=500)
 
-@router.get("/stats", dependencies=[superadmin_only])
-def get_superadmin_stats(db: Session = Depends(get_db)):
-    total_cooperatives = db.query(func.count(User.cooperative_id.distinct())).scalar() or 0
-    total_coolers = db.query(Cooler).count()
-    total_farmers = db.query(User).filter(User.role == UserRole.FARMER).count()
-    pending_apps = db.query(CooperativeApplication).filter(CooperativeApplication.status == "PENDING").count()
-    pending_pays = db.query(SMSCreditPayment).filter(SMSCreditPayment.status == "PENDING").count()
 
+class PaymentAction(BaseModel):
+    action: Literal["VERIFY", "REJECT"]
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+def iso(value: Optional[datetime]) -> Optional[str]:
+    """Columns store naive UTC; mark them as UTC so browsers don't read them as local time."""
+    if value is None:
+        return None
+    return value.isoformat() + ("Z" if value.tzinfo is None else "")
+
+
+def parse_uuid(value: str, what: str) -> UUID:
+    try:
+        return UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"{what} not found")
+
+
+def require_reason(action: str, reason: Optional[str]) -> Optional[str]:
+    cleaned = (reason or "").strip()
+    if action == "REJECT" and len(cleaned) < 5:
+        raise HTTPException(status_code=422, detail="Give a reason (at least 5 characters) when rejecting.")
+    return cleaned or None
+
+
+def audit(db: Session, admin: dict, action: str, target: str, reason: Optional[str] = None) -> None:
+    """Added in the same transaction as the change it records."""
+    text = f"{target} (reason: {reason})" if reason else target
+    db.add(AuditLog(admin_id=UUID(admin["sub"]), action=action, target=text[:500]))
+
+
+# ---------- read endpoints ----------
+
+@router.get("/stats")
+def get_superadmin_stats(db: Session = Depends(get_db), _admin: dict = Depends(require_superadmin)):
     return {
-        "total_cooperatives": total_cooperatives,
-        "total_coolers": total_coolers,
-        "total_farmers": total_farmers,
-        "milk_today_kg": 0.0,
-        "pending_applications_count": pending_apps,
-        "pending_payments_count": pending_pays,
+        "total_cooperatives": db.query(func.count(User.cooperative_id.distinct())).scalar() or 0,
+        "total_coolers": db.query(Cooler).count(),
+        "total_farmers": db.query(User).filter(User.role == UserRole.FARMER).count(),
+        "milk_today_kg": 0.0,  # TODO: sum today's collections once the collections table exists
+        "pending_applications_count": db.query(CooperativeApplication)
+        .filter(CooperativeApplication.status == "PENDING").count(),
+        "pending_payments_count": db.query(SMSCreditPayment)
+        .filter(SMSCreditPayment.status == "PENDING").count(),
     }
 
-@router.get("/applications/pending", dependencies=[superadmin_only])
-def get_pending_applications(db: Session = Depends(get_db)):
-    return db.query(CooperativeApplication).filter(CooperativeApplication.status == "PENDING").all()
 
-@router.get("/payments/pending", dependencies=[superadmin_only])
-def get_pending_payments(db: Session = Depends(get_db)):
-    return db.query(SMSCreditPayment).filter(SMSCreditPayment.status == "PENDING").all()
+@router.get("/applications/pending")
+def get_pending_applications(db: Session = Depends(get_db), _admin: dict = Depends(require_superadmin)):
+    rows = (
+        db.query(CooperativeApplication)
+        .filter(CooperativeApplication.status == "PENDING")
+        .order_by(CooperativeApplication.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(a.id),
+            "org_name": a.org_name,
+            "applicant_name": a.applicant_name,
+            "email": a.email,
+            "phone": a.phone,
+            "location": a.location,
+            "status": a.status,
+            "created_at": iso(a.created_at),
+        }
+        for a in rows
+    ]
 
-@router.post("/applications/{app_id}/action", dependencies=[superadmin_only])
-def process_application_action(
-    app_id: str, 
-    payload: ActionPayload, 
-    db: Session = Depends(get_db)
+
+@router.get("/payments/pending")
+def get_pending_payments(db: Session = Depends(get_db), _admin: dict = Depends(require_superadmin)):
+    rows = (
+        db.query(SMSCreditPayment)
+        .filter(SMSCreditPayment.status == "PENDING")
+        .order_by(SMSCreditPayment.submitted_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(p.id),
+            "cooperative_id": str(p.cooperative_id) if p.cooperative_id else None,
+            # TODO: join the cooperatives table for its name once it has a SQLAlchemy model.
+            "cooperative_name": None,
+            "package_name": None,
+            "amount_kes": float(p.amount_kes),
+            "credits_requested": int(p.credits_requested),
+            "masked_mpesa_ref": p.masked_mpesa_ref,
+            "status": p.status,
+            "submitted_at": iso(p.submitted_at),
+        }
+        for p in rows
+    ]
+
+
+@router.get("/activity")
+def get_activity(
+    limit: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_superadmin),
 ):
-    app_record = db.query(CooperativeApplication).filter(CooperativeApplication.id == app_id).first()
-    if not app_record:
-        raise HTTPException(status_code=404, detail="Application record not found")
-
-    if payload.action not in ["APPROVE", "REJECT"]:
-        raise HTTPException(status_code=400, detail="Invalid action type")
-
-    try:
-        if payload.action == "APPROVE":
-            app_record.status = "APPROVED"
-            user = db.query(User).filter(User.email == app_record.email).first()
-            if user:
-                user.is_active = True
-        else:
-            app_record.status = "REJECTED"
-
-        db.commit()
-        return {"success": True, "application_id": app_id, "status": app_record.status}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
-
-@router.post("/payments/{payment_id}/action", dependencies=[superadmin_only])
-def verify_payment_action(
-    payment_id: str, 
-    payload: ActionPayload, 
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    payment = db.query(SMSCreditPayment).filter(SMSCreditPayment.id == payment_id).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment record not found")
-
-    if payload.action not in ["VERIFY", "REJECT"]:
-        raise HTTPException(status_code=400, detail="Invalid action type")
-
-    try:
-        payment.status = "VERIFIED" if payload.action == "VERIFY" else "REJECTED"
-        db.commit()
-        return {"success": True, "payment_id": payment_id, "status": payment.status}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Payment verification failed: {str(e)}")
-
-@router.get("/settings", dependencies=[superadmin_only])
-def get_system_settings():
-    return SYSTEM_SETTINGS_CACHE
-
-@router.post("/settings", dependencies=[superadmin_only])
-def update_system_settings(payload: SystemSettingsPayload):
-    SYSTEM_SETTINGS_CACHE.update(payload.dict(exclude_unset=True))
-    return {"success": True, "settings": SYSTEM_SETTINGS_CACHE}
-
-@router.get("/audit-logs", dependencies=[superadmin_only])
-def get_audit_logs(db: Session = Depends(get_db)):
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    rows = (
+        db.query(AuditLog, User.email)
+        .outerjoin(User, User.id == AuditLog.admin_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "id": str(log.id),
-            "admin_email": log.admin.email if log.admin else "System",
             "action": log.action,
             "target": log.target,
-            "created_at": log.created_at.isoformat() if log.created_at else ""
+            "admin_email": email,
+            "created_at": iso(log.created_at),
         }
-        for log in logs
+        for log, email in rows
     ]
+
+
+# ---------- decisions ----------
+
+@router.post("/applications/{app_id}/action")
+def process_application_action(
+    app_id: str,
+    payload: ApplicationAction,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_superadmin),
+):
+    reason = require_reason(payload.action, payload.reason)
+    record = db.get(CooperativeApplication, parse_uuid(app_id, "Application"))
+    if not record:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if record.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"This application was already {record.status.lower()}.")
+
+    approved = payload.action == "APPROVE"
+    record.status = "APPROVED" if approved else "REJECTED"
+    # TODO on approve: create the cooperative and its COOP_ADMIN user here, in the same transaction.
+    audit(db, admin, "APPLICATION_APPROVED" if approved else "APPLICATION_REJECTED", record.org_name, reason)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not save the decision. Try again.")
+    return {"success": True, "application_id": app_id, "status": record.status}
+
+
+@router.post("/payments/{payment_id}/action")
+def verify_payment_action(
+    payment_id: str,
+    payload: PaymentAction,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_superadmin),
+):
+    reason = require_reason(payload.action, payload.reason)
+    payment = db.get(SMSCreditPayment, parse_uuid(payment_id, "Payment"))
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"This payment was already {payment.status.lower()}.")
+
+    verified = payload.action == "VERIFY"
+    payment.status = "VERIFIED" if verified else "REJECTED"
+    # TODO on verify: add payment.credits_requested to the cooperative's SMS balance here.
+    target = f"{int(payment.credits_requested):,} credits, KES {float(payment.amount_kes):,.0f}, ref {payment.masked_mpesa_ref}"
+    audit(db, admin, "PAYMENT_VERIFIED" if verified else "PAYMENT_REJECTED", target, reason)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not save the decision. Try again.")
+    return {"success": True, "payment_id": payment_id, "status": payment.status}

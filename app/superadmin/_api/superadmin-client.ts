@@ -1,112 +1,69 @@
-import { clearSession, logout as authLogout } from '@/lib/auth';
-import {
-  SuperadminStats,
+import type {
+  AuditEntry,
   CooperativeApplication,
   PaymentVerificationItem,
-  SystemSettings,
-  AuditLogItem,
-} from "../_types/superadmin-types";
+  SuperadminStats,
+} from '../_types/superadmin-types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1/superadmin";
+// Relative URL: goes through the Next.js rewrite (same origin), so the HttpOnly cookie is sent.
+const BASE_URL = '/api/v1/superadmin';
+const LEGACY_TOKEN_KEY = 'milkflow_token';
 
-const DEFAULT_FETCH_OPTIONS: RequestInit = {
-  headers: {
-    "Content-Type": "application/json",
-  },
-};
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
 
-async function handleResponse(res: Response, message: string): Promise<Response> {
-  if (res.status === 401 || res.status === 403) {
-    clearSession();
-    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-      window.location.replace('/login');
-    }
-    throw new Error('Your session is invalid or no longer authorized. Please sign in again.');
+/** Works with cookie auth and, if present, the localStorage bearer token. */
+export function authHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem(LEGACY_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init.headers },
+  });
+
+  if (res.status === 401) {
+    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+    throw new ApiError(401, 'Your session has expired. Sign in again.');
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    /* empty or non-JSON body */
   }
 
   if (!res.ok) {
-    throw new Error(`${message} (${res.status})`);
+    const detail = (body as { detail?: unknown } | null)?.detail;
+    throw new ApiError(res.status, typeof detail === 'string' ? detail : `Request failed (HTTP ${res.status})`);
   }
-
-  return res;
+  return body as T;
 }
 
-function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = typeof window === 'undefined' ? null : localStorage.getItem('milkflow_token');
-  const headers = new Headers(options.headers ?? DEFAULT_FETCH_OPTIONS.headers);
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+export const fetchSuperadminStats = () => request<SuperadminStats>('/stats');
+export const fetchPendingApplications = () => request<CooperativeApplication[]>('/applications/pending');
+export const fetchPendingPayments = () => request<PaymentVerificationItem[]>('/payments/pending');
+export const fetchActivity = (limit = 20) => request<AuditEntry[]>(`/activity?limit=${limit}`);
 
-  return fetch(url, {
-    ...DEFAULT_FETCH_OPTIONS,
-    ...options,
-    headers,
+export function processApplication(id: string, action: 'APPROVE' | 'REJECT', reason?: string) {
+  return request<{ success: boolean }>(`/applications/${id}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ action, reason }),
   });
 }
 
-export async function fetchSuperadminStats(): Promise<SuperadminStats> {
-  const res = await handleResponse(await authFetch(`${BASE_URL}/stats`), 'Failed to fetch stats');
-  return res.json();
-}
-
-export async function fetchPendingApplications(): Promise<CooperativeApplication[]> {
-  const res = await handleResponse(await authFetch(`${BASE_URL}/applications/pending`), 'Failed to fetch pending applications');
-  return res.json();
-}
-
-export async function fetchPendingPayments(): Promise<PaymentVerificationItem[]> {
-  const res = await handleResponse(await authFetch(`${BASE_URL}/payments/pending`), 'Failed to fetch pending payments');
-  return res.json();
-}
-
-export async function processApplication(
-  id: string,
-  action: "APPROVE" | "REJECT"
-): Promise<boolean> {
-  const res = await authFetch(`${BASE_URL}/applications/${id}/action`, {
-    method: "POST",
-    body: JSON.stringify({ action }),
+export function verifyPayment(id: string, action: 'VERIFY' | 'REJECT', reason?: string) {
+  return request<{ success: boolean }>(`/payments/${id}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ action, reason }),
   });
-  await handleResponse(res, 'Failed to process application');
-  return true;
-}
-
-export async function verifyPayment(
-  id: string,
-  action: "VERIFY" | "REJECT"
-): Promise<boolean> {
-  const res = await authFetch(`${BASE_URL}/payments/${id}/action`, {
-    method: "POST",
-    body: JSON.stringify({ action }),
-  });
-  await handleResponse(res, 'Failed to process payment');
-  return true;
-}
-
-export async function fetchSystemSettings(): Promise<SystemSettings> {
-  const res = await handleResponse(await authFetch(`${BASE_URL}/settings`), 'Failed to fetch settings');
-  return res.json();
-}
-
-export async function updateSystemSettings(settings: Partial<SystemSettings>): Promise<boolean> {
-  const res = await authFetch(`${BASE_URL}/settings`, {
-    method: "POST",
-    body: JSON.stringify(settings),
-  });
-  await handleResponse(res, 'Failed to update settings');
-  return true;
-}
-
-export async function fetchAuditLogs(): Promise<AuditLogItem[]> {
-  const res = await handleResponse(await authFetch(`${BASE_URL}/audit-logs`), 'Failed to fetch audit logs');
-  return res.json();
-}
-
-export async function performLogout(): Promise<void> {
-  try {
-    await fetch('/api/v1/auth/logout', { method: 'POST' });
-  } catch {
-    // Ignore network error during logout
-  } finally {
-    authLogout();
-  }
 }

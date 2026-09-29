@@ -1,190 +1,83 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { SuperadminStats, CooperativeApplication, PaymentVerificationItem } from '../_types/superadmin-types';
-import { 
-  fetchSuperadminStats, 
-  fetchPendingApplications, 
-  fetchPendingPayments, 
-  verifyPayment, 
-  processApplication 
-} from '../_api/superadmin-client';
+import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
+import { useSuperadminData } from './superadmin-data';
+import { DecisionQueue } from './decision-queue';
+import { ActivityFeed } from './activity-feed';
+import { formatNumber, greeting } from '../_lib/format';
+
+function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="px-5 py-4">
+      <dt className="text-sm text-[#5E6B64]">{label}</dt>
+      <dd className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{value}</dd>
+      {note && <dd className="text-xs text-[#8A968F]">{note}</dd>}
+    </div>
+  );
+}
 
 export function SuperadminDashboard() {
-  const [stats, setStats] = useState<SuperadminStats | null>(null);
-  const [applications, setApplications] = useState<CooperativeApplication[]>([]);
-  const [payments, setPayments] = useState<PaymentVerificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadErrors, setLoadErrors] = useState<string[]>([]);
-
-  const loadData = async () => {
-    setLoading(true);
-    const [sRes, aRes, pRes] = await Promise.allSettled([
-      fetchSuperadminStats(),
-      fetchPendingApplications(),
-      fetchPendingPayments()
-    ]);
-    if (sRes.status === 'fulfilled') setStats(sRes.value);
-    if (aRes.status === 'fulfilled') setApplications(aRes.value);
-    if (pRes.status === 'fulfilled') setPayments(pRes.value);
-
-    const errors = [sRes, aRes, pRes]
-      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
-    errors.forEach((message) => console.error('Superadmin data load error:', message));
-    setLoadErrors(errors);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleVerifyPayment = async (id: string, action: 'VERIFY' | 'REJECT') => {
-    const success = await verifyPayment(id, action);
-    if (success) loadData();
-  };
-
-  const handleProcessApplication = async (id: string, action: 'APPROVE' | 'REJECT') => {
-    const success = await processApplication(id, action);
-    if (success) loadData();
-  };
-
-  if (loading) {
-    return (
-      <div className="p-12 text-center text-zinc-400 text-sm font-medium">
-        Loading Platform Superadmin Portal...
-      </div>
-    );
-  }
+  const { stats, queue, status, refreshing, errors, lastUpdated, refresh } = useSuperadminData();
+  const waiting = queue.length;
+  const loading = status === 'loading';
 
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto text-white">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Platform Superadmin Control Center</h1>
-        <p className="text-xs text-zinc-400 mt-1">
-          Global multi-tenant governance, cooperative onboarding verification, and SMS credit issuing.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{greeting()}.</h1>
+          <p className="mt-1 text-[#5E6B64]">
+            {loading
+              ? 'Loading the platform…'
+              : waiting === 0
+                ? 'All caught up. Nothing needs your decision.'
+                : `${waiting} ${waiting === 1 ? 'item needs' : 'items need'} your decision.`}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-[#5E6B64]">
+          {lastUpdated && (
+            <span>
+              Updated {lastUpdated.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#C9D2CB] bg-white px-3 py-1.5 text-sm font-medium text-[#17221D] hover:bg-[#EEF1EC] disabled:opacity-60"
+          >
+            <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+      </header>
 
-      {loadErrors.length > 0 && (
-        <div role="alert" className="p-4 border border-red-800 bg-red-950/80 rounded-xl text-xs text-red-200">
-          {loadErrors.join(' · ')}
+      {errors.length > 0 && (
+        <div role="alert" className="rounded-lg border border-[#F4C7C3] bg-[#FDECEA] px-4 py-3 text-sm text-[#912018]">
+          Some data didn&apos;t load: {errors.join('; ')}
         </div>
       )}
 
-      {/* Platform Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
-          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Cooperatives</p>
-          <p className="text-2xl font-extrabold text-white mt-1">{stats?.total_cooperatives ?? 0}</p>
-        </div>
+      {/* One strip, not four cards: these are reference numbers, the queue is the job. */}
+      <dl className="grid grid-cols-2 divide-[#EEF1EC] rounded-xl border border-[#DDE3DE] bg-white md:grid-cols-4 md:divide-x [&>*:nth-child(-n+2)]:border-b [&>*:nth-child(-n+2)]:border-[#EEF1EC] md:[&>*:nth-child(-n+2)]:border-b-0">
+        <Metric label="Cooperatives" value={loading ? '–' : formatNumber(stats?.total_cooperatives)} />
+        <Metric label="Farmers" value={loading ? '–' : formatNumber(stats?.total_farmers)} />
+        <Metric label="Coolers" value={loading ? '–' : formatNumber(stats?.total_coolers)} />
+        <Metric label="Milk collected today" value={loading ? '–' : `${formatNumber(stats?.milk_today_kg)} kg`} note="Across all cooperatives" />
+      </dl>
 
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
-          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Active Coolers</p>
-          <p className="text-2xl font-extrabold text-white mt-1">{stats?.total_coolers ?? 0}</p>
-        </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <DecisionQueue title="Needs a decision" limit={8} />
 
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
-          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Milk Today (KG)</p>
-          <p className="text-2xl font-extrabold text-emerald-400 mt-1">
-            {stats?.milk_today_kg?.toLocaleString() ?? 0} KG
-          </p>
-        </div>
-
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
-          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Pending Verifications</p>
-          <p className="text-2xl font-extrabold text-amber-400 mt-1">
-            {(stats?.pending_applications_count ?? 0) + (stats?.pending_payments_count ?? 0)}
-          </p>
-        </div>
-      </div>
-
-      {/* Dual Queue Panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Onboarding Applications Queue */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-md space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">Cooperative Onboarding Queue</h2>
-            <span className="text-xs bg-amber-950/80 text-amber-300 border border-amber-800 px-2.5 py-0.5 rounded-full font-semibold">
-              {applications.length} Pending
-            </span>
+        <section aria-labelledby="activity-title" className="self-start rounded-xl border border-[#DDE3DE] bg-white">
+          <div className="flex items-baseline justify-between px-5 pb-2 pt-5">
+            <h2 id="activity-title" className="text-base font-semibold">Recent activity</h2>
+            <Link href="/superadmin/activity" className="text-sm font-medium text-[#176044] hover:underline">
+              View all
+            </Link>
           </div>
-
-          {applications.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-8 text-center">No pending cooperative applications.</p>
-          ) : (
-            <div className="space-y-3">
-              {applications.map((app) => (
-                <div key={app.id} className="p-4 border border-zinc-800 rounded-lg bg-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-white">{app.org_name}</p>
-                    <p className="text-xs text-zinc-300 mt-0.5">{app.applicant_name} ({app.phone})</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">{app.location}</p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => handleProcessApplication(app.id, 'APPROVE')}
-                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleProcessApplication(app.id, 'REJECT')}
-                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* SMS Credit Verification Queue */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-md space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-white">SMS Credit Top-Up Verification</h2>
-            <span className="text-xs bg-emerald-950/80 text-emerald-300 border border-emerald-800 px-2.5 py-0.5 rounded-full font-semibold">
-              {payments.length} Pending
-            </span>
-          </div>
-
-          {payments.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-8 text-center">No pending M-Pesa payment verifications.</p>
-          ) : (
-            <div className="space-y-3">
-              {payments.map((p) => (
-                <div key={p.id} className="p-4 border border-zinc-800 rounded-lg bg-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-white">{p.cooperative_name}</p>
-                    <p className="text-xs text-emerald-400 font-semibold mt-0.5">
-                      {p.credits_requested.toLocaleString()} Credits ({p.amount_kes} KES)
-                    </p>
-                    <p className="text-xs text-zinc-400 mt-0.5">Masked Ref: {p.masked_mpesa_ref}</p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => handleVerifyPayment(p.id, 'VERIFY')}
-                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors"
-                    >
-                      Verify & Issue
-                    </button>
-                    <button
-                      onClick={() => handleVerifyPayment(p.id, 'REJECT')}
-                      className="px-3 py-1.5 bg-red-950 hover:bg-red-900 text-red-200 text-xs font-medium rounded-lg border border-red-800 transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+          <ActivityFeed limit={6} />
+        </section>
       </div>
     </div>
   );
