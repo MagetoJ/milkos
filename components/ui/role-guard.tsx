@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearSession, getSession, homeFor, loginUrl, logout, type UserRole } from '@/lib/auth';
-import { useActiveRefresh } from "@/hooks/use-active-refresh";
+import { useActiveRefresh } from "@/app/hooks/use-active-refresh";
 
 type GuardState = 'checking' | 'authorized' | 'unavailable';
 

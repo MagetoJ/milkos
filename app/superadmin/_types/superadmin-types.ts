@@ -17,6 +17,22 @@ export interface CooperativeApplication {
   location: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   created_at: string;
+  // Null on applications submitted before these fields were collected.
+  registration_number?: string | null;
+  kra_pin?: string | null;
+  county?: string | null;
+  sub_county?: string | null;
+  admin_id_number?: string | null;
+  estimated_daily_liters?: number | null;
+  initial_coolers_count?: number | null;
+  additional_info?: string | null;
+  /** Problems detected at registration; the superadmin must acknowledge them before approving. */
+  flags?: ApplicationFlag[];
+}
+
+export interface ApplicationFlag {
+  code: 'SIMILAR_NAME' | 'SHARED_PHONE' | 'SHARED_ID_NUMBER' | 'PREVIOUSLY_REJECTED' | string;
+  message: string;
 }
 
 export interface PaymentVerificationItem {

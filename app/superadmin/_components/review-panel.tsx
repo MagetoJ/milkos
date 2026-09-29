@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { TriangleAlert, X } from 'lucide-react';
 import type { Decision, QueueItem } from '../_types/superadmin-types';
 import { formatDateTime, formatKes, formatNumber, waitingFor } from '../_lib/format';
 import { useSuperadminData } from './superadmin-data';
@@ -39,6 +39,7 @@ export function ReviewPanel({ item, onClose }: { item: QueueItem | null; onClose
   const [mode, setMode] = useState<'review' | 'rejecting'>('review');
   const [reason, setReason] = useState('');
   const [matched, setMatched] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState<Decision | null>(null);
   const [error, setError] = useState('');
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -48,6 +49,7 @@ export function ReviewPanel({ item, onClose }: { item: QueueItem | null; onClose
     setMode('review');
     setReason('');
     setMatched(false);
+    setAcknowledged(false);
     setError('');
     setBusy(null);
     if (item) closeRef.current?.focus();
@@ -77,7 +79,8 @@ export function ReviewPanel({ item, onClose }: { item: QueueItem | null; onClose
     }
   }
 
-  const canApprove = item.kind === 'application' || matched;
+  const flags = item.kind === 'application' ? item.data.flags ?? [] : [];
+  const canApprove = item.kind === 'application' ? flags.length === 0 || acknowledged : matched;
   const canReject = reason.trim().length >= 5;
 
   return (
@@ -102,13 +105,39 @@ export function ReviewPanel({ item, onClose }: { item: QueueItem | null; onClose
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {flags.length > 0 && (
+            <div role="alert" className="mb-4 rounded-lg border border-[#F4C77B] bg-[#FFF7E8] p-3 text-sm text-[#7A4B00]">
+              <p className="flex items-center gap-2 font-semibold">
+                <TriangleAlert className="size-4 shrink-0" aria-hidden />
+                {flags.length === 1 ? '1 warning' : `${flags.length} warnings`} found at registration
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-6">
+                {flags.map((flag, i) => (
+                  <li key={`${flag.code}-${i}`}>{flag.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <dl className="divide-y divide-[#EEF1EC]">
             {item.kind === 'application' ? (
               <>
                 <Detail label="Applicant" value={item.data.applicant_name} />
                 <Detail label="Email" value={<a className="text-[#176044] underline-offset-2 hover:underline" href={`mailto:${item.data.email}`}>{item.data.email}</a>} />
                 <Detail label="Phone" value={<a className="text-[#176044] underline-offset-2 hover:underline" href={`tel:${item.data.phone}`}>{item.data.phone}</a>} />
-                <Detail label="Location" value={item.data.location} />
+                <Detail label="Admin ID no." value={item.data.admin_id_number ?? '—'} />
+                <Detail label="Registration no." value={item.data.registration_number ?? '—'} />
+                <Detail label="KRA PIN" value={item.data.kra_pin ?? '—'} />
+                <Detail label="County" value={item.data.county ?? '—'} />
+                <Detail label="Location" value={item.data.sub_county ?? item.data.location} />
+                <Detail
+                  label="Milk per day"
+                  value={item.data.estimated_daily_liters != null ? `${formatNumber(item.data.estimated_daily_liters)} litres (estimate)` : '—'}
+                />
+                <Detail label="Coolers" value={item.data.initial_coolers_count != null ? formatNumber(item.data.initial_coolers_count) : '—'} />
+                {item.data.additional_info && (
+                  <Detail label="Notes" value={<span className="whitespace-pre-line">{item.data.additional_info}</span>} />
+                )}
                 <Detail label="Submitted" value={formatDateTime(item.data.created_at)} />
               </>
             ) : (
@@ -121,6 +150,21 @@ export function ReviewPanel({ item, onClose }: { item: QueueItem | null; onClose
               </>
             )}
           </dl>
+
+          {flags.length > 0 && mode === 'review' && (
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-[#DDE3DE] p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 size-4 accent-[#176044]"
+              />
+              <span>
+                I have checked these warnings.
+                <span className="block text-xs text-[#5E6B64]">Approving creates the cooperative and activates the admin&apos;s account.</span>
+              </span>
+            </label>
+          )}
 
           {item.kind === 'payment' && mode === 'review' && (
             <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-[#DDE3DE] p-3 text-sm">

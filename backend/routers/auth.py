@@ -1,8 +1,10 @@
+import logging
 import os
 from uuid import UUID
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -10,8 +12,20 @@ from models.user import User
 from models.admin import CooperativeApplication
 from schemas.auth import UserLogin, UserRole, CooperativeRegisterRequest, CooperativeRegisterResponse
 from core.security import hash_password, verify_password, create_access_token, decode_access_token
+from core.notifications import notify_applicant
+from core.onboarding import detect_flags, find_conflict
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+logger = logging.getLogger("milkflow.auth")
+
+
+def conflict_error(field: Optional[str], message: str) -> HTTPException:
+    """409 shaped like FastAPI's 422 body, so the client maps both to form fields the same way."""
+    loc = ["body", field] if field else ["body"]
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=[{"loc": loc, "msg": message, "type": "conflict"}],
+    )
 
 
 # 1. Custom token extractor checking Cookies and Authorization header
@@ -64,32 +78,16 @@ def register_cooperative_application(
     Individual roles (Managers, Collectors, Farmers) cannot self-register here;
     they are created by the Cooperative Admin upon approval.
     """
-    # Check if applicant email or phone is already registered
-    existing_user = db.query(User).filter(
-        (User.email == payload.admin_email.lower()) | (User.phone_number == payload.admin_phone)
-    ).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account or application with this email or phone number already exists."
-        )
+    # The payload is already normalised (phone in E.164, uppercase KRA PIN, canonical county...).
+    conflict = find_conflict(db, payload)
+    if conflict:
+        raise conflict_error(*conflict)
+    flags = detect_flags(db, payload)
 
     try:
-        # Create Cooperative Onboarding Application (PENDING status)
-        new_app = CooperativeApplication(
-            org_name=payload.cooperative_name,
-            applicant_name=payload.admin_full_name,
-            email=payload.admin_email.lower(),
-            phone=payload.admin_phone,
-            location=f"{payload.county}, {payload.location}",
-            status="PENDING"
-        )
-        db.add(new_app)
-        db.flush()  # Generate application ID
-
         # Create inactive COOP_ADMIN user account pending Superadmin approval
         coop_admin_user = User(
-            email=payload.admin_email.lower(),
+            email=payload.admin_email,
             password_hash=hash_password(payload.password),
             full_name=payload.admin_full_name,
             phone_number=payload.admin_phone,
@@ -97,19 +95,48 @@ def register_cooperative_application(
             is_active=False  # Remains inactive until Superadmin approves application
         )
         db.add(coop_admin_user)
-        db.commit()
+        db.flush()  # Generate user ID
 
-        return CooperativeRegisterResponse(
-            message="Cooperative application submitted successfully. Pending administrative approval.",
-            application_id=str(new_app.id),
-            status="PENDING"
+        new_app = CooperativeApplication(
+            org_name=payload.cooperative_name,
+            applicant_name=payload.admin_full_name,
+            email=payload.admin_email,
+            phone=payload.admin_phone,
+            location=f"{payload.location}, {payload.county}",
+            status="PENDING",
+            registration_number=payload.registration_number,
+            kra_pin=payload.kra_pin,
+            county=payload.county,
+            sub_county=payload.location,
+            admin_id_number=payload.admin_id_number,
+            estimated_daily_liters=payload.estimated_daily_liters,
+            initial_coolers_count=payload.initial_coolers_count,
+            additional_info=payload.additional_info,
+            admin_user_id=coop_admin_user.id,
+            flags=flags,
         )
-    except Exception as e:
+        db.add(new_app)
+        db.commit()
+    except IntegrityError:
+        # A simultaneous submission won the race for a unique value (email, phone, reg. no., KRA PIN).
         db.rollback()
+        raise conflict_error(*(find_conflict(db, payload) or (
+            None, "An application with these details was just submitted. Refresh and check before trying again."
+        )))
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Cooperative registration failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail="We couldn't save your application. Please try again in a few minutes."
         )
+
+    notify_applicant(new_app, "APPLICATION_RECEIVED")
+    return CooperativeRegisterResponse(
+        message="Cooperative application submitted successfully. Pending administrative approval.",
+        application_id=str(new_app.id),
+        status="PENDING"
+    )
 
 
 @router.post("/login")
@@ -147,13 +174,16 @@ def refresh_token(
     response: Response = None,
     db: Session = Depends(get_db)
 ):
-    new_token = create_access_token(
-        data={
-            "sub": current_user["sub"],
-            "email": current_user.get("email"),
-            "role": current_user.get("role"),
-        }
-    )
+    # Re-read the account so a deactivated user or a changed role can't be carried forward.
+    try:
+        user = db.get(User, UUID(current_user["sub"]))
+    except (ValueError, KeyError):
+        user = None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found or inactive")
+
+    role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
+    new_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
 
     if response:
         response.set_cookie(
@@ -168,8 +198,8 @@ def refresh_token(
 
     return {
         "access_token": new_token,
-        "role": current_user.get("role"),
-        "user_id": current_user["sub"],
+        "role": role,
+        "user_id": str(user.id),
     }
 
 

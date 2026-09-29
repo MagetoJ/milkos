@@ -1,19 +1,24 @@
+import logging
 from datetime import datetime
 from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from core.notifications import notify_applicant
+from core.onboarding import generate_cooperative_code
 from db import get_db
 from models.admin import AuditLog, CooperativeApplication, Cooler, SMSCreditPayment
+from models.cooperative import Cooperative
 from models.user import User
 from routers.auth import require_roles
 from schemas.auth import UserRole
 
 router = APIRouter(prefix="/api/v1/superadmin", tags=["Super Admin"])
+logger = logging.getLogger("milkflow.superadmin")
 
 # Every endpoint below requires a SUPER_ADMIN; the dependency also returns the token payload.
 require_superadmin = require_roles([UserRole.SUPER_ADMIN])
@@ -58,12 +63,19 @@ def audit(db: Session, admin: dict, action: str, target: str, reason: Optional[s
     db.add(AuditLog(admin_id=UUID(admin["sub"]), action=action, target=text[:500]))
 
 
+def applicant_account(db: Session, record: CooperativeApplication) -> Optional[User]:
+    """The COOP_ADMIN user created at registration. Applications from before admin_user_id existed fall back to email."""
+    if record.admin_user_id:
+        return db.get(User, record.admin_user_id)
+    return db.query(User).filter(User.email == record.email, User.role == UserRole.COOP_ADMIN).first()
+
+
 # ---------- read endpoints ----------
 
 @router.get("/stats")
 def get_superadmin_stats(db: Session = Depends(get_db), _admin: dict = Depends(require_superadmin)):
     return {
-        "total_cooperatives": db.query(func.count(User.cooperative_id.distinct())).scalar() or 0,
+        "total_cooperatives": db.query(Cooperative).count(),
         "total_coolers": db.query(Cooler).count(),
         "total_farmers": db.query(User).filter(User.role == UserRole.FARMER).count(),
         "milk_today_kg": 0.0,  # TODO: sum today's collections once the collections table exists
@@ -92,6 +104,15 @@ def get_pending_applications(db: Session = Depends(get_db), _admin: dict = Depen
             "location": a.location,
             "status": a.status,
             "created_at": iso(a.created_at),
+            "registration_number": a.registration_number,
+            "kra_pin": a.kra_pin,
+            "county": a.county,
+            "sub_county": a.sub_county,
+            "admin_id_number": a.admin_id_number,
+            "estimated_daily_liters": float(a.estimated_daily_liters) if a.estimated_daily_liters is not None else None,
+            "initial_coolers_count": a.initial_coolers_count,
+            "additional_info": a.additional_info,
+            "flags": a.flags or [],
         }
         for a in rows
     ]
@@ -157,23 +178,85 @@ def process_application_action(
     admin: dict = Depends(require_superadmin),
 ):
     reason = require_reason(payload.action, payload.reason)
-    record = db.get(CooperativeApplication, parse_uuid(app_id, "Application"))
+    # Row lock (Postgres) so two superadmins deciding at once are serialised.
+    record = db.get(CooperativeApplication, parse_uuid(app_id, "Application"), with_for_update=True)
     if not record:
         raise HTTPException(status_code=404, detail="Application not found")
     if record.status != "PENDING":
         raise HTTPException(status_code=409, detail=f"This application was already {record.status.lower()}.")
 
     approved = payload.action == "APPROVE"
-    record.status = "APPROVED" if approved else "REJECTED"
-    # TODO on approve: create the cooperative and its COOP_ADMIN user here, in the same transaction.
-    audit(db, admin, "APPLICATION_APPROVED" if approved else "APPLICATION_REJECTED", record.org_name, reason)
+    applicant = applicant_account(db, record)
+    cooperative = None
 
+    if approved:
+        if not (record.registration_number and record.kra_pin and record.county):
+            raise HTTPException(
+                status_code=422,
+                detail="This application is missing its registration number, KRA PIN or county. "
+                       "Reject it and ask the applicant to apply again.",
+            )
+        if not applicant:
+            raise HTTPException(
+                status_code=409,
+                detail="The applicant's account no longer exists. Reject this application and ask them to apply again.",
+            )
+
+    # Everything below is one transaction: either all of it is saved or none of it.
+    # These models have no relationship()s, so the unit of work can't infer insert order from
+    # foreign keys; the explicit flushes put each row in place before anything points at it.
     try:
+        if approved:
+            cooperative = Cooperative(
+                name=record.org_name,
+                code=generate_cooperative_code(db, record.org_name),
+                registration_number=record.registration_number,
+                kra_pin=record.kra_pin,
+                county=record.county,
+                location=record.sub_county,
+                estimated_daily_liters=record.estimated_daily_liters,
+            )
+            db.add(cooperative)
+            db.flush()
+            applicant.is_active = True
+            applicant.cooperative_id = cooperative.id
+            record.admin_user_id = applicant.id
+            record.cooperative_id = cooperative.id
+        else:
+            record.rejection_reason = reason
+            # Free the email/phone so the applicant can apply again. Only an account that was never
+            # activated or attached to a cooperative is removed.
+            if applicant and not applicant.is_active and applicant.cooperative_id is None \
+                    and applicant.role == UserRole.COOP_ADMIN:
+                record.admin_user_id = None
+                db.flush()
+                db.delete(applicant)
+
+        record.status = "APPROVED" if approved else "REJECTED"
+        record.reviewed_by = UUID(admin["sub"])
+        record.reviewed_at = datetime.utcnow()
+        target = f"{record.org_name} ({cooperative.code})" if cooperative else record.org_name
+        audit(db, admin, "APPLICATION_APPROVED" if approved else "APPLICATION_REJECTED", target, reason)
         db.commit()
-    except Exception:
+    except IntegrityError:
         db.rollback()
+        logger.warning("Decision on application %s hit a constraint", app_id, exc_info=True)
+        raise HTTPException(
+            status_code=409,
+            detail="A cooperative with this registration number or KRA PIN already exists. Reject this application.",
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("Saving the decision on application %s failed", app_id)
         raise HTTPException(status_code=500, detail="Could not save the decision. Try again.")
-    return {"success": True, "application_id": app_id, "status": record.status}
+
+    notify_applicant(record, "APPLICATION_APPROVED" if approved else "APPLICATION_REJECTED")
+    return {
+        "success": True,
+        "application_id": app_id,
+        "status": record.status,
+        "cooperative_id": str(cooperative.id) if cooperative else None,
+    }
 
 
 @router.post("/payments/{payment_id}/action")

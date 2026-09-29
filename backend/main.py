@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from db import engine, Base
+import models.cooperative
 import models.user
 import models.admin
 from routers import auth, superadmin
 
-Base.metadata.create_all(bind=engine)
+# The schema is managed by Alembic (`alembic upgrade head`), never created at startup.
 
 app = FastAPI(title="MilkOS API")
 
