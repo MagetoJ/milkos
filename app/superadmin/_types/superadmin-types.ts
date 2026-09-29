@@ -5,7 +5,7 @@ export interface SuperadminStats {
   milk_today_kg: number;
   pending_applications_count: number;
   pending_payments_count: number;
-  sms_credits_system_balance: number;
+  sms_credits_system_balance?: number;
 }
 
 export interface CooperativeApplication {
@@ -22,10 +22,26 @@ export interface CooperativeApplication {
 export interface PaymentVerificationItem {
   id: string;
   cooperative_name: string;
-  package_name: string;
+  package_name?: string;
   amount_kes: number;
   credits_requested: number;
   masked_mpesa_ref: string;
   submitted_at: string;
   status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+}
+
+export interface SystemSettings {
+  sms_rate_kes: number;
+  mpesa_paybill: string;
+  auto_approve_cooperatives: boolean;
+  maintenance_mode: boolean;
+  system_alert_notice: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  admin_email: string;
+  action: string;
+  target: string;
+  created_at: string;
 }

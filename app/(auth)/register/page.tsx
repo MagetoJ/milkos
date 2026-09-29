@@ -3,8 +3,8 @@ import { RegisterForm } from '../_components/register-form';
 
 export default function RegisterPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <AuthCard title="Create Account" subtitle="Register a new farmer or collector account">
+    <main className="min-h-screen flex items-center justify-center bg-black p-4 text-white">
+      <AuthCard title="Create Account" subtitle="Submit a new cooperative onboarding application">
         <RegisterForm />
       </AuthCard>
     </main>

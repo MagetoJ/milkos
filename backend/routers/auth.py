@@ -1,10 +1,14 @@
+import os
 from uuid import UUID
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from db import get_db
 from models.user import User
-from schemas.auth import UserLogin, UserRole
+from models.admin import CooperativeApplication
+from schemas.auth import UserLogin, UserRole, CooperativeRegisterRequest, CooperativeRegisterResponse
 from core.security import hash_password, verify_password, create_access_token, decode_access_token
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -49,13 +53,72 @@ def require_roles(allowed_roles: list[UserRole]):
     return role_checker
 
 
+# 4. Public Cooperative Onboarding Application Registration
+@router.post("/register", response_model=CooperativeRegisterResponse, status_code=status.HTTP_201_CREATED)
+def register_cooperative_application(
+    payload: CooperativeRegisterRequest, 
+    db: Session = Depends(get_db)
+):
+    """
+    Public registration endpoint reserved exclusively for Cooperative Onboarding.
+    Individual roles (Managers, Collectors, Farmers) cannot self-register here;
+    they are created by the Cooperative Admin upon approval.
+    """
+    # Check if applicant email or phone is already registered
+    existing_user = db.query(User).filter(
+        (User.email == payload.admin_email.lower()) | (User.phone_number == payload.admin_phone)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account or application with this email or phone number already exists."
+        )
+
+    try:
+        # Create Cooperative Onboarding Application (PENDING status)
+        new_app = CooperativeApplication(
+            org_name=payload.cooperative_name,
+            applicant_name=payload.admin_full_name,
+            email=payload.admin_email.lower(),
+            phone=payload.admin_phone,
+            location=f"{payload.county}, {payload.location}",
+            status="PENDING"
+        )
+        db.add(new_app)
+        db.flush()  # Generate application ID
+
+        # Create inactive COOP_ADMIN user account pending Superadmin approval
+        coop_admin_user = User(
+            email=payload.admin_email.lower(),
+            password_hash=hash_password(payload.password),
+            full_name=payload.admin_full_name,
+            phone_number=payload.admin_phone,
+            role=UserRole.COOP_ADMIN,
+            is_active=False  # Remains inactive until Superadmin approves application
+        )
+        db.add(coop_admin_user)
+        db.commit()
+
+        return CooperativeRegisterResponse(
+            message="Cooperative application submitted successfully. Pending administrative approval.",
+            application_id=str(new_app.id),
+            status="PENDING"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
 @router.post("/login")
 def login(credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == credentials.email.lower()).first()
     if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is pending approval or inactive")
 
     role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
@@ -133,3 +196,80 @@ def get_my_profile(current_user: dict = Depends(get_current_user), db: Session =
 def logout(response: Response):
     response.delete_cookie(key="access_token", path="/")
     return {"message": "Logged out successfully"}
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/v1/auth/google/callback")
+
+@router.get("/google/login")
+def google_login():
+    """Redirects user to Google OAuth consent screen."""
+    google_auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"response_type=code&client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}&scope=openid%20email%20profile"
+    )
+    return RedirectResponse(url=google_auth_url)
+
+
+@router.get("/google/callback")
+async def google_callback(code: str, response: Response, db: Session = Depends(get_db)):
+    """Handles Google OAuth callback, verifies user, and sets JWT session cookie."""
+    import httpx
+
+    # Exchange authorization code for token
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+
+    async with httpx.AsyncClient() as client:
+        res = await client.post(token_url, data=data)
+        if res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to authenticate with Google")
+        token_data = res.json()
+
+        # Fetch user info from Google
+        user_info_res = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token_data['access_token']}"}
+        )
+        if user_info_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch Google profile")
+        
+        google_profile = user_info_res.json()
+
+    email = google_profile.get("email", "").lower()
+    
+    # Lookup existing user
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No account associated with this Google email. Please register your cooperative first."
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Account is pending approval or inactive."
+        )
+
+    role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
+    access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
+
+    redirect_res = RedirectResponse(url="/login?google_success=1")
+    redirect_res.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=15 * 60,
+        path="/"
+    )
+    return redirect_res

@@ -11,16 +11,27 @@ class UserRole(str, Enum):
     FARMER = "FARMER"
 
 # --- Registration Input Validation ---
-class UserRegister(BaseModel):
-    email: EmailStr
-    full_name: str = Field(..., min_length=2, max_length=100)
-    # CHANGED: 'regex' is now 'pattern' in Pydantic V2
-    phone_number: str = Field(..., pattern=r"^\+?[1-9]\d{1,14}$")  # E.164 phone format
-    password: str = Field(..., min_length=8, max_length=64)
-    role: UserRole = UserRole.FARMER
-    cooperative_id: Optional[str] = None
 
-    # CHANGED: '@validator' is now '@field_validator' in Pydantic V2
+class CooperativeRegisterRequest(BaseModel):
+    # Organization Details
+    cooperative_name: str = Field(..., min_length=3, description="Official Cooperative Name")
+    registration_number: str = Field(..., description="Official Co-op Registration/License Number")
+    kra_pin: str = Field(..., description="KRA PIN for verification")
+    county: str = Field(..., description="County of operation")
+    location: str = Field(..., description="Town/Sub-County address")
+    
+    # Primary Admin / Applicant Info
+    admin_full_name: str = Field(..., min_length=3, description="Full Name of Primary Administrator")
+    admin_email: EmailStr = Field(..., description="Official Email Address")
+    admin_phone: str = Field(..., description="Phone Number")
+    admin_id_number: str = Field(..., description="National ID Number")
+    password: str = Field(..., min_length=8, max_length=64, description="Account Password")
+
+    # Operational Details
+    estimated_daily_liters: Optional[float] = Field(None, description="Estimated daily milk volume in Liters")
+    initial_coolers_count: Optional[int] = Field(1, description="Number of collection centers/coolers")
+    additional_info: Optional[str] = Field(None, description="Additional background information")
+
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
@@ -29,6 +40,11 @@ class UserRegister(BaseModel):
         if not any(char.isupper() for char in v):
             raise ValueError("Password must contain at least one uppercase letter.")
         return v
+
+class CooperativeRegisterResponse(BaseModel):
+    message: str
+    application_id: str
+    status: str
 
 # --- Login Input Validation ---
 class UserLogin(BaseModel):
@@ -50,5 +66,4 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
 
-    # CHANGED: ConfigDict syntax in Pydantic V2
     model_config = ConfigDict(from_attributes=True)

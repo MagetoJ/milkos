@@ -51,42 +51,50 @@ export function SuperadminDashboard() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-500 text-sm">Loading Platform Superadmin Portal...</div>;
+    return (
+      <div className="p-12 text-center text-zinc-400 text-sm font-medium">
+        Loading Platform Superadmin Portal...
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto">
+    <div className="space-y-8 p-6 max-w-7xl mx-auto text-white">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Platform Superadmin Control Center</h1>
-        <p className="text-xs text-slate-500">Global multi-tenant governance, onboarding verification, and SMS credit issuing.</p>
+        <h1 className="text-2xl font-bold text-white">Platform Superadmin Control Center</h1>
+        <p className="text-xs text-zinc-400 mt-1">
+          Global multi-tenant governance, cooperative onboarding verification, and SMS credit issuing.
+        </p>
       </div>
 
       {loadErrors.length > 0 && (
-        <div role="alert" className="p-3 border border-red-200 bg-red-50 rounded-lg text-xs text-red-700">
+        <div role="alert" className="p-4 border border-red-800 bg-red-950/80 rounded-xl text-xs text-red-200">
           {loadErrors.join(' · ')}
         </div>
       )}
 
       {/* Platform Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Cooperatives</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats?.total_cooperatives ?? 0}</p>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Cooperatives</p>
+          <p className="text-2xl font-extrabold text-white mt-1">{stats?.total_cooperatives ?? 0}</p>
         </div>
 
-        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Active Coolers</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{stats?.total_coolers ?? 0}</p>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Active Coolers</p>
+          <p className="text-2xl font-extrabold text-white mt-1">{stats?.total_coolers ?? 0}</p>
         </div>
 
-        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Milk Today (KG)</p>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">{stats?.milk_today_kg?.toLocaleString() ?? 0} KG</p>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Milk Today (KG)</p>
+          <p className="text-2xl font-extrabold text-emerald-400 mt-1">
+            {stats?.milk_today_kg?.toLocaleString() ?? 0} KG
+          </p>
         </div>
 
-        <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase">Pending Verifications</p>
-          <p className="text-2xl font-bold text-amber-600 mt-1">
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Pending Verifications</p>
+          <p className="text-2xl font-extrabold text-amber-400 mt-1">
             {(stats?.pending_applications_count ?? 0) + (stats?.pending_payments_count ?? 0)}
           </p>
         </div>
@@ -95,36 +103,36 @@ export function SuperadminDashboard() {
       {/* Dual Queue Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Onboarding Applications */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+        {/* Onboarding Applications Queue */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-md space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900">Cooperative Onboarding Queue</h2>
-            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+            <h2 className="text-base font-bold text-white">Cooperative Onboarding Queue</h2>
+            <span className="text-xs bg-amber-950/80 text-amber-300 border border-amber-800 px-2.5 py-0.5 rounded-full font-semibold">
               {applications.length} Pending
             </span>
           </div>
 
           {applications.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">No pending cooperative applications.</p>
+            <p className="text-xs text-zinc-400 py-8 text-center">No pending cooperative applications.</p>
           ) : (
             <div className="space-y-3">
               {applications.map((app) => (
-                <div key={app.id} className="p-3 border rounded-lg bg-slate-50 flex items-center justify-between">
+                <div key={app.id} className="p-4 border border-zinc-800 rounded-lg bg-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{app.org_name}</p>
-                    <p className="text-xs text-slate-500">{app.applicant_name} ({app.phone})</p>
-                    <p className="text-xs text-slate-400">{app.location}</p>
+                    <p className="text-sm font-bold text-white">{app.org_name}</p>
+                    <p className="text-xs text-zinc-300 mt-0.5">{app.applicant_name} ({app.phone})</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">{app.location}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => handleProcessApplication(app.id, 'APPROVE')}
-                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-md"
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors"
                     >
                       Approve
                     </button>
                     <button
                       onClick={() => handleProcessApplication(app.id, 'REJECT')}
-                      className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-medium rounded-md"
+                      className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-lg transition-colors"
                     >
                       Reject
                     </button>
@@ -136,35 +144,37 @@ export function SuperadminDashboard() {
         </div>
 
         {/* SMS Credit Verification Queue */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-md space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900">SMS Credit Top-Up Verification</h2>
-            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium">
+            <h2 className="text-base font-bold text-white">SMS Credit Top-Up Verification</h2>
+            <span className="text-xs bg-emerald-950/80 text-emerald-300 border border-emerald-800 px-2.5 py-0.5 rounded-full font-semibold">
               {payments.length} Pending
             </span>
           </div>
 
           {payments.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">No pending M-Pesa payment verifications.</p>
+            <p className="text-xs text-zinc-400 py-8 text-center">No pending M-Pesa payment verifications.</p>
           ) : (
             <div className="space-y-3">
               {payments.map((p) => (
-                <div key={p.id} className="p-3 border rounded-lg bg-slate-50 flex items-center justify-between">
+                <div key={p.id} className="p-4 border border-zinc-800 rounded-lg bg-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{p.cooperative_name}</p>
-                    <p className="text-xs text-emerald-700 font-medium">{p.credits_requested.toLocaleString()} Credits ({p.amount_kes} KES)</p>
-                    <p className="text-xs text-slate-400">Masked Ref: {p.masked_mpesa_ref}</p>
+                    <p className="text-sm font-bold text-white">{p.cooperative_name}</p>
+                    <p className="text-xs text-emerald-400 font-semibold mt-0.5">
+                      {p.credits_requested.toLocaleString()} Credits ({p.amount_kes} KES)
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">Masked Ref: {p.masked_mpesa_ref}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => handleVerifyPayment(p.id, 'VERIFY')}
-                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium rounded-md"
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors"
                     >
                       Verify & Issue
                     </button>
                     <button
                       onClick={() => handleVerifyPayment(p.id, 'REJECT')}
-                      className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-medium rounded-md"
+                      className="px-3 py-1.5 bg-red-950 hover:bg-red-900 text-red-200 text-xs font-medium rounded-lg border border-red-800 transition-colors"
                     >
                       Reject
                     </button>

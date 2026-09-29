@@ -1,9 +1,10 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Milkflow — Collection OS',
+  title: 'MilkOS — Collection OS',
   description: 'The operating system for modern milk collection networks.',
   generator: 'v0.app',
   icons: {
@@ -47,3 +48,4 @@ export default function RootLayout({
     </html>
   )
 }
+

@@ -64,11 +64,11 @@ export default function SuperAdminLayout({
   // Render a consistent fallback on both Server and initial Client Hydration
   if (!mounted || !isAuthorized) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-500">Checking authorization...</p>
+      <div className="flex h-screen items-center justify-center bg-black text-white">
+        <p className="text-sm text-zinc-400">Checking authorization...</p>
       </div>
     );
   }
 
-  return <div className="min-h-screen bg-slate-50">{children}</div>;
+  return <div className="min-h-screen bg-black text-white">{children}</div>;
 }

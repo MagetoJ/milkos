@@ -12,11 +12,25 @@ from routers.auth import require_roles, get_current_user
 
 router = APIRouter(prefix="/api/v1/superadmin", tags=["Super Admin"])
 
-# Security Guard: Only users with SUPER_ADMIN role can execute these endpoints
 superadmin_only = Depends(require_roles([UserRole.SUPER_ADMIN]))
 
 class ActionPayload(BaseModel):
     action: str  # "APPROVE" | "REJECT" | "VERIFY"
+
+class SystemSettingsPayload(BaseModel):
+    sms_rate_kes: Optional[float] = 1.0
+    mpesa_paybill: Optional[str] = "522522"
+    auto_approve_cooperatives: Optional[bool] = False
+    maintenance_mode: Optional[bool] = False
+    system_alert_notice: Optional[str] = ""
+
+SYSTEM_SETTINGS_CACHE = {
+    "sms_rate_kes": 1.0,
+    "mpesa_paybill": "522522",
+    "auto_approve_cooperatives": False,
+    "maintenance_mode": False,
+    "system_alert_notice": "Platform systems operating normally."
+}
 
 @router.get("/stats", dependencies=[superadmin_only])
 def get_superadmin_stats(db: Session = Depends(get_db)):
@@ -57,7 +71,14 @@ def process_application_action(
         raise HTTPException(status_code=400, detail="Invalid action type")
 
     try:
-        app_record.status = "APPROVED" if payload.action == "APPROVE" else "REJECTED"
+        if payload.action == "APPROVE":
+            app_record.status = "APPROVED"
+            user = db.query(User).filter(User.email == app_record.email).first()
+            if user:
+                user.is_active = True
+        else:
+            app_record.status = "REJECTED"
+
         db.commit()
         return {"success": True, "application_id": app_id, "status": app_record.status}
     except Exception as e:
@@ -79,13 +100,32 @@ def verify_payment_action(
         raise HTTPException(status_code=400, detail="Invalid action type")
 
     try:
-        if payload.action == "VERIFY":
-            payment.status = "VERIFIED"
-        else:
-            payment.status = "REJECTED"
-
+        payment.status = "VERIFIED" if payload.action == "VERIFY" else "REJECTED"
         db.commit()
         return {"success": True, "payment_id": payment_id, "status": payment.status}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Payment verification failed: {str(e)}")
+
+@router.get("/settings", dependencies=[superadmin_only])
+def get_system_settings():
+    return SYSTEM_SETTINGS_CACHE
+
+@router.post("/settings", dependencies=[superadmin_only])
+def update_system_settings(payload: SystemSettingsPayload):
+    SYSTEM_SETTINGS_CACHE.update(payload.dict(exclude_unset=True))
+    return {"success": True, "settings": SYSTEM_SETTINGS_CACHE}
+
+@router.get("/audit-logs", dependencies=[superadmin_only])
+def get_audit_logs(db: Session = Depends(get_db)):
+    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    return [
+        {
+            "id": str(log.id),
+            "admin_email": log.admin.email if log.admin else "System",
+            "action": log.action,
+            "target": log.target,
+            "created_at": log.created_at.isoformat() if log.created_at else ""
+        }
+        for log in logs
+    ]
