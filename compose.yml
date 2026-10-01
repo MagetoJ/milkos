@@ -1,0 +1,62 @@
+services:
+
+  db:
+    image: postgres:17
+    container_name: milkos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: milkos
+      POSTGRES_USER: milkos
+      POSTGRES_PASSWORD: milkos_dev_password
+    volumes:
+       - milkos_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U milkos -d milkos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: milkos-backend
+    restart: unless-stopped
+    # SECRET_KEY, GOOGLE_* etc. come from backend/.env (it is excluded from the image);
+    # values under `environment` win, so the app uses the compose database, not Supabase.
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://milkos:milkos_dev_password@db:5432/milkos
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Interpolated from the root .env, which compose reads automatically
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        BACKEND_INTERNAL_URL: http://backend:8000
+    container_name: milkos-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+    milkos_postgres_data:

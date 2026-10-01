@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.local
+backend
+infra
+*.log
+*.patch
+tsconfig.tsbuildinfo
+.agents
+.claude
+.cursor
+.devin
