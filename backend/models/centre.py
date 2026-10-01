@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Numeric, String, Text, Uuid
 
 from db import Base
 
@@ -17,6 +17,6 @@ class CollectionCentre(Base):
     location_description = Column(Text, nullable=True)
     manager_user_id = Column(Uuid, nullable=True)
     has_cooler = Column(Boolean, nullable=False, default=False)
-    cooler_capacity_litres = Column(nullable=True)
+    cooler_capacity_litres = Column(Numeric(10, 2), nullable=True)
     status = Column(String(30), nullable=False, default="ACTIVE")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
