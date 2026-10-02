@@ -1,13 +1,16 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
 
 from db import Base
 
 
 class CollectionCentre(Base):
     __tablename__ = "collection_centres"
+    __table_args__ = (
+        Index("uq_centres_cooperative_code", "cooperative_id", "code", unique=True),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="CASCADE"), nullable=False, index=True)

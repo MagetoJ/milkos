@@ -1,7 +1,11 @@
+# Patterns without **/ only match at the top of the build context
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
 venv
-__pycache__
-*.pyc
-.pytest_cache
+.venv
 .env
-.env.local
+.env.*
+!.env.example
+*.db
 .git

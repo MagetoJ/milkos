@@ -18,7 +18,8 @@ export const ROLE_HOME: Record<UserRole, string> = {
 /** Which roles may open each protected section. Edit this table to change access. */
 export const ROUTE_ACCESS: Record<string, UserRole[]> = {
   '/superadmin': ['SUPER_ADMIN'],
-  '/cooperatives': ['SUPER_ADMIN', 'COOP_ADMIN', 'MANAGER'],
+  // A cooperative's own workspace: platform staff have no cooperative of their own, so they stay in /superadmin.
+  '/cooperatives': ['COOP_ADMIN', 'MANAGER'],
   '/collections': ['COOP_ADMIN', 'MANAGER', 'COLLECTOR', 'FARMER'],
 };
 

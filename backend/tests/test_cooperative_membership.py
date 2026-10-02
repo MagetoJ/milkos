@@ -47,7 +47,7 @@ def test_same_user_can_have_distinct_roles_across_cooperatives(session):
         CooperativeMembership(
             cooperative_id=coop_b.id,
             user_id=user.id,
-            role=UserRole.AUDITOR.value,
+            role=UserRole.MANAGER.value,
             status="ACTIVE",
         ),
     ])

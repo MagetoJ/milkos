@@ -1,36 +1,51 @@
 import os
+import sys
+
 from sqlalchemy.orm import Session
+
+from core.security import hash_password
 from db import SessionLocal
 from models.user import User
 from schemas.auth import UserRole
-from core.security import hash_password
 
-def seed_superadmin():
+
+def seed_superadmin() -> int:
+    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@milkflow.com").strip().lower()
+    superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "")
+
     db: Session = SessionLocal()
     try:
-        superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@milkflow.com")
-        superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "SuperAdmin#2026Pass")
-
         existing_admin = db.query(User).filter(User.email == superadmin_email).first()
-        if not existing_admin:
-            admin_user = User(
-                email=superadmin_email,
-                password_hash=hash_password(superadmin_password),
-                full_name="Platform Super Admin",
-                phone_number="+254700000000",
-                role=UserRole.SUPER_ADMIN,
-                is_active=True
-            )
-            db.add(admin_user)
-            db.commit()
-            print(f"[SUCCESS] Superadmin seeded successfully: {superadmin_email}")
-        else:
+        if existing_admin:
             print("[INFO] Superadmin account already exists.")
+            return 0
+
+        if not superadmin_password:
+            print(
+                "[ERROR] SUPERADMIN_PASSWORD is not set, so the superadmin cannot be created. "
+                "Set it in backend/.env.",
+                file=sys.stderr,
+            )
+            return 1
+
+        db.add(User(
+            email=superadmin_email,
+            password_hash=hash_password(superadmin_password),
+            full_name="Platform Super Admin",
+            phone_number="+254700000000",
+            role=UserRole.SUPER_ADMIN,
+            is_active=True,
+        ))
+        db.commit()
+        print(f"[SUCCESS] Superadmin seeded successfully: {superadmin_email}")
+        return 0
     except Exception as e:
         db.rollback()
-        print(f"[ERROR] Seeding failed: {e}")
+        print(f"[ERROR] Seeding failed: {e}", file=sys.stderr)
+        return 1
     finally:
         db.close()
 
+
 if __name__ == "__main__":
-    seed_superadmin()
+    sys.exit(seed_superadmin())

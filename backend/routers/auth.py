@@ -229,7 +229,10 @@ def logout(response: Response):
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/v1/auth/google/callback")
+# Public URL of the web app. Google is sent back through it (Next proxies /api/v1 to this
+# backend), so the session cookie and the final redirect both land on the app's own origin.
+APP_URL = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", f"{APP_URL}/api/v1/auth/google/callback")
 
 @router.get("/google/login")
 def google_login():
@@ -292,7 +295,7 @@ async def google_callback(code: str, response: Response, db: Session = Depends(g
     role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
 
-    redirect_res = RedirectResponse(url="/login?google_success=1")
+    redirect_res = RedirectResponse(url=f"{APP_URL}/login?google_success=1")
     redirect_res.set_cookie(
         key="access_token",
         value=access_token,

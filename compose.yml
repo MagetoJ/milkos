@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: milkos
       POSTGRES_USER: milkos
-      POSTGRES_PASSWORD: milkos_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-milkos_dev_password}
     volumes:
        - milkos_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +27,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg://milkos:milkos_dev_password@db:5432/milkos
+      DATABASE_URL: postgresql+psycopg://milkos:${POSTGRES_PASSWORD:-milkos_dev_password}@db:5432/milkos
     ports:
       - "8000:8000"
     depends_on:

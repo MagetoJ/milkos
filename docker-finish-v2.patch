@@ -1,0 +1,372 @@
+diff --git a/.dockerignore b/.dockerignore
+index 6159822..8f8ae1a 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -2,13 +2,17 @@ node_modules
+ .next
+ .git
+ .env
+-.env.local
++.env.*
++!.env.example
+ backend
+ infra
+-*.log
+-*.patch
+-tsconfig.tsbuildinfo
++**/*.log
++**/*.patch
++**/*.tsbuildinfo
++**/__pycache__
+ .agents
+ .claude
+ .cursor
+ .devin
++compose.yml
++Dockerfile
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..d45d4f5
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,10 @@
++# Root .env: read automatically by `docker compose` (used as frontend build args).
++# Copy to .env and fill in. Changing a NEXT_PUBLIC_* value needs `docker compose build frontend`.
++
++# Supabase client used by the web app (lib/supabase.ts); the build fails or the UI breaks if empty
++NEXT_PUBLIC_SUPABASE_URL=
++NEXT_PUBLIC_SUPABASE_ANON_KEY=
++
++# Optional: password for the compose Postgres container (defaults to a dev-only value).
++# Set it BEFORE the first `docker compose up`; the database keeps the first password it was created with.
++# POSTGRES_PASSWORD=
+diff --git a/.gitignore b/.gitignore
+index eba2378..49d8934 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -16,4 +16,8 @@ node_modules
+ # Python
+ backend/venv/
+ __pycache__/
+-*.pyc
+\ No newline at end of file
++*.pyc
++# Build output and logs
++*.tsbuildinfo
++*.log
++*.patch
+diff --git a/DOCKER.md b/DOCKER.md
+new file mode 100644
+index 0000000..6308d27
+--- /dev/null
++++ b/DOCKER.md
+@@ -0,0 +1,47 @@
++# Running MilkOS with Docker
++
++Three containers: `db` (Postgres 17), `backend` (FastAPI, port 8000), `frontend` (Next.js, port 3000).
++The frontend proxies `/api/v1/*` to the backend, so the browser only talks to `http://localhost:3000`.
++
++## First run
++
++```bash
++cp .env.example .env                    # Supabase values for the web app
++cp backend/.env.example backend/.env    # SECRET_KEY, SUPERADMIN_PASSWORD, ...
++# edit both files, then:
++docker compose up -d --build
++docker compose ps                       # all three should become healthy
++```
++
++Open http://localhost:3000 and log in with `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD`.
++
++The backend container applies database migrations and creates the superadmin on every start
++(both are safe to repeat). If `SECRET_KEY` is missing, or `SUPERADMIN_PASSWORD` is missing on a
++fresh database, the backend stops with a clear error instead of starting half-configured.
++
++## Things to know
++
++- `NEXT_PUBLIC_*` values are baked into the frontend at build time. After changing them in `.env`,
++  run `docker compose build frontend`.
++- `POSTGRES_PASSWORD` only takes effect when the database volume is first created. To change it later,
++  either change the password inside Postgres or reset the volume (`docker compose down -v`, which deletes all data).
++- Google login: register `http://localhost:3000/api/v1/auth/google/callback` (your `APP_URL` plus
++  `/api/v1/auth/google/callback`) as an authorized redirect URI in Google Cloud Console.
++- Deploying anywhere other than localhost: set `APP_URL` and `CORS_ORIGINS` in `backend/.env`, and
++  build the frontend with the real public URL for `NEXT_PUBLIC_API_URL`. Session cookies are currently
++  set with `secure=False`; switch that on once the site is served over HTTPS.
++- Run only one backend replica for now: migrations run at container start and two replicas starting
++  together can race.
++
++## Checks
++
++```bash
++docker compose ps
++docker compose exec frontend whoami                    # node (not root)
++docker compose exec backend whoami                     # app (not root)
++docker compose exec backend pytest                     # backend tests (SQLite, no effect on the real database)
++curl -i -X POST http://localhost:3000/api/v1/auth/login -H 'content-type: application/json' -d '{}'
++                                                       # 422 JSON from FastAPI = the proxy works (a Next 404 page would mean it doesn't)
++```
++
++Reset everything, including data: `docker compose down -v`.
+diff --git a/backend/.dockerignore b/backend/.dockerignore
+index d2de25e..8a59597 100644
+--- a/backend/.dockerignore
++++ b/backend/.dockerignore
+@@ -1,7 +1,11 @@
++# Patterns without **/ only match at the top of the build context
++**/__pycache__
++**/*.pyc
++**/.pytest_cache
+ venv
+-__pycache__
+-*.pyc
+-.pytest_cache
++.venv
+ .env
+-.env.local
++.env.*
++!.env.example
++*.db
+ .git
+diff --git a/backend/.env.example b/backend/.env.example
+new file mode 100644
+index 0000000..14ddbe5
+--- /dev/null
++++ b/backend/.env.example
+@@ -0,0 +1,19 @@
++# backend/.env: loaded by compose (env_file) and never copied into the image.
++# Copy to backend/.env and fill in. DATABASE_URL is set by compose and doesn't belong here.
++
++# REQUIRED. The API refuses to start without it.
++# Generate: python -c "import secrets; print(secrets.token_urlsafe(48))"
++SECRET_KEY=
++
++# REQUIRED the first time: creates the platform superadmin. Existing accounts are never changed.
++SUPERADMIN_EMAIL=superadmin@milkflow.com
++SUPERADMIN_PASSWORD=
++
++# Public URL of the web app (Google login returns the browser here), and the origins allowed by CORS.
++APP_URL=http://localhost:3000
++CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
++
++# Optional Google sign-in. Register this redirect URI in Google Cloud Console:
++#   http://localhost:3000/api/v1/auth/google/callback   (i.e. APP_URL + /api/v1/auth/google/callback)
++GOOGLE_CLIENT_ID=
++GOOGLE_CLIENT_SECRET=
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+index 3b699ce..d644234 100644
+--- a/backend/Dockerfile
++++ b/backend/Dockerfile
+@@ -2,17 +2,26 @@ FROM python:3.12-slim
+ 
+ WORKDIR /app
+ 
+-ENV PYTHONDONTWRITEBYTECODE=1
+-ENV PYTHONUNBUFFERED=1
++ENV PYTHONDONTWRITEBYTECODE=1 \
++    PYTHONUNBUFFERED=1 \
++    PIP_DISABLE_PIP_VERSION_CHECK=1
+ 
+ COPY requirements.txt .
+ 
+-RUN pip install --no-cache-dir --upgrade pip \
+-    && pip install --no-cache-dir -r requirements.txt
++# The pip cache mount keeps downloaded wheels between builds, so a requirements change
++# (or a retry after a network failure) doesn't re-download everything.
++RUN --mount=type=cache,target=/root/.cache/pip \
++    pip install --root-user-action=ignore -r requirements.txt
+ 
+ COPY . .
+ 
++# Run as an unprivileged user
++RUN useradd --system --uid 10001 --no-create-home app && chown -R app:app /app
++USER app
++
+ EXPOSE 8000
+ 
+-# Bring the schema to head and make sure the superadmin exists (both idempotent), then serve
++# Bring the schema to head and make sure the superadmin exists (both idempotent), then serve.
++# `&&` means a failed migration or a missing SUPERADMIN_PASSWORD stops the container
++# instead of starting an API that can't work.
+ CMD ["sh", "-c", "alembic upgrade head && python seed_superadmin.py && exec uvicorn main:app --host 0.0.0.0 --port 8000"]
+diff --git a/backend/core/security.py b/backend/core/security.py
+index f40d03c..5964661 100644
+--- a/backend/core/security.py
++++ b/backend/core/security.py
+@@ -13,7 +13,12 @@ load_dotenv()
+ 
+ logger = logging.getLogger("milkflow.security")
+ 
+-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-production-key-change-this")
++SECRET_KEY = os.getenv("SECRET_KEY")
++if not SECRET_KEY:
++    raise RuntimeError(
++        "SECRET_KEY is not set. Put a long random value in backend/.env "
++        "(generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\")."
++    )
+ ALGORITHM = "HS256"
+ ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 15-minute active token window
+ 
+diff --git a/backend/main.py b/backend/main.py
+index da93af8..048d6d2 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -1,21 +1,26 @@
++import os
++
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+-import models.cooperative
+-import models.user
+-import models.admin
++
++import models  # noqa: F401  (registers every table on Base.metadata)
+ from routers import auth, superadmin
+ 
+ # The schema is managed by Alembic (`alembic upgrade head`), never created at startup.
+ 
+ app = FastAPI(title="MilkOS API")
+ 
+-# Explicit origins are required when allow_credentials=True
++# Explicit origins are required when allow_credentials=True.
++# Comma-separated; override with CORS_ORIGINS in backend/.env for any non-local deployment.
++CORS_ORIGINS = [
++    origin.strip()
++    for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
++    if origin.strip()
++]
++
+ app.add_middleware(
+     CORSMiddleware,
+-    allow_origins=[
+-        "http://localhost:3000",
+-        "http://127.0.0.1:3000",
+-    ],
++    allow_origins=CORS_ORIGINS,
+     allow_credentials=True,
+     allow_methods=["*"],
+     allow_headers=["*"],
+diff --git a/backend/routers/auth.py b/backend/routers/auth.py
+index 6fdf8db..c5f00af 100644
+--- a/backend/routers/auth.py
++++ b/backend/routers/auth.py
+@@ -229,7 +229,10 @@ def logout(response: Response):
+ 
+ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/v1/auth/google/callback")
++# Public URL of the web app. Google is sent back through it (Next proxies /api/v1 to this
++# backend), so the session cookie and the final redirect both land on the app's own origin.
++APP_URL = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
++GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", f"{APP_URL}/api/v1/auth/google/callback")
+ 
+ @router.get("/google/login")
+ def google_login():
+@@ -292,7 +295,7 @@ async def google_callback(code: str, response: Response, db: Session = Depends(g
+     role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
+     access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
+ 
+-    redirect_res = RedirectResponse(url="/login?google_success=1")
++    redirect_res = RedirectResponse(url=f"{APP_URL}/login?google_success=1")
+     redirect_res.set_cookie(
+         key="access_token",
+         value=access_token,
+diff --git a/backend/seed_superadmin.py b/backend/seed_superadmin.py
+index 086c0b1..7b63d4e 100644
+--- a/backend/seed_superadmin.py
++++ b/backend/seed_superadmin.py
+@@ -1,36 +1,51 @@
+ import os
++import sys
++
+ from sqlalchemy.orm import Session
++
++from core.security import hash_password
+ from db import SessionLocal
+ from models.user import User
+ from schemas.auth import UserRole
+-from core.security import hash_password
+ 
+-def seed_superadmin():
++
++def seed_superadmin() -> int:
++    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@milkflow.com").strip().lower()
++    superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "")
++
+     db: Session = SessionLocal()
+     try:
+-        superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@milkflow.com")
+-        superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "SuperAdmin#2026Pass")
+-
+         existing_admin = db.query(User).filter(User.email == superadmin_email).first()
+-        if not existing_admin:
+-            admin_user = User(
+-                email=superadmin_email,
+-                password_hash=hash_password(superadmin_password),
+-                full_name="Platform Super Admin",
+-                phone_number="+254700000000",
+-                role=UserRole.SUPER_ADMIN,
+-                is_active=True
+-            )
+-            db.add(admin_user)
+-            db.commit()
+-            print(f"[SUCCESS] Superadmin seeded successfully: {superadmin_email}")
+-        else:
++        if existing_admin:
+             print("[INFO] Superadmin account already exists.")
++            return 0
++
++        if not superadmin_password:
++            print(
++                "[ERROR] SUPERADMIN_PASSWORD is not set, so the superadmin cannot be created. "
++                "Set it in backend/.env.",
++                file=sys.stderr,
++            )
++            return 1
++
++        db.add(User(
++            email=superadmin_email,
++            password_hash=hash_password(superadmin_password),
++            full_name="Platform Super Admin",
++            phone_number="+254700000000",
++            role=UserRole.SUPER_ADMIN,
++            is_active=True,
++        ))
++        db.commit()
++        print(f"[SUCCESS] Superadmin seeded successfully: {superadmin_email}")
++        return 0
+     except Exception as e:
+         db.rollback()
+-        print(f"[ERROR] Seeding failed: {e}")
++        print(f"[ERROR] Seeding failed: {e}", file=sys.stderr)
++        return 1
+     finally:
+         db.close()
+ 
++
+ if __name__ == "__main__":
+-    seed_superadmin()
+\ No newline at end of file
++    sys.exit(seed_superadmin())
+diff --git a/compose.yml b/compose.yml
+index 10b4af4..f77e4e0 100644
+--- a/compose.yml
++++ b/compose.yml
+@@ -7,7 +7,7 @@ services:
+     environment:
+       POSTGRES_DB: milkos
+       POSTGRES_USER: milkos
+-      POSTGRES_PASSWORD: milkos_dev_password
++      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-milkos_dev_password}
+     volumes:
+        - milkos_postgres_data:/var/lib/postgresql/data
+     healthcheck:
+@@ -27,7 +27,7 @@ services:
+     env_file:
+       - ./backend/.env
+     environment:
+-      DATABASE_URL: postgresql+psycopg://milkos:milkos_dev_password@db:5432/milkos
++      DATABASE_URL: postgresql+psycopg://milkos:${POSTGRES_PASSWORD:-milkos_dev_password}@db:5432/milkos
+     ports:
+       - "8000:8000"
+     depends_on:

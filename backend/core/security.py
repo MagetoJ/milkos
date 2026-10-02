@@ -13,7 +13,12 @@ load_dotenv()
 
 logger = logging.getLogger("milkflow.security")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-production-key-change-this")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is not set. Put a long random value in backend/.env "
+        "(generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\")."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15  # 15-minute active token window
 

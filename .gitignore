@@ -17,3 +17,7 @@ node_modules
 backend/venv/
 __pycache__/
 *.pyc
+# Build output and logs
+*.tsbuildinfo
+*.log
+*.patch
