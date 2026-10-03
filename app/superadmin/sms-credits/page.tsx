@@ -1,13 +1,6 @@
-import { DecisionQueue } from '../_components/decision-queue';
+import { redirect } from 'next/navigation';
 
-export default function SmsCreditsPage() {
-  return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">SMS credits</h1>
-        <p className="mt-1 text-[#5E6B64]">Match each M-Pesa payment against the paybill statement before issuing credits.</p>
-      </header>
-      <DecisionQueue kind="payment" title="Top-ups to verify" />
-    </div>
-  );
+// Replaced by /superadmin/payments; kept so old links and bookmarks still work.
+export default function Page() {
+  redirect('/superadmin/payments');
 }

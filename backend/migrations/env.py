@@ -15,8 +15,8 @@ target_metadata = db.Base.metadata
 
 
 def include_object(obj, name, type_, reflected, compare_to):
-    # Tables that exist in the database but have no model yet (milk_collections,
-    # sms_credit_packages) must never show up as "drop table" in an autogenerate.
+    # Tables that exist in the database but have no model must never show up as
+    # "drop table" in an autogenerate.
     if type_ == "table" and reflected and compare_to is None:
         return False
     return True
@@ -37,6 +37,11 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     with db.engine.connect() as connection:
+        if connection.dialect.name == "sqlite":
+            # Batch mode rebuilds a table by DROP + RENAME. With foreign keys enforced (db.py turns them
+            # on), dropping e.g. `cooperatives` would fire ON DELETE CASCADE and wipe dependent rows.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

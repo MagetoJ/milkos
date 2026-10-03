@@ -52,16 +52,36 @@ class CooperativeApplication(Base):
         ),
     )
 
+class CoolerStatus:
+    ACTIVE = "ACTIVE"      # in service (whether or not it is currently reporting)
+    INACTIVE = "INACTIVE"  # decommissioned by an administrator
+
+
 class Cooler(Base):
     __tablename__ = "coolers"
+    __table_args__ = (
+        Index("uq_coolers_cooperative_code", "cooperative_id", "code", unique=True),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="CASCADE"))
-    name = Column(String, nullable=False)
-    location = Column(String)
-    scale_device_id = Column(String, nullable=True)
+    cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="CASCADE"), nullable=False, index=True)
+    centre_id = Column(Uuid, ForeignKey("collection_centres.id", ondelete="SET NULL"), nullable=True, index=True)
+    code = Column(String(50), nullable=False)
+    name = Column(String(255), nullable=False)
+    location = Column(String(255))
+    capacity_litres = Column(Numeric(10, 2))
+    scale_device_id = Column(String(255), nullable=True)
+    status = Column(String(20), nullable=False, default=CoolerStatus.ACTIVE, server_default=text("'ACTIVE'"))
+    # Operational = online and usable right now; an ACTIVE cooler can be offline.
     is_operational = Column(Boolean, default=True)
+    last_temperature_c = Column(Numeric(5, 2))
+    last_reading_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    cooperative = relationship("Cooperative", back_populates="coolers", viewonly=True)
+    centre = relationship("CollectionCentre", viewonly=True)
+
 
 class SMSCreditPackage(Base):
     __tablename__ = "sms_credit_packages"
@@ -71,6 +91,7 @@ class SMSCreditPackage(Base):
     credits_amount = Column(Integer, nullable=False)
     price_kes = Column(Numeric(10, 2), nullable=False)
     is_active = Column(Boolean, default=True)
+
 
 class SMSCreditPayment(Base):
     __tablename__ = "sms_credit_payments"
@@ -83,17 +104,54 @@ class SMSCreditPayment(Base):
     mpesa_reference = Column(String, nullable=False)
     masked_mpesa_ref = Column(String, nullable=False)
     status = Column(String, default="PENDING")
+    rejection_reason = Column(Text)
+    submitted_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
     verified_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
     verified_at = Column(DateTime)
 
+    cooperative = relationship("Cooperative", viewonly=True)
+    package = relationship("SMSCreditPackage", viewonly=True)
+
+
 class AuditLog(Base):
+    """Append-only record of administrative changes. Rows are never updated or deleted by the API."""
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at", "created_at"),
+        Index("ix_audit_logs_cooperative_id", "cooperative_id"),
+        Index("ix_audit_logs_entity", "entity_type", "entity_id"),
+        Index("ix_audit_logs_action", "action"),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    admin_id = Column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # The actor. Kept as `admin_id` (the original column); SET NULL so deleting a user never erases history.
+    admin_id = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_email = Column(String(255))   # snapshot, readable even if the account is later removed
+    actor_role = Column(String(50))
     action = Column(String, nullable=False)
-    target = Column(String, nullable=False)
+    target = Column(String, nullable=False)  # human-readable summary
+    entity_type = Column(String(50))
+    entity_id = Column(String(64))
+    cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="SET NULL"), nullable=True)
+    old_values = Column(JSON().with_variant(JSONB(), "postgresql"))
+    new_values = Column(JSON().with_variant(JSONB(), "postgresql"))
+    ip_address = Column(String(64))
+    user_agent = Column(String(500))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     admin = relationship("models.user.User")
+
+    @property
+    def actor_id(self):
+        return self.admin_id
+
+
+class PlatformSetting(Base):
+    """Platform-wide configuration, one row per key. Allowed keys and types live in services/settings.py."""
+    __tablename__ = "platform_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+    updated_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

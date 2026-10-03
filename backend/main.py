@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import models  # noqa: F401  (registers every table on Base.metadata)
-from routers import auth, cooperative, superadmin
+from routers import auth, collections, cooperative, superadmin
 
 # The schema is managed by Alembic (`alembic upgrade head`), never created at startup.
 
@@ -29,3 +29,4 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(superadmin.router)
 app.include_router(cooperative.router)
+app.include_router(collections.router)

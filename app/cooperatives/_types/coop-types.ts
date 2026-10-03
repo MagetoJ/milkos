@@ -16,6 +16,7 @@ export interface Overview {
   centres: { total: number; active: number; with_cooler: number };
   coolers: { total: number; operational: number };
   team: { admins: number; managers: number; collectors: number };
+  milk: { today: number; week: number; month: number; collections_today: number };
   recent_farmers: { id: string; farmer_number: string; full_name: string; phone: string; created_at: string | null }[];
 }
 

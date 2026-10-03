@@ -1,13 +1,3 @@
-export interface SuperadminStats {
-  total_cooperatives: number;
-  total_coolers: number;
-  total_farmers: number;
-  milk_today_kg: number;
-  pending_applications_count: number;
-  pending_payments_count: number;
-  sms_credits_system_balance?: number;
-}
-
 export interface CooperativeApplication {
   id: string;
   org_name: string;
@@ -39,6 +29,7 @@ export interface PaymentVerificationItem {
   id: string;
   cooperative_id?: string | null;
   cooperative_name?: string | null;
+  cooperative_code?: string | null;
   package_name?: string | null;
   amount_kes: number;
   credits_requested: number;

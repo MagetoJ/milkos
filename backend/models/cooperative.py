@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, Numeric, DateTime, Uuid, text
+from sqlalchemy import Column, String, Integer, Numeric, DateTime, Text, Uuid, text
+from sqlalchemy.orm import relationship
 import uuid
 import datetime
 
@@ -11,7 +12,7 @@ class CooperativeStatus:
 
 
 class Cooperative(Base):
-    """Created only by approving a CooperativeApplication (routers/superadmin.py)."""
+    """Created by approving a CooperativeApplication, or directly by a superadmin."""
     __tablename__ = "cooperatives"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -22,7 +23,20 @@ class Cooperative(Base):
     kra_pin = Column(String(11), unique=True, nullable=False)
     county = Column(String(50), nullable=False)
     location = Column(String(255))  # sub-county / town
+    contact_email = Column(String(255))
+    contact_phone = Column(String(50))
     status = Column(String(20), nullable=False, default=CooperativeStatus.ACTIVE, server_default=text("'ACTIVE'"))
+    suspension_reason = Column(Text)
+    suspended_at = Column(DateTime)
     sms_credit_balance = Column(Integer, nullable=False, default=0, server_default=text("0"))
     estimated_daily_liters = Column(Numeric(12, 2))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    # Read-side navigation only; rows are removed by the database's ON DELETE rules, never by the ORM.
+    users = relationship("User", back_populates="cooperative", viewonly=True)
+    farmers = relationship("Farmer", back_populates="cooperative", viewonly=True)
+    collectors = relationship("Collector", back_populates="cooperative", viewonly=True)
+    coolers = relationship("Cooler", back_populates="cooperative", viewonly=True)
+    centres = relationship("CollectionCentre", back_populates="cooperative", viewonly=True)
+    collections = relationship("MilkCollection", back_populates="cooperative", viewonly=True)

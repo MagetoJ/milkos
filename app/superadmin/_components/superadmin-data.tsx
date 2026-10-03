@@ -2,25 +2,20 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  fetchDashboard,
   fetchPendingApplications,
   fetchPendingPayments,
-  fetchSuperadminStats,
   processApplication,
   verifyPayment,
 } from '../_api/superadmin-client';
-import type {
-  CooperativeApplication,
-  Decision,
-  PaymentVerificationItem,
-  QueueItem,
-  SuperadminStats,
-} from '../_types/superadmin-types';
+import type { CooperativeApplication, Decision, PaymentVerificationItem, QueueItem } from '../_types/superadmin-types';
+import type { Dashboard } from '../_types/platform-types';
 import { formatKes, formatNumber, parseServerDate } from '../_lib/format';
 
 const AUTO_REFRESH_MS = 60_000;
 
 interface SuperadminData {
-  stats: SuperadminStats | null;
+  dashboard: Dashboard | null;
   queue: QueueItem[];
   counts: { applications: number; payments: number };
   status: 'loading' | 'ready';
@@ -48,7 +43,7 @@ function paymentToItem(p: PaymentVerificationItem): QueueItem {
   return {
     kind: 'payment',
     id: p.id,
-    title: p.cooperative_name || `Cooperative ${p.cooperative_id?.slice(0, 8) ?? 'unknown'}`,
+    title: p.cooperative_name || 'Unknown cooperative',
     subtitle: `${formatNumber(p.credits_requested)} credits for ${formatKes(p.amount_kes)}`,
     submittedAt: p.submitted_at,
     data: p,
@@ -57,7 +52,7 @@ function paymentToItem(p: PaymentVerificationItem): QueueItem {
 
 /** One shared source for the sidebar counts, overview and queue pages. */
 export function SuperadminDataProvider({ children }: { children: ReactNode }) {
-  const [stats, setStats] = useState<SuperadminStats | null>(null);
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [applications, setApplications] = useState<CooperativeApplication[]>([]);
   const [payments, setPayments] = useState<PaymentVerificationItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready'>('loading');
@@ -72,11 +67,11 @@ export function SuperadminDataProvider({ children }: { children: ReactNode }) {
     setRefreshing(true);
 
     const [s, a, p] = await Promise.allSettled([
-      fetchSuperadminStats(),
+      fetchDashboard(),
       fetchPendingApplications(),
       fetchPendingPayments(),
     ]);
-    if (s.status === 'fulfilled') setStats(s.value);
+    if (s.status === 'fulfilled') setDashboard(s.value);
     if (a.status === 'fulfilled') setApplications(a.value);
     if (p.status === 'fulfilled') setPayments(p.value);
 
@@ -127,7 +122,7 @@ export function SuperadminDataProvider({ children }: { children: ReactNode }) {
   );
 
   const value: SuperadminData = {
-    stats,
+    dashboard,
     queue,
     counts: { applications: applications.length, payments: payments.length },
     status,

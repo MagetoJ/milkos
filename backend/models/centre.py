@@ -2,6 +2,7 @@ import datetime
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy.orm import relationship
 
 from db import Base
 
@@ -23,3 +24,6 @@ class CollectionCentre(Base):
     cooler_capacity_litres = Column(Numeric(10, 2), nullable=True)
     status = Column(String(30), nullable=False, default="ACTIVE")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    cooperative = relationship("Cooperative", back_populates="centres", viewonly=True)

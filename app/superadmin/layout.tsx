@@ -4,7 +4,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AdminShell } from './_components/admin-shell';
 import { SuperadminDataProvider } from './_components/superadmin-data';
 import { ToastProvider } from './_components/toast';
-import { authHeaders } from './_api/superadmin-client';
+import { useActiveRefresh } from '@/app/hooks/use-active-refresh';
+import { authHeaders } from '@/lib/api-client';
+import { clearSession, homeFor, loginUrl, type UserRole } from '@/lib/auth';
 
 type GuardState = { status: 'checking' } | { status: 'offline' } | { status: 'ok'; email?: string };
 
@@ -15,6 +17,7 @@ type GuardState = { status: 'checking' } | { status: 'offline' } | { status: 'ok
  * "Router action dispatched before initialization" error.
  */
 export default function SuperadminLayout({ children }: { children: ReactNode }) {
+  useActiveRefresh(); // keeps the 15-minute token alive while the admin is active
   const [state, setState] = useState<GuardState>({ status: 'checking' });
 
   useEffect(() => {
@@ -24,15 +27,16 @@ export default function SuperadminLayout({ children }: { children: ReactNode }) 
       .then(async (res) => {
         if (cancelled) return;
         if (res.status === 401 || res.status === 403) {
-          localStorage.removeItem('milkflow_token');
-          window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+          clearSession();
+          window.location.replace(loginUrl(window.location.pathname));
           return;
         }
         if (!res.ok) return setState({ status: 'offline' });
 
-        const me = (await res.json()) as { role?: string; email?: string };
+        // The server's answer decides (the token in localStorage is only a hint).
+        const me = (await res.json()) as { role?: UserRole; email?: string };
         if (me.role !== 'SUPER_ADMIN') {
-          window.location.replace('/'); // `/` forwards each role to its own dashboard
+          window.location.replace(me.role ? homeFor(me.role) : '/login');
           return;
         }
         setState({ status: 'ok', email: me.email });

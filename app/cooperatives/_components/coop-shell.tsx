@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, LogOut, MapPin, Menu, UserCog, Users, X, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, LogOut, MapPin, Menu, Milk, Snowflake, UserCog, Users, X, type LucideIcon } from 'lucide-react';
 import { TOKEN_KEY } from '@/lib/auth';
 import { useCoop } from './coop-context';
 
@@ -41,6 +41,8 @@ export function CoopShell({ children }: { children: ReactNode }) {
     { href: '/cooperatives/centres', label: 'Collection centres', icon: MapPin, count: overview.centres.active },
     { href: '/cooperatives/farmers', label: 'Farmers', icon: Users, count: overview.farmers.active },
     { href: '/cooperatives/team', label: 'Team', icon: UserCog },
+    { href: '/cooperatives/operations', label: 'Field operations', icon: Snowflake, count: overview.coolers.operational },
+    { href: '/collections', label: 'Milk collections', icon: Milk },
   ];
 
   const isActive = (href: string) => (href === '/cooperatives' ? pathname === href : pathname.startsWith(href));

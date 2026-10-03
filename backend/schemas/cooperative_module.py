@@ -92,9 +92,20 @@ class CentreUpdate(_Body):
 # ---------------- farmers ----------------
 
 FarmerStatus = Literal["ACTIVE", "INACTIVE"]
+PaymentMethod = Literal["MPESA", "BANK"]
 
 
-class FarmerCreate(_Body):
+class _FarmerExtras(_Body):
+    """Farm and payout details shared by create and update."""
+    number_of_cows: Optional[int] = Field(None, ge=0, le=100_000)
+    payment_method: Optional[PaymentMethod] = None
+    payment_account: Optional[str] = Field(None, max_length=100)  # M-Pesa number or bank account
+    bank_name: Optional[str] = Field(None, max_length=100)
+
+    _bank = field_validator("bank_name", "payment_account")(_blank_to_none)
+
+
+class FarmerCreate(_FarmerExtras):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     phone: str
@@ -102,6 +113,8 @@ class FarmerCreate(_Body):
     village: Optional[str] = Field(None, max_length=150)
     centre_id: Optional[UUID] = None
     farmer_number: Optional[str] = None  # generated (F-0001, F-0002, ...) when left out
+    # Only a superadmin chooses the cooperative; anyone else naming a different one is refused.
+    cooperative_id: Optional[UUID] = None
 
     _names = field_validator("first_name", "last_name")(clean_text)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
@@ -110,7 +123,7 @@ class FarmerCreate(_Body):
     _village = field_validator("village")(_blank_to_none)
 
 
-class FarmerUpdate(_Body):
+class FarmerUpdate(_FarmerExtras):
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = None

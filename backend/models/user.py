@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Uuid, Enum as SQLEnum
+from sqlalchemy.orm import relationship
 import uuid
 import datetime
 from db import Base
@@ -16,4 +17,12 @@ class User(Base):
     role = Column(SQLEnum(UserRole, name="user_role"), default=UserRole.FARMER)
     cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True)
+    last_login_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    cooperative = relationship("Cooperative", back_populates="users", viewonly=True)
+
+    @property
+    def role_value(self) -> str:
+        return self.role.value if isinstance(self.role, UserRole) else str(self.role)

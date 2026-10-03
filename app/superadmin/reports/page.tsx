@@ -1,0 +1,11 @@
+import { Suspense } from 'react';
+import { ReportsView } from '../_components/views/reports-view';
+
+// The view reads ?focus= / filters from the URL, which needs a Suspense boundary in the App Router.
+export default function Page() {
+  return (
+    <Suspense>
+      <ReportsView />
+    </Suspense>
+  );
+}

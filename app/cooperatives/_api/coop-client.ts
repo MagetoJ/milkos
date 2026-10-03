@@ -1,4 +1,4 @@
-import { TOKEN_KEY, clearSession, loginUrl } from '@/lib/auth';
+import { ApiError, createApi, send } from '@/lib/api-client';
 import type {
   Centre,
   CentreInput,
@@ -11,80 +11,11 @@ import type {
   TeamMember,
   TeamUpdateInput,
 } from '../_types/coop-types';
+import type { Collector, CollectorInput, Cooler, CoolerInput } from '@/app/superadmin/_types/platform-types';
 
-// Relative URL: goes through the Next.js rewrite (same origin), so the session cookie is sent too.
-const BASE_URL = '/api/v1/cooperative';
+export { ApiError };
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    /** Messages keyed by the request field they belong to (from 422 and 409 responses). */
-    public fields: Record<string, string> = {},
-  ) {
-    super(message);
-  }
-}
-
-function authHeaders(): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-interface ErrorItem {
-  loc?: unknown[];
-  msg?: string;
-}
-
-function readError(status: number, body: unknown): ApiError {
-  const detail = (body as { detail?: unknown } | null)?.detail;
-  if (typeof detail === 'string') return new ApiError(status, detail);
-
-  if (Array.isArray(detail)) {
-    const fields: Record<string, string> = {};
-    let first: string | undefined;
-    for (const item of detail as ErrorItem[]) {
-      const field = String(item.loc?.[item.loc.length - 1] ?? 'form');
-      const message = item.msg ?? 'Invalid value.';
-      fields[field] ??= message;
-      first ??= message;
-    }
-    return new ApiError(status, first ?? 'Please check the highlighted fields.', fields);
-  }
-  return new ApiError(status, `Request failed (HTTP ${status})`);
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}${path}`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init.headers },
-    });
-  } catch {
-    throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
-  }
-
-  if (res.status === 401) {
-    clearSession();
-    window.location.replace(loginUrl(window.location.pathname));
-    throw new ApiError(401, 'Your session has expired. Sign in again.');
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    /* empty or non-JSON body */
-  }
-  if (!res.ok) throw readError(res.status, body);
-  return body as T;
-}
-
-const send = (method: string, data: unknown): RequestInit => ({ method, body: JSON.stringify(data) });
+const request = createApi('/api/v1/cooperative');
 
 export const getOverview = () => request<Overview>('/overview');
 
@@ -105,3 +36,9 @@ export const updateFarmer = (id: string, data: FarmerInput) => request<Farmer>(`
 export const listTeam = () => request<TeamMember[]>('/team');
 export const createMember = (data: TeamCreateInput) => request<TeamMember>('/team', send('POST', data));
 export const updateMember = (id: string, data: TeamUpdateInput) => request<TeamMember>(`/team/${id}`, send('PATCH', data));
+// ---- field operations: coolers and collector assignments ----
+export const listCoolers = () => request<Cooler[]>('/coolers');
+export const createCooler = (data: CoolerInput) => request<Cooler>('/coolers', send('POST', data));
+export const updateCooler = (id: string, data: CoolerInput) => request<Cooler>(`/coolers/${id}`, send('PATCH', data));
+export const listCollectors = () => request<Collector[]>('/collectors');
+export const updateCollector = (id: string, data: CollectorInput) => request<Collector>(`/collectors/${id}`, send('PATCH', data));

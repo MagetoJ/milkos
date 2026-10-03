@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 from uuid import UUID
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -78,6 +79,13 @@ def register_cooperative_application(
     Individual roles (Managers, Collectors, Farmers) cannot self-register here;
     they are created by the Cooperative Admin upon approval.
     """
+    from services import settings  # local: services import this module
+
+    if not settings.get(db, "onboarding.accepting_applications"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Milkflow is not accepting new cooperative applications right now. Please try again later.",
+        )
     # The payload is already normalised (phone in E.164, uppercase KRA PIN, canonical county...).
     conflict = find_conflict(db, payload)
     if conflict:
@@ -149,6 +157,8 @@ def login(credentials: UserLogin, response: Response, db: Session = Depends(get_
 
     role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
     access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
+    user.last_login_at = datetime.utcnow()
+    db.commit()
 
     response.set_cookie(
         key="access_token",
@@ -214,11 +224,17 @@ def get_my_profile(current_user: dict = Depends(get_current_user), db: Session =
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found or inactive")
 
+    from core.permissions import permissions_for
+
+    role = user.role.value if isinstance(user.role, UserRole) else str(user.role)
     return {
         "user_id": str(user.id),
         "email": user.email,
         "full_name": user.full_name,
-        "role": user.role.value if isinstance(user.role, UserRole) else str(user.role),
+        "role": role,
+        "cooperative_id": str(user.cooperative_id) if user.cooperative_id else None,
+        # For showing/hiding UI only; every endpoint re-checks on the server.
+        "permissions": sorted(p.value for p in permissions_for(role)),
     }
 
 

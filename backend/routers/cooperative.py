@@ -1,31 +1,37 @@
-"""Cooperative workspace API: overview, collection centres, farmers and team.
+"""Cooperative workspace API: overview, collection centres, farmers, team, collectors, coolers, activity
+and SMS credits.
 
 Every endpoint works on the logged-in user's own cooperative (users.cooperative_id). The cooperative is
-never taken from the URL or the request body, so one cooperative cannot read or change another's data.
+never taken from the URL; a body naming a different cooperative is refused. One cooperative therefore
+cannot read or change another's data. Access is checked by core.access against the database.
 
   COOP_ADMIN  everything below
-  MANAGER     read everything; create and edit centres and farmers; cannot change the team
+  MANAGER     read everything; create and edit centres, farmers, collector assignments and coolers;
+              cannot change the team or decommission equipment
 """
 import logging
-import re
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Iterable, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from core.access import Principal, ensure_same_cooperative, load_principal, require_permission
+from core.pagination import PageParams, page_params, paginate
+from core.permissions import Permission
 from core.security import hash_password
+from core.utils import field_error, iso, next_sequence, num, parse_uuid, reject_nulls
 from db import get_db
-from models.admin import Cooler
+from models.admin import AuditLog, Cooler, CoolerStatus, SMSCreditPackage, SMSCreditPayment
 from models.centre import CollectionCentre
-from models.cooperative import Cooperative, CooperativeStatus
+from models.cooperative import Cooperative
 from models.farmer import Farmer
+from models.operations import Collector
 from models.user import User
-from routers.auth import conflict_error, get_current_user
+from routers.auth import conflict_error
 from schemas.auth import UserRole
 from schemas.cooperative_module import (
     CentreCreate,
@@ -35,6 +41,9 @@ from schemas.cooperative_module import (
     TeamCreate,
     TeamUpdate,
 )
+from schemas.platform import CollectorCreate, CollectorUpdate, CoolerCreate, CoolerUpdate, SmsTopUpCreate
+from services import audit, collectors, coolers, cooperatives, farmers, payments
+from services.users import account_conflict
 
 router = APIRouter(prefix="/api/v1/cooperative", tags=["Cooperative"])
 logger = logging.getLogger("milkflow.cooperative")
@@ -46,42 +55,30 @@ TEAM_ROLES = (UserRole.COOP_ADMIN, UserRole.MANAGER, UserRole.COLLECTOR)
 
 @dataclass
 class Ctx:
-    user: User
-    cooperative: Cooperative
+    principal: Principal
+
+    @property
+    def user(self) -> User:
+        return self.principal.user
+
+    @property
+    def cooperative(self) -> Cooperative:
+        return self.principal.cooperative
 
     @property
     def role(self) -> str:
-        return role_value(self.user)
-
-
-def role_value(user: User) -> str:
-    return user.role.value if isinstance(user.role, UserRole) else str(user.role)
+        return self.principal.role
 
 
 def _context(allowed: set[UserRole]):
     allowed_values = {role.value for role in allowed}
 
-    def dependency(payload: dict = Depends(get_current_user), db: Session = Depends(get_db)) -> Ctx:
-        try:
-            user = db.get(User, UUID(payload["sub"]))
-        except (ValueError, KeyError):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token subject")
-        # Role, activation and cooperative come from the database, not the (up to 15-minute-old) token,
-        # so deactivating someone cuts off access immediately.
-        if not user or not user.is_active:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Account not found or inactive")
-        if role_value(user) not in allowed_values:
+    def dependency(principal: Principal = Depends(load_principal)) -> Ctx:
+        # load_principal has already refused inactive accounts, accounts without a cooperative and
+        # suspended cooperatives (all read from the database, not the token).
+        if principal.role not in allowed_values or principal.cooperative is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions for this action")
-        if not user.cooperative_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Your account is not linked to a cooperative.")
-        cooperative = db.get(Cooperative, user.cooperative_id)
-        if not cooperative:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Your account is not linked to a cooperative.")
-        if cooperative.status != CooperativeStatus.ACTIVE:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "This cooperative is suspended. Contact the platform administrator."
-            )
-        return Ctx(user=user, cooperative=cooperative)
+        return Ctx(principal)
 
     return dependency
 
@@ -90,52 +87,19 @@ staff = _context({UserRole.COOP_ADMIN, UserRole.MANAGER})
 admin_only = _context({UserRole.COOP_ADMIN})
 
 
-# ---------------- helpers ----------------
+def _staff_with(permission: Permission):
+    """Workspace staff (COOP_ADMIN / MANAGER) holding `permission`."""
 
-def _iso(value: Optional[datetime]) -> Optional[str]:
-    """Columns store naive UTC; mark them as UTC so browsers don't read them as local time."""
-    if value is None:
-        return None
-    return value.isoformat() + ("Z" if value.tzinfo is None else "")
+    def dependency(ctx: Ctx = Depends(staff)) -> Ctx:
+        ctx.principal.require(permission)
+        return ctx
 
-
-def _uuid(value: str, what: str) -> UUID:
-    try:
-        return UUID(value)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
-
-
-def _field_error(field: str, message: str) -> HTTPException:
-    """422 shaped like FastAPI's own validation errors so forms map it to the field."""
-    return HTTPException(
-        422,
-        detail=[{"loc": ["body", field], "msg": message, "type": "invalid"}],
-    )
-
-
-def _reject_nulls(data: dict, *fields: str) -> None:
-    for field in fields:
-        if field in data and data[field] is None:
-            raise _field_error(field, "This field can't be empty.")
-
-
-def _next_sequence(values: Iterable[Optional[str]], prefix: str, width: int) -> str:
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-    highest = 0
-    for value in values:
-        match = pattern.match(value or "")
-        if match:
-            highest = max(highest, int(match.group(1)))
-    return f"{prefix}-{highest + 1:0{width}d}"
+    return dependency
 
 
 def _own(db: Session, model, raw_id: str, ctx: Ctx, what: str):
-    row = db.get(model, _uuid(raw_id, what))
     # Someone else's row looks exactly like a missing one.
-    if row is None or row.cooperative_id != ctx.cooperative.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
-    return row
+    return ensure_same_cooperative(ctx.principal, db.get(model, parse_uuid(raw_id, what)), what)
 
 
 def _check_manager(db: Session, ctx: Ctx, manager_user_id: Optional[UUID]) -> None:
@@ -145,19 +109,10 @@ def _check_manager(db: Session, ctx: Ctx, manager_user_id: Optional[UUID]) -> No
     if (
         manager is None
         or manager.cooperative_id != ctx.cooperative.id
-        or role_value(manager) != UserRole.MANAGER.value
+        or manager.role_value != UserRole.MANAGER.value
         or not manager.is_active
     ):
-        raise _field_error("manager_user_id", "Choose an active manager from your team.")
-
-
-def _check_centre(db: Session, ctx: Ctx, centre_id: Optional[UUID]) -> Optional[CollectionCentre]:
-    if centre_id is None:
-        return None
-    centre = db.get(CollectionCentre, centre_id)
-    if centre is None or centre.cooperative_id != ctx.cooperative.id:
-        raise _field_error("centre_id", "Choose a collection centre from your own cooperative.")
-    return centre
+        raise field_error("manager_user_id", "Choose an active manager from your team.")
 
 
 # ---------------- overview ----------------
@@ -192,8 +147,8 @@ def overview(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
             "location": coop.location,
             "status": coop.status,
             "sms_credit_balance": coop.sms_credit_balance or 0,
-            "estimated_daily_liters": float(coop.estimated_daily_liters) if coop.estimated_daily_liters is not None else None,
-            "created_at": _iso(coop.created_at),
+            "estimated_daily_liters": num(coop.estimated_daily_liters),
+            "created_at": iso(coop.created_at),
         },
         "farmers": {
             "total": count(Farmer),
@@ -206,21 +161,22 @@ def overview(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
             "with_cooler": count(CollectionCentre, CollectionCentre.status == "ACTIVE", CollectionCentre.has_cooler.is_(True)),
         },
         "coolers": {
-            "total": count(Cooler),
-            "operational": count(Cooler, Cooler.is_operational.is_(True)),
+            "total": count(Cooler, Cooler.status == CoolerStatus.ACTIVE),
+            "operational": count(Cooler, Cooler.status == CoolerStatus.ACTIVE, Cooler.is_operational.is_(True)),
         },
         "team": {
             "admins": team_counts.get(UserRole.COOP_ADMIN, 0),
             "managers": team_counts.get(UserRole.MANAGER, 0),
             "collectors": team_counts.get(UserRole.COLLECTOR, 0),
         },
+        "milk": cooperatives.milk_volumes(db, coop.id),
         "recent_farmers": [
             {
                 "id": str(f.id),
                 "farmer_number": f.farmer_number,
-                "full_name": f"{f.first_name} {f.last_name}",
+                "full_name": f.full_name,
                 "phone": f.phone,
-                "created_at": _iso(f.created_at),
+                "created_at": iso(f.created_at),
             }
             for f in recent
         ],
@@ -239,10 +195,10 @@ def _centre_json(centre: CollectionCentre, farmer_count: int = 0, manager_name: 
         "manager_user_id": str(centre.manager_user_id) if centre.manager_user_id else None,
         "manager_name": manager_name,
         "has_cooler": bool(centre.has_cooler),
-        "cooler_capacity_litres": float(centre.cooler_capacity_litres) if centre.cooler_capacity_litres is not None else None,
+        "cooler_capacity_litres": num(centre.cooler_capacity_litres),
         "status": centre.status,
         "farmer_count": farmer_count,
-        "created_at": _iso(centre.created_at),
+        "created_at": iso(centre.created_at),
     }
 
 
@@ -285,7 +241,7 @@ def create_centre(payload: CentreCreate, ctx: Ctx = Depends(staff), db: Session 
     explicit_code = payload.code is not None
 
     for attempt in range(3):
-        code = payload.code or _next_sequence(
+        code = payload.code or next_sequence(
             (row[0] for row in db.query(CollectionCentre.code).filter(CollectionCentre.cooperative_id == ctx.cooperative.id)),
             "CTR", 3,
         )
@@ -304,6 +260,11 @@ def create_centre(payload: CentreCreate, ctx: Ctx = Depends(staff), db: Session 
         )
         db.add(centre)
         try:
+            db.flush()
+            audit.record(
+                db, ctx.principal, "CENTRE_CREATED", target=f"{centre.name} ({centre.code})",
+                entity_type="centre", entity_id=centre.id, cooperative_id=ctx.cooperative.id,
+            )
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -319,7 +280,7 @@ def create_centre(payload: CentreCreate, ctx: Ctx = Depends(staff), db: Session 
 def update_centre(centre_id: str, payload: CentreUpdate, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
     centre = _own(db, CollectionCentre, centre_id, ctx, "Collection centre")
     data = payload.model_dump(exclude_unset=True)
-    _reject_nulls(data, "name", "code", "county", "has_cooler", "status")
+    reject_nulls(data, "name", "code", "county", "has_cooler", "status")
 
     if "manager_user_id" in data:
         _check_manager(db, ctx, data["manager_user_id"])
@@ -330,6 +291,12 @@ def update_centre(centre_id: str, payload: CentreUpdate, ctx: Ctx = Depends(staf
         setattr(centre, field, value)
     if not centre.has_cooler:
         centre.cooler_capacity_litres = None
+    if data:
+        audit.record(
+            db, ctx.principal, "CENTRE_UPDATED", target=f"{centre.name} ({centre.code})",
+            entity_type="centre", entity_id=centre.id, cooperative_id=ctx.cooperative.id,
+            new_values={k: (str(v) if isinstance(v, UUID) else v) for k, v in data.items()},
+        )
 
     try:
         db.commit()
@@ -349,47 +316,6 @@ def update_centre(centre_id: str, payload: CentreUpdate, ctx: Ctx = Depends(staf
 
 
 # ---------------- farmers ----------------
-
-def _farmer_json(farmer: Farmer, centre_name: Optional[str] = None) -> dict:
-    return {
-        "id": str(farmer.id),
-        "farmer_number": farmer.farmer_number,
-        "first_name": farmer.first_name,
-        "last_name": farmer.last_name,
-        "full_name": f"{farmer.first_name} {farmer.last_name}",
-        "phone": farmer.phone,
-        "national_id": farmer.national_id,
-        "village": farmer.village,
-        "status": farmer.status,
-        "centre_id": str(farmer.centre_id) if farmer.centre_id else None,
-        "centre_name": centre_name,
-        "created_at": _iso(farmer.created_at),
-    }
-
-
-def _farmer_conflict(
-    db: Session, ctx: Ctx, *, number: Optional[str], phone: Optional[str], national_id: Optional[str],
-    exclude_id: Optional[UUID] = None,
-) -> Optional[tuple[str, str]]:
-    def taken(column, value) -> bool:
-        query = db.query(Farmer.id).filter(Farmer.cooperative_id == ctx.cooperative.id, column == value)
-        if exclude_id:
-            query = query.filter(Farmer.id != exclude_id)
-        return query.first() is not None
-
-    if number and taken(Farmer.farmer_number, number):
-        return "farmer_number", "This farmer number is already used in your cooperative."
-    if phone and taken(Farmer.phone, phone):
-        return "phone", "A farmer with this phone number is already registered in your cooperative."
-    if national_id and taken(Farmer.national_id, national_id):
-        return "national_id", "A farmer with this national ID is already registered in your cooperative."
-    return None
-
-
-def _like(term: str) -> str:
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
 
 @router.get("/farmers")
 def list_farmers(
@@ -412,20 +338,8 @@ def list_farmers(
     if centre_id == "none":
         query = query.filter(Farmer.centre_id.is_(None))
     elif centre_id:
-        query = query.filter(Farmer.centre_id == _uuid(centre_id, "Collection centre"))
-
-    # Every word must match somewhere: "jane limuru" finds Jane in Limuru.
-    for term in (search or "").split():
-        clauses = [
-            column.ilike(_like(term), escape="\\")
-            for column in (Farmer.first_name, Farmer.last_name, Farmer.farmer_number, Farmer.national_id, Farmer.village)
-        ]
-        if re.fullmatch(r"\+?\d+", term):
-            digits = term.lstrip("+")
-            digits = digits[1:] if digits.startswith("0") else digits[3:] if digits.startswith("254") else digits
-            if len(digits) >= 3:
-                clauses.append(Farmer.phone.like(f"%{digits}%"))
-        query = query.filter(or_(*clauses))
+        query = query.filter(Farmer.centre_id == parse_uuid(centre_id, "Collection centre"))
+    query = farmers.search_filter(query, search)
 
     total = query.count()
     rows = (
@@ -435,7 +349,7 @@ def list_farmers(
         .all()
     )
     return {
-        "items": [_farmer_json(farmer, centre_name) for farmer, centre_name in rows],
+        "items": [farmers.farmer_json(farmer, centre_name) for farmer, centre_name in rows],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -444,76 +358,15 @@ def list_farmers(
 
 @router.post("/farmers", status_code=status.HTTP_201_CREATED)
 def create_farmer(payload: FarmerCreate, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
-    centre = _check_centre(db, ctx, payload.centre_id)
-    explicit_number = payload.farmer_number is not None
-
-    for attempt in range(3):
-        number = payload.farmer_number or _next_sequence(
-            (row[0] for row in db.query(Farmer.farmer_number).filter(Farmer.cooperative_id == ctx.cooperative.id)),
-            "F", 4,
-        )
-        conflict = _farmer_conflict(
-            db, ctx, number=number if explicit_number else None, phone=payload.phone, national_id=payload.national_id
-        )
-        if conflict:
-            raise conflict_error(*conflict)
-
-        farmer = Farmer(
-            cooperative_id=ctx.cooperative.id,
-            centre_id=payload.centre_id,
-            farmer_number=number,
-            first_name=payload.first_name,
-            last_name=payload.last_name,
-            phone=payload.phone,
-            national_id=payload.national_id,
-            village=payload.village,
-            status="ACTIVE",
-        )
-        db.add(farmer)
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            # A simultaneous request took a unique value. Re-check which one; retry an auto number.
-            conflict = _farmer_conflict(db, ctx, number=number, phone=payload.phone, national_id=payload.national_id)
-            if conflict and (explicit_number or conflict[0] != "farmer_number" or attempt == 2):
-                raise conflict_error(*conflict)
-            continue
-        db.refresh(farmer)
-        return _farmer_json(farmer, centre.name if centre else None)
+    farmer, centre = farmers.create(db, ctx.principal, payload)
+    return farmers.farmer_json(farmer, centre.name if centre else None)
 
 
 @router.patch("/farmers/{farmer_id}")
 def update_farmer(farmer_id: str, payload: FarmerUpdate, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
-    farmer = _own(db, Farmer, farmer_id, ctx, "Farmer")
-    data = payload.model_dump(exclude_unset=True)
-    _reject_nulls(data, "first_name", "last_name", "phone", "farmer_number", "status")
-
-    if data.get("centre_id") is not None:
-        _check_centre(db, ctx, data["centre_id"])
-    conflict = _farmer_conflict(
-        db, ctx,
-        number=data.get("farmer_number"), phone=data.get("phone"), national_id=data.get("national_id"),
-        exclude_id=farmer.id,
-    )
-    if conflict:
-        raise conflict_error(*conflict)
-
-    for field, value in data.items():
-        setattr(farmer, field, value)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        conflict = _farmer_conflict(
-            db, ctx, number=data.get("farmer_number"), phone=data.get("phone"),
-            national_id=data.get("national_id"), exclude_id=farmer.id,
-        )
-        raise conflict_error(*(conflict or (None, "These details clash with another farmer. Refresh and try again.")))
-    db.refresh(farmer)
-
+    farmer = farmers.update(db, ctx.principal, _own(db, Farmer, farmer_id, ctx, "Farmer"), payload)
     centre = db.get(CollectionCentre, farmer.centre_id) if farmer.centre_id else None
-    return _farmer_json(farmer, centre.name if centre else None)
+    return farmers.farmer_json(farmer, centre.name if centre else None)
 
 
 # ---------------- team ----------------
@@ -524,25 +377,11 @@ def _member_json(user: User, current: User) -> dict:
         "full_name": user.full_name,
         "email": user.email,
         "phone_number": user.phone_number,
-        "role": role_value(user),
+        "role": user.role_value,
         "is_active": bool(user.is_active),
         "is_you": user.id == current.id,
-        "created_at": _iso(user.created_at),
+        "created_at": iso(user.created_at),
     }
-
-
-def _account_conflict(db: Session, *, email: Optional[str], phone: Optional[str], exclude_id: Optional[UUID] = None):
-    def taken(column, value) -> bool:
-        query = db.query(User.id).filter(column == value)
-        if exclude_id:
-            query = query.filter(User.id != exclude_id)
-        return query.first() is not None
-
-    if email and taken(User.email, email):
-        return "email", "An account with this email address already exists."
-    if phone and taken(User.phone_number, phone):
-        return "phone", "This phone number already belongs to another account."
-    return None
 
 
 @router.get("/team")
@@ -554,13 +393,13 @@ def list_team(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
         .all()
     )
     order = {UserRole.COOP_ADMIN.value: 0, UserRole.MANAGER.value: 1, UserRole.COLLECTOR.value: 2}
-    members.sort(key=lambda u: (order.get(role_value(u), 9), u.full_name.lower()))
+    members.sort(key=lambda u: (order.get(u.role_value, 9), u.full_name.lower()))
     return [_member_json(u, ctx.user) for u in members]
 
 
 @router.post("/team", status_code=status.HTTP_201_CREATED)
 def create_team_member(payload: TeamCreate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
-    conflict = _account_conflict(db, email=payload.email, phone=payload.phone)
+    conflict = account_conflict(db, email=payload.email, phone=payload.phone)
     if conflict:
         raise conflict_error(*conflict)
 
@@ -575,10 +414,18 @@ def create_team_member(payload: TeamCreate, ctx: Ctx = Depends(admin_only), db: 
     )
     db.add(member)
     try:
+        db.flush()
+        if payload.role == UserRole.COLLECTOR.value:
+            collectors.ensure_profile(db, member)
+        audit.record(
+            db, ctx.principal, "USER_CREATED", target=f"{member.full_name} <{member.email}> as {payload.role}",
+            entity_type="user", entity_id=member.id, cooperative_id=ctx.cooperative.id,
+            new_values={"email": member.email, "role": payload.role},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
-        conflict = _account_conflict(db, email=payload.email, phone=payload.phone)
+        conflict = account_conflict(db, email=payload.email, phone=payload.phone)
         raise conflict_error(*(conflict or (None, "An account with these details already exists.")))
     db.refresh(member)
     return _member_json(member, ctx.user)
@@ -588,12 +435,13 @@ def create_team_member(payload: TeamCreate, ctx: Ctx = Depends(admin_only), db: 
 def update_team_member(member_id: str, payload: TeamUpdate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
     member = _own_member(db, member_id, ctx)
     data = payload.model_dump(exclude_unset=True)
-    _reject_nulls(data, "full_name", "phone", "role", "is_active", "password")
+    reject_nulls(data, "full_name", "phone", "role", "is_active", "password")
 
-    conflict = _account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
+    conflict = account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
     if conflict:
         raise conflict_error(*conflict)
 
+    old_role = member.role_value
     if "full_name" in data:
         member.full_name = data["full_name"]
     if "phone" in data:
@@ -605,22 +453,177 @@ def update_team_member(member_id: str, payload: TeamUpdate, ctx: Ctx = Depends(a
     if "password" in data:
         member.password_hash = hash_password(data["password"])
 
+    # Keep the collector profile in step with the account.
+    profile = db.query(Collector).filter(Collector.user_id == member.id).first()
+    if member.role_value == UserRole.COLLECTOR.value:
+        profile = collectors.ensure_profile(db, member)
+        profile.status = "ACTIVE" if member.is_active else "INACTIVE"
+    elif profile is not None:
+        profile.status = "INACTIVE"
+
+    changes = {k: v for k, v in data.items() if k != "password"}
+    action = (
+        "USER_ROLE_CHANGED" if member.role_value != old_role
+        else ("USER_ACTIVATED" if member.is_active else "USER_DISABLED") if set(changes) == {"is_active"}
+        else "USER_PASSWORD_RESET" if set(data) == {"password"}
+        else "USER_UPDATED"
+    )
+    audit.record(
+        db, ctx.principal, action, target=f"{member.full_name} <{member.email}>",
+        entity_type="user", entity_id=member.id, cooperative_id=ctx.cooperative.id,
+        old_values={"role": old_role} if member.role_value != old_role else None, new_values=changes or None,
+    )
+
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        conflict = _account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
+        conflict = account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
         raise conflict_error(*(conflict or (None, "These details clash with another account.")))
     db.refresh(member)
     return _member_json(member, ctx.user)
 
 
 def _own_member(db: Session, member_id: str, ctx: Ctx) -> User:
-    member = db.get(User, _uuid(member_id, "Team member"))
+    member = db.get(User, parse_uuid(member_id, "Team member"))
     if member is None or member.cooperative_id != ctx.cooperative.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Team member not found")
-    if role_value(member) == UserRole.COOP_ADMIN.value:
+    if member.role_value == UserRole.COOP_ADMIN.value:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "The cooperative admin's account can't be changed here.")
-    if role_value(member) not in {UserRole.MANAGER.value, UserRole.COLLECTOR.value}:
+    if member.role_value not in {UserRole.MANAGER.value, UserRole.COLLECTOR.value}:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Team member not found")
     return member
+
+
+# ---------------- collectors ----------------
+
+def _collector_rows(db: Session, cooperative_id: UUID, collector_id: Optional[UUID] = None):
+    query = (
+        db.query(Collector, User, CollectionCentre.name, Cooler.name)
+        .join(User, User.id == Collector.user_id)
+        .outerjoin(CollectionCentre, CollectionCentre.id == Collector.centre_id)
+        .outerjoin(Cooler, Cooler.id == Collector.cooler_id)
+        .filter(Collector.cooperative_id == cooperative_id)
+    )
+    if collector_id:
+        query = query.filter(Collector.id == collector_id)
+    rows = query.order_by(User.full_name).all()
+    stats = collectors.stats_for(db, [r[0].id for r in rows])
+    return [
+        collectors.collector_json(c, u, centre_name=centre, cooler_name=cooler, stats=stats.get(c.id))
+        for c, u, centre, cooler in rows
+    ]
+
+
+@router.get("/collectors")
+def list_collectors(ctx: Ctx = Depends(_staff_with(Permission.COLLECTOR_READ)), db: Session = Depends(get_db)):
+    return _collector_rows(db, ctx.cooperative.id)
+
+
+@router.post("/collectors", status_code=status.HTTP_201_CREATED)
+def create_collector(
+    payload: CollectorCreate, ctx: Ctx = Depends(_staff_with(Permission.COLLECTOR_CREATE)), db: Session = Depends(get_db)
+):
+    profile = collectors.create(db, ctx.principal, payload)
+    return _collector_rows(db, ctx.cooperative.id, profile.id)[0]
+
+
+@router.patch("/collectors/{collector_id}")
+def update_collector(
+    collector_id: str, payload: CollectorUpdate,
+    ctx: Ctx = Depends(_staff_with(Permission.COLLECTOR_UPDATE)), db: Session = Depends(get_db),
+):
+    profile = _own(db, Collector, collector_id, ctx, "Collector")
+    if "status" in payload.model_fields_set:
+        ctx.principal.require(Permission.COLLECTOR_DISABLE)
+    profile = collectors.update(db, ctx.principal, profile, payload)
+    return _collector_rows(db, ctx.cooperative.id, profile.id)[0]
+
+
+# ---------------- coolers ----------------
+
+def _cooler_rows(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID] = None) -> list[dict]:
+    query = (
+        db.query(Cooler, CollectionCentre.name)
+        .outerjoin(CollectionCentre, CollectionCentre.id == Cooler.centre_id)
+        .filter(Cooler.cooperative_id == cooperative_id)
+    )
+    if cooler_id:
+        query = query.filter(Cooler.id == cooler_id)
+    rows = query.order_by(Cooler.status, Cooler.code).all()
+    today = coolers.litres_today(db, [c.id for c, _ in rows])
+    return [coolers.cooler_json(c, centre_name=centre, litres_today=today.get(c.id, 0.0)) for c, centre in rows]
+
+
+@router.get("/coolers")
+def list_coolers(principal: Principal = Depends(require_permission(Permission.COOLER_READ)), db: Session = Depends(get_db)):
+    # Collectors may read their cooperative's coolers too (to choose one when recording milk).
+    if principal.cooperative is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions for this action")
+    return _cooler_rows(db, principal.cooperative.id)
+
+
+@router.post("/coolers", status_code=status.HTTP_201_CREATED)
+def create_cooler(
+    payload: CoolerCreate, ctx: Ctx = Depends(_staff_with(Permission.COOLER_CREATE)), db: Session = Depends(get_db)
+):
+    cooler = coolers.create(db, ctx.principal, payload)
+    return _cooler_rows(db, ctx.cooperative.id, cooler.id)[0]
+
+
+@router.patch("/coolers/{cooler_id}")
+def update_cooler(
+    cooler_id: str, payload: CoolerUpdate,
+    ctx: Ctx = Depends(_staff_with(Permission.COOLER_UPDATE)), db: Session = Depends(get_db),
+):
+    cooler = _own(db, Cooler, cooler_id, ctx, "Cooler")
+    if "status" in payload.model_fields_set:
+        ctx.principal.require(Permission.COOLER_DISABLE)
+    cooler = coolers.update(db, ctx.principal, cooler, payload)
+    return _cooler_rows(db, ctx.cooperative.id, cooler.id)[0]
+
+
+# ---------------- activity ----------------
+
+@router.get("/activity")
+def list_activity(
+    params: PageParams = Depends(page_params),
+    ctx: Ctx = Depends(_staff_with(Permission.AUDIT_READ)),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(AuditLog)
+        .filter(AuditLog.cooperative_id == ctx.cooperative.id)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id)
+    )
+    return paginate(query, params, audit.entry_json)
+
+
+# ---------------- SMS credits ----------------
+
+@router.get("/sms-credits")
+def sms_credits(ctx: Ctx = Depends(_staff_with(Permission.PAYMENT_READ)), db: Session = Depends(get_db)):
+    packages = db.query(SMSCreditPackage).filter(SMSCreditPackage.is_active.is_(True)).order_by(SMSCreditPackage.credits_amount).all()
+    history = (
+        db.query(SMSCreditPayment, SMSCreditPackage)
+        .outerjoin(SMSCreditPackage, SMSCreditPackage.id == SMSCreditPayment.package_id)
+        .filter(SMSCreditPayment.cooperative_id == ctx.cooperative.id)
+        .order_by(SMSCreditPayment.submitted_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {
+        "balance": ctx.cooperative.sms_credit_balance or 0,
+        "packages": [
+            {"id": str(p.id), "name": p.name, "credits_amount": p.credits_amount, "price_kes": num(p.price_kes)}
+            for p in packages
+        ],
+        "payments": [payments.payment_json(p, ctx.cooperative, pkg) for p, pkg in history],
+    }
+
+
+@router.post("/sms-credits/payments", status_code=status.HTTP_201_CREATED)
+def submit_sms_payment(payload: SmsTopUpCreate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    payment = payments.submit(db, ctx.principal, payload)
+    package = db.get(SMSCreditPackage, payment.package_id) if payment.package_id else None
+    return payments.payment_json(payment, ctx.cooperative, package)

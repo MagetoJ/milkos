@@ -57,3 +57,45 @@ def test_downgrade_to_baseline_and_back(tmp_path):
     for step in (["upgrade", "head"], ["downgrade", "0001_baseline"], ["upgrade", "head"]):
         res = run(["-m", "alembic", *step], url)
         assert res.returncode == 0, res.stderr
+
+
+SEED_0004 = """
+    import sqlite3, sys, uuid
+    c = sqlite3.connect(sys.argv[1])
+    coop, user = uuid.uuid4().hex, uuid.uuid4().hex
+    c.execute("INSERT INTO cooperatives (id, name, code, registration_number, kra_pin, county, status, sms_credit_balance)"
+              " VALUES (?, 'C', 'C-1', 'CS/1', 'P000000001A', 'Kiambu', 'ACTIVE', 0)", (coop,))
+    c.execute("INSERT INTO users (id, email, password_hash, full_name, phone_number, role, cooperative_id, is_active)"
+              " VALUES (?, 'c@x.ke', 'h', 'Col', '+254700000001', 'COLLECTOR', ?, 1)", (user, coop))
+    for name in ("K1", "K2"):
+        c.execute("INSERT INTO coolers (id, cooperative_id, name, is_operational) VALUES (?, ?, ?, 1)", (uuid.uuid4().hex, coop, name))
+    c.execute("INSERT INTO audit_logs (id, admin_id, action, target) VALUES (?, ?, 'X', 'y')", (uuid.uuid4().hex, user))
+    c.commit()
+"""
+
+CHECK_0005 = """
+    import sqlite3, sys
+    c = sqlite3.connect(sys.argv[1])
+    print(sorted(r[0] for r in c.execute("SELECT code FROM coolers")))
+    print(c.execute("SELECT collector_number, status FROM collectors").fetchall())
+    print(c.execute("SELECT COUNT(*) FROM users WHERE cooperative_id IS NOT NULL").fetchone()[0])
+    print(c.execute("SELECT actor_email FROM audit_logs").fetchall())
+"""
+
+
+def test_0005_keeps_and_backfills_existing_rows(tmp_path):
+    """Rebuilding tables in SQLite batch mode must not fire ON DELETE rules (it used to wipe coolers)."""
+    path = (tmp_path / "data.db").as_posix()
+    url = f"sqlite:///{path}"
+    assert run(["-m", "alembic", "upgrade", "0004_cooperative_uniques"], url).returncode == 0
+    seed = run(["-c", textwrap.dedent(SEED_0004), path], url)
+    assert seed.returncode == 0, seed.stderr
+    upgrade = run(["-m", "alembic", "upgrade", "head"], url)
+    assert upgrade.returncode == 0, upgrade.stderr
+    check = run(["-c", textwrap.dedent(CHECK_0005), path], url)
+    assert check.stdout.split("\n")[:4] == [
+        "['CLR-001', 'CLR-002']", "[('COL-001', 'ACTIVE')]", "1", "[('c@x.ke',)]",
+    ], check.stdout + check.stderr
+    for step in (["downgrade", "-1"], ["upgrade", "head"]):
+        res = run(["-m", "alembic", *step], url)
+        assert res.returncode == 0, res.stderr

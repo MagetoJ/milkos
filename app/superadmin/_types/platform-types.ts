@@ -1,0 +1,381 @@
+// Shapes returned by /api/v1/superadmin/* (see backend/routers/superadmin and backend/services).
+import type { UserRole } from '@/lib/auth';
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export type ActiveStatus = 'ACTIVE' | 'INACTIVE';
+export type CooperativeStatus = 'ACTIVE' | 'SUSPENDED';
+export type QualityStatus = 'ACCEPTED' | 'REJECTED' | 'PENDING';
+export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+export interface AuditEntry {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  actor_role: string | null;
+  action: string;
+  target: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  cooperative_id: string | null;
+  cooperative_name: string | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+  admin_email?: string | null;
+}
+
+export interface Dashboard {
+  cooperatives: { total: number; active: number; suspended: number };
+  users: {
+    total: number;
+    active: number;
+    superadmins: number;
+    coop_admins: number;
+    managers: number;
+    collector_accounts: number;
+    farmer_accounts: number;
+  };
+  farmers: { total: number; active: number };
+  collectors: { total: number; active: number };
+  coolers: { total: number; operational: number; offline: number };
+  milk: { today: number; week: number; month: number; collections_today: number; daily: { date: string; litres: number }[] };
+  pending: { applications: number; payments: number; payment_credits: number; payment_amount_kes: number };
+  sms: { total_balance: number; low_balance_cooperatives: number };
+  top_cooperatives: { id: string; name: string; code: string; litres_30d: number }[];
+  recent_activity: AuditEntry[];
+  generated_at: string;
+}
+
+export interface CooperativeCounts {
+  farmers: number;
+  collectors: number;
+  managers: number;
+  admins: number;
+  coolers: number;
+  litres_30d: number;
+  centres?: number;
+}
+
+export interface Cooperative {
+  id: string;
+  name: string;
+  code: string;
+  registration_number: string;
+  kra_pin: string;
+  county: string;
+  location: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  status: CooperativeStatus;
+  suspension_reason: string | null;
+  suspended_at: string | null;
+  sms_credit_balance: number;
+  estimated_daily_liters: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  counts?: CooperativeCounts;
+}
+
+export interface CooperativeDetail extends Cooperative {
+  counts: CooperativeCounts;
+  administrators: { id: string; full_name: string; email: string; phone_number: string; is_active: boolean; last_login_at: string | null }[];
+  milk: { today: number; week: number; month: number; collections_today: number };
+  payments: { pending: number; verified: number; rejected: number; verified_amount_kes: number };
+  recent_activity: AuditEntry[];
+}
+
+export interface CooperativeInput {
+  name?: string;
+  registration_number?: string;
+  kra_pin?: string;
+  county?: string;
+  location?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  estimated_daily_liters?: number | null;
+  admin?: { full_name: string; email: string; phone: string; password: string } | null;
+}
+
+export interface PlatformUser {
+  id: string;
+  full_name: string;
+  email: string;
+  phone_number: string;
+  role: UserRole;
+  is_active: boolean;
+  cooperative_id: string | null;
+  cooperative_name: string | null;
+  cooperative_code: string | null;
+  last_login_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PlatformUserDetail extends PlatformUser {
+  permissions: string[];
+  activity: AuditEntry[];
+}
+
+export interface UserInput {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  role?: UserRole;
+  password?: string;
+  cooperative_id?: string | null;
+  farmer_id?: string | null;
+}
+
+export interface Stats {
+  total_litres: number;
+  collections: number;
+  last_collection: string | null;
+}
+
+export interface Farmer {
+  id: string;
+  cooperative_id: string;
+  cooperative_name?: string;
+  cooperative_code?: string;
+  farmer_number: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  phone: string;
+  national_id: string | null;
+  village: string | null;
+  number_of_cows: number | null;
+  payment_method: 'MPESA' | 'BANK' | null;
+  payment_account: string | null;
+  bank_name: string | null;
+  status: ActiveStatus;
+  centre_id: string | null;
+  centre_name: string | null;
+  has_account: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  stats: Stats;
+}
+
+export interface FarmerDetail extends Farmer {
+  recent_collections: Collection[];
+  activity: AuditEntry[];
+  payments_supported: boolean;
+}
+
+export interface FarmerInput {
+  cooperative_id?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  national_id?: string | null;
+  village?: string | null;
+  number_of_cows?: number | null;
+  payment_method?: 'MPESA' | 'BANK' | null;
+  payment_account?: string | null;
+  bank_name?: string | null;
+  farmer_number?: string;
+  status?: ActiveStatus;
+}
+
+export interface Collector {
+  id: string;
+  user_id: string;
+  cooperative_id: string;
+  cooperative_name?: string;
+  cooperative_code?: string;
+  collector_number: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  assigned_area: string | null;
+  centre_id: string | null;
+  centre_name: string | null;
+  cooler_id: string | null;
+  cooler_name: string | null;
+  status: ActiveStatus;
+  account_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  stats: Stats;
+}
+
+export interface CollectorInput {
+  cooperative_id?: string;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  collector_number?: string;
+  assigned_area?: string | null;
+  cooler_id?: string | null;
+  status?: ActiveStatus;
+}
+
+export interface Cooler {
+  id: string;
+  cooperative_id: string;
+  cooperative_name?: string;
+  cooperative_code?: string;
+  code: string;
+  name: string;
+  location: string | null;
+  centre_id: string | null;
+  centre_name: string | null;
+  capacity_litres: number | null;
+  scale_device_id: string | null;
+  status: ActiveStatus;
+  is_operational: boolean;
+  last_temperature_c: number | null;
+  last_reading_at: string | null;
+  litres_today: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CoolerInput {
+  cooperative_id?: string;
+  name?: string;
+  code?: string;
+  location?: string | null;
+  capacity_litres?: number | null;
+  scale_device_id?: string | null;
+  is_operational?: boolean;
+  status?: ActiveStatus;
+}
+
+export interface Collection {
+  id: string;
+  reference: string;
+  cooperative_id: string;
+  cooperative_name: string;
+  cooperative_code: string;
+  farmer_id: string;
+  farmer_name: string;
+  farmer_number: string;
+  collector_id: string | null;
+  collector_name: string | null;
+  collector_number: string | null;
+  cooler_id: string | null;
+  cooler_name: string | null;
+  cooler_code: string | null;
+  collection_date: string;
+  collection_time: string | null;
+  quantity_litres: number;
+  fat_percentage: number | null;
+  snf_percentage: number | null;
+  temperature_c: number | null;
+  quality_status: QualityStatus;
+  rejection_reason: string | null;
+  notes: string | null;
+  recorded_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CollectionSummary {
+  collections: number;
+  accepted_litres: number;
+  rejected_collections: number;
+  rejected_litres: number;
+  average_fat_percentage: number | null;
+}
+
+export interface Payment {
+  id: string;
+  cooperative_id: string | null;
+  cooperative_name: string | null;
+  cooperative_code: string | null;
+  package_id: string | null;
+  package_name: string | null;
+  amount_kes: number;
+  credits_requested: number;
+  masked_mpesa_ref: string;
+  status: PaymentStatus;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  verified_at: string | null;
+}
+
+export interface PaymentDetail extends Payment {
+  activity: AuditEntry[];
+}
+
+export interface PaymentSummary {
+  pending: { count: number; amount_kes: number };
+  verified: { count: number; amount_kes: number };
+  rejected: { count: number; amount_kes: number };
+}
+
+export interface CollectionsReport {
+  range: { from: string; to: string; days: number };
+  cooperative_id: string | null;
+  totals: {
+    collections: number;
+    accepted_litres: number;
+    rejected_litres: number;
+    rejected_collections: number;
+    farmers_delivering: number;
+    average_fat_percentage: number | null;
+    average_snf_percentage: number | null;
+    average_daily_litres: number;
+  };
+  daily: { date: string; accepted_litres: number; rejected_litres: number; collections: number }[];
+  by_cooperative: {
+    id: string;
+    name: string;
+    code: string;
+    accepted_litres: number;
+    rejected_litres: number;
+    collections: number;
+    farmers_delivering: number;
+    average_fat_percentage: number | null;
+  }[];
+  top_farmers: { id: string; full_name: string; farmer_number: string; cooperative_name: string; accepted_litres: number; collections: number }[];
+}
+
+export type SearchType = 'COOPERATIVE' | 'USER' | 'FARMER' | 'COLLECTOR' | 'COOLER' | 'COLLECTION';
+
+export interface SearchResult {
+  type: SearchType;
+  id: string;
+  title: string;
+  subtitle: string;
+  context: string | null;
+  cooperative_id: string | null;
+}
+
+export interface Setting {
+  key: string;
+  value: unknown;
+  default: unknown;
+  type: 'boolean' | 'number' | 'integer' | 'email' | 'phone';
+  group: string;
+  label: string;
+  help: string;
+  min: number | null;
+  max: number | null;
+  updated_at: string | null;
+}
+
+export interface SmsPackage {
+  id: string;
+  name: string;
+  credits_amount: number;
+  price_kes: number;
+  is_active: boolean;
+}
+
+export interface RolesMatrix {
+  permissions: string[];
+  roles: Record<string, string[]>;
+}
