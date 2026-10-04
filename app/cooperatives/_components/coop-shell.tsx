@@ -3,8 +3,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, LogOut, MapPin, Menu, Milk, Snowflake, UserCog, Users, X, type LucideIcon } from 'lucide-react';
-import { TOKEN_KEY } from '@/lib/auth';
+import { Gauge, LayoutDashboard, LogOut, MapPin, Menu, Milk, RefreshCw, Snowflake, UserCog, Users, X, type LucideIcon } from 'lucide-react';
+import { ConnectionStatus, OfflineBanner, SyncStatus } from '@/components/offline/status';
+import { signOutEverywhere } from '@/lib/offline/auth';
+import { syncEngine } from '@/lib/sync/engine';
 import { useCoop } from './coop-context';
 
 interface NavItem {
@@ -14,23 +16,32 @@ interface NavItem {
   count?: number;
 }
 
+/**
+ * Sign out. Unsynchronised changes are never thrown away: they stay on this device and sync after the
+ * same person signs in again; the user is told so first.
+ */
 export async function signOut() {
+  const { pending, syncing, failed, conflict } = syncEngine.getState().counts;
+  const waiting = pending + syncing + failed + conflict;
+  if (
+    waiting > 0 &&
+    !window.confirm(
+      `You have ${waiting} unsynchronized record${waiting === 1 ? '' : 's'}. They stay on this device and sync after you sign in again. Sign out?`,
+    )
+  ) {
+    return;
+  }
   try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    await fetch('/api/v1/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    syncEngine.stop();
+    await signOutEverywhere();
   } finally {
-    localStorage.removeItem(TOKEN_KEY);
     window.location.assign('/login');
   }
 }
 
 export function CoopShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { overview, email } = useCoop();
+  const { overview, email, offlineCapable } = useCoop();
   const [open, setOpen] = useState(false);
 
   // Close the mobile menu after navigating.
@@ -42,13 +53,15 @@ export function CoopShell({ children }: { children: ReactNode }) {
     { href: '/cooperatives/farmers', label: 'Farmers', icon: Users, count: overview.farmers.active },
     { href: '/cooperatives/team', label: 'Team', icon: UserCog },
     { href: '/cooperatives/operations', label: 'Field operations', icon: Snowflake, count: overview.coolers.operational },
+    { href: '/cooperatives/coolers', label: 'Cooler monitoring', icon: Gauge },
     { href: '/collections', label: 'Milk collections', icon: Milk },
+    ...(offlineCapable ? [{ href: '/cooperatives/sync', label: 'Sync center', icon: RefreshCw }] : []),
   ];
 
   const isActive = (href: string) => (href === '/cooperatives' ? pathname === href : pathname.startsWith(href));
 
   const sidebar = (
-    <nav aria-label="Cooperative" className="flex h-full flex-col bg-[#0F3325] text-[#DCE8E0]">
+    <nav aria-label="Cooperative" className="flex h-full flex-col overflow-y-auto bg-[#0F3325] text-[#DCE8E0]">
       <div className="px-5 pb-6 pt-6">
         <p className="text-lg font-semibold tracking-tight text-white">Milkflow</p>
         <p className="mt-1 truncate text-sm font-medium text-[#DCE8E0]" title={overview.cooperative.name}>
@@ -80,6 +93,11 @@ export function CoopShell({ children }: { children: ReactNode }) {
           );
         })}
       </ul>
+
+      <div className="space-y-3 border-t border-white/10 px-5 py-4">
+        <ConnectionStatus dark />
+        {offlineCapable && <SyncStatus dark />}
+      </div>
 
       <div className="border-t border-white/10 px-5 py-4">
         {email && (
@@ -124,7 +142,10 @@ export function CoopShell({ children }: { children: ReactNode }) {
       )}
 
       <main className="lg:pl-60">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">{children}</div>
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+          {offlineCapable && <OfflineBanner />}
+          {children}
+        </div>
       </main>
     </div>
   );

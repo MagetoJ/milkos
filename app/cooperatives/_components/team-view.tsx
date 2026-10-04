@@ -1,5 +1,6 @@
 'use client';
 
+import { useReloadOn } from '@/lib/sync/hooks';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Check, Copy, KeyRound, Pencil, Plus, RefreshCw } from 'lucide-react';
@@ -57,6 +58,7 @@ export function TeamView() {
   const toast = useToast();
   const params = useSearchParams();
   const team = useResource(listTeam, []);
+  useReloadOn(['team'], team.reload);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
   useEffect(() => {

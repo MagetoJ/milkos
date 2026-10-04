@@ -238,8 +238,119 @@ export interface Cooler {
   last_temperature_c: number | null;
   last_reading_at: string | null;
   litres_today: number;
+  // Cooler monitoring (offline-first foundation). Optional so older responses still type-check.
+  manager_user_id?: string | null;
+  manager_name?: string | null;
+  current_volume_litres?: number | null;
+  last_seen_at?: string | null;
+  low_volume_alert_litres?: number | null;
+  high_volume_alert_litres?: number | null;
+  min_temperature_c?: number | null;
+  max_temperature_c?: number | null;
+  stale_after_minutes?: number | null;
+  low_battery_percent?: number | null;
+  alerts_enabled?: boolean;
+  sensors?: SensorDevice[];
+  sync_version?: number;
+  sync_status?: SyncStatus;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export type SyncStatus = 'synced' | 'pending' | 'syncing' | 'failed' | 'conflict';
+
+export interface SensorDevice {
+  id: string;
+  cooperative_id: string;
+  cooperative_name?: string;
+  cooler_id: string | null;
+  cooler_name: string | null;
+  sensor_identifier: string;
+  name: string;
+  sensor_type: string;
+  transport: 'BLUETOOTH_LE' | 'NATIVE_BRIDGE' | 'SIMULATED';
+  protocol: string | null;
+  bluetooth_device_id: string | null;
+  bluetooth_name: string | null;
+  firmware_version: string | null;
+  calibration: Record<string, unknown> | null;
+  is_active: boolean;
+  is_simulated: boolean;
+  last_seen_at: string | null;
+  last_connection_state: string | null;
+  bound_at: string | null;
+}
+
+export interface CoolerReading {
+  id: string;
+  cooperative_id?: string;
+  cooperative_name?: string;
+  cooler_id: string;
+  cooler_name?: string;
+  cooler_code?: string;
+  sensor_id: string | null;
+  volume_litres: number | null;
+  temperature_celsius: number | null;
+  battery_percent: number | null;
+  signal_strength: number | null;
+  measured_at: string;
+  received_at: string | null;
+  source: 'BLUETOOTH' | 'NATIVE_BRIDGE' | 'MANUAL' | 'SIMULATED';
+  quality: 'VALID' | 'SUSPICIOUS' | 'SIMULATED';
+  quality_flags: string[];
+  sync_status?: SyncStatus;
+}
+
+export interface AlertNotification {
+  id: string;
+  cooperative_id: string;
+  cooperative_name?: string;
+  cooler_id: string | null;
+  recipient_phone: string;
+  type: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  message: string;
+  context: Record<string, unknown> | null;
+  status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+  provider: string | null;
+  attempts: number;
+  error: string | null;
+  created_at: string | null;
+  sent_at: string | null;
+  failed_at: string | null;
+}
+
+export interface Device {
+  id: string;
+  device_identifier: string;
+  cooperative_id: string | null;
+  cooperative_name: string | null;
+  label: string | null;
+  platform: string | null;
+  app_version: string | null;
+  is_active: boolean;
+  last_seen_at: string | null;
+  last_sync_at: string | null;
+  created_at: string | null;
+}
+
+export interface SyncHealth {
+  generated_at: string;
+  totals: { devices: number; active_sessions: number; applied_24h: number; open_conflicts: number; readings_24h: number; failed_notifications: number };
+  cooperatives: {
+    cooperative_id: string;
+    cooperative_name: string;
+    cooperative_code: string;
+    devices: number;
+    active_devices: number;
+    last_sync_at: string | null;
+    applied_24h: number;
+    rejected_24h: number;
+    conflicts_24h: number;
+    open_conflicts: number;
+    readings_24h: number;
+    failed_notifications: number;
+  }[];
 }
 
 export interface CoolerInput {
@@ -251,6 +362,14 @@ export interface CoolerInput {
   scale_device_id?: string | null;
   is_operational?: boolean;
   status?: ActiveStatus;
+  manager_user_id?: string | null;
+  low_volume_alert_litres?: number | null;
+  high_volume_alert_litres?: number | null;
+  min_temperature_c?: number | null;
+  max_temperature_c?: number | null;
+  stale_after_minutes?: number | null;
+  low_battery_percent?: number | null;
+  alerts_enabled?: boolean;
 }
 
 export interface Collection {
@@ -278,6 +397,9 @@ export interface Collection {
   rejection_reason: string | null;
   notes: string | null;
   recorded_by: string | null;
+  sync_version?: number;
+  sync_status?: SyncStatus;
+  sync_error?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

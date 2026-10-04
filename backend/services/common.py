@@ -1,4 +1,6 @@
 """Helpers shared by the services."""
+import datetime
+from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
 
@@ -10,6 +12,21 @@ from core.access import Principal, verify_cooperative_access
 from core.utils import field_error
 from models.centre import CollectionCentre
 from models.cooperative import Cooperative
+
+
+@dataclass(frozen=True)
+class SyncOrigin:
+    """Where an offline-created record came from (services/sync/push.py).
+
+    `entity_id` is the id the device generated, reused as the server id so later offline records that
+    reference it (a collection for a farmer created offline) resolve without a mapping step.
+    """
+    entity_id: Optional[UUID] = None
+    device_id: Optional[UUID] = None
+    client_recorded_at: Optional[datetime.datetime] = None
+
+    def id_kwargs(self) -> dict:
+        return {"id": self.entity_id} if self.entity_id else {}
 
 
 def target_cooperative(db: Session, principal: Principal, requested: Optional[UUID]) -> Cooperative:

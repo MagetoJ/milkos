@@ -1,4 +1,13 @@
+import type { SyncStatus } from '@/app/superadmin/_types/platform-types';
+
 export type CoopRole = 'COOP_ADMIN' | 'MANAGER';
+
+/** Sync metadata on records read from the device's local database (absent on live server responses). */
+export interface SyncFields {
+  sync_status?: SyncStatus;
+  sync_error?: string | null;
+  sync_version?: number;
+}
 
 export interface Overview {
   role: CoopRole;
@@ -18,11 +27,13 @@ export interface Overview {
   team: { admins: number; managers: number; collectors: number };
   milk: { today: number; week: number; month: number; collections_today: number };
   recent_farmers: { id: string; farmer_number: string; full_name: string; phone: string; created_at: string | null }[];
+  /** True when built from this device's local data because the server couldn't be reached. */
+  offline?: boolean;
 }
 
 export type ActiveStatus = 'ACTIVE' | 'INACTIVE';
 
-export interface Centre {
+export interface Centre extends SyncFields {
   id: string;
   name: string;
   code: string;
@@ -48,7 +59,7 @@ export interface CentreInput {
   status?: ActiveStatus;
 }
 
-export interface Farmer {
+export interface Farmer extends SyncFields {
   id: string;
   farmer_number: string;
   first_name: string;

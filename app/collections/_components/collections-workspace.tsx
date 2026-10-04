@@ -1,5 +1,6 @@
 'use client';
 
+import { useReloadOn } from '@/lib/sync/hooks';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Milk, Plus } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
   type Column,
 } from '@/components/admin';
 import { ToastProvider, useToast } from '@/app/superadmin/_components/toast';
+import { SyncPill } from '@/components/offline/status';
 import type { Collection } from '@/app/superadmin/_types/platform-types';
 import { formatDate, formatLitres, formatNumber, formatPercent, isoDay } from '@/lib/format';
 import { useDebounced } from '@/lib/hooks/use-debounced';
@@ -48,6 +50,7 @@ function Workspace() {
   const toast = useToast();
   const list = useListState({ filters: { quality_status: '', date_from: '', date_to: '' } });
   const data = useResource(() => listCollections(list.params), [JSON.stringify(list.params)]);
+  useReloadOn(['collections'], data.reload);
   const [recording, setRecording] = useState(false);
   const role = data.data?.role ?? '';
   const s = data.data?.summary;
@@ -55,7 +58,16 @@ function Workspace() {
 
   const columns: Column<Collection>[] = [
     { key: 'date', header: 'Date', sortKey: 'collection_date', cell: (c) => <PrimaryCell title={formatDate(c.collection_date)} subtitle={c.collection_time ?? undefined} /> },
-    { key: 'ref', header: 'Reference', cell: (c) => <span className="font-mono text-xs">{c.reference}</span> },
+    {
+      key: 'ref',
+      header: 'Reference',
+      cell: (c) =>
+        c.sync_status && c.sync_status !== 'synced' ? (
+          <SyncPill status={c.sync_status} error={c.sync_error} />
+        ) : (
+          <span className="font-mono text-xs">{c.reference}</span>
+        ),
+    },
     { key: 'farmer', header: 'Farmer', hidden: isFarmer, cell: (c) => <PrimaryCell title={c.farmer_name} subtitle={c.farmer_number} /> },
     { key: 'collector', header: 'Collector', hidden: role === 'COLLECTOR', cell: (c) => c.collector_name ?? <Muted>Staff</Muted> },
     { key: 'cooler', header: 'Cooler', cell: (c) => c.cooler_name ?? <Muted /> },
@@ -84,6 +96,7 @@ function Workspace() {
             )}
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Milk collections</h1>
             <p className="mt-1 text-[#5E6B64]">{SUBTITLE[role] ?? 'Milk intake records.'}</p>
+            {data.data?.offline && <p className="mt-1 text-xs text-[#8A968F]">Showing collections saved on this device (recent history kept for offline use).</p>}
           </div>
           {data.data?.can_record && (
             <button onClick={() => setRecording(true)} className={primaryButton}>
@@ -135,7 +148,8 @@ function Workspace() {
           onClose={() => setRecording(false)}
           onSaved={(c) => {
             setRecording(false);
-            toast(`${formatLitres(c.quantity_litres)} from ${c.farmer_name} recorded${c.quality_status === 'REJECTED' ? ' as rejected' : ''}.`);
+            const pending = c.sync_status && c.sync_status !== 'synced';
+            toast(`${formatLitres(c.quantity_litres)} from ${c.farmer_name} recorded${c.quality_status === 'REJECTED' ? ' as rejected' : ''}${pending ? ' · Pending synchronization' : '.'}`);
             void data.reload();
           }}
         />

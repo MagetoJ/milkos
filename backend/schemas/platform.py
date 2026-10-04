@@ -193,7 +193,19 @@ class CollectorUpdate(_Body):
 
 # ---------------- coolers ----------------
 
-class CoolerCreate(_Body):
+class _CoolerAlerts(_Body):
+    """Who is in charge and when to alert (services/cooler_alerts.py). Empty threshold = alert off."""
+    manager_user_id: Optional[UUID] = None
+    low_volume_alert_litres: Optional[float] = Field(None, ge=0, le=1_000_000)
+    high_volume_alert_litres: Optional[float] = Field(None, ge=0, le=1_000_000)
+    min_temperature_c: Optional[float] = Field(None, ge=-30, le=80)
+    max_temperature_c: Optional[float] = Field(None, ge=-30, le=80)
+    stale_after_minutes: Optional[int] = Field(None, ge=5, le=10_080)
+    low_battery_percent: Optional[int] = Field(None, ge=1, le=99)
+    alerts_enabled: Optional[bool] = None
+
+
+class CoolerCreate(_CoolerAlerts):
     name: str = Field(..., min_length=2, max_length=255)
     code: Optional[str] = None  # generated (CLR-001, ...) when left out
     cooperative_id: Optional[UUID] = None
@@ -208,7 +220,7 @@ class CoolerCreate(_Body):
     _location = field_validator("location", "scale_device_id")(_blank_to_none)
 
 
-class CoolerUpdate(_Body):
+class CoolerUpdate(_CoolerAlerts):
     name: Optional[str] = Field(None, min_length=2, max_length=255)
     code: Optional[str] = None
     centre_id: Optional[UUID] = None

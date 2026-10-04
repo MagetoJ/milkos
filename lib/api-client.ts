@@ -3,6 +3,12 @@
 // the bearer token from localStorage is added too. The backend is the authority on every permission:
 // nothing here decides what a user may see or do.
 import { TOKEN_KEY, clearSession, loginUrl } from '@/lib/auth';
+import { refreshWithDeviceSession } from '@/lib/offline/auth';
+import { reportRequest } from '@/lib/offline/connectivity';
+
+export const OFFLINE_MESSAGE = "Can't reach the server. Check your connection and try again.";
+/** For changes the server must make itself (accounts, equipment, payments, settings). */
+export const NEEDS_CONNECTION = 'This change needs a connection to the MilkOS server. Try again when you are back online.';
 
 export class ApiError extends Error {
   constructor(
@@ -51,16 +57,22 @@ export function readError(status: number, body: unknown): ApiError {
 /** A request function bound to one API prefix, e.g. createApi('/api/v1/superadmin'). */
 export function createApi(baseUrl: string) {
   return async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    let res: Response;
-    try {
-      res = await fetch(`${baseUrl}${path}`, {
+    const send = () =>
+      fetch(`${baseUrl}${path}`, {
         credentials: 'same-origin',
         cache: 'no-store',
         ...init,
         headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init.headers },
       });
+    let res: Response;
+    try {
+      res = await send();
+      reportRequest(![502, 503, 504].includes(res.status));
+      // An expired access token is renewed with this device's offline session (if it has one).
+      if (res.status === 401 && (await refreshWithDeviceSession()) === 'ok') res = await send();
     } catch {
-      throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
+      reportRequest(false);
+      throw new ApiError(0, OFFLINE_MESSAGE);
     }
 
     if (res.status === 401) {

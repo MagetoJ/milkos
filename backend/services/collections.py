@@ -18,7 +18,7 @@ from models.user import User
 from schemas.auth import UserRole
 from schemas.platform import CollectionCreate, CollectionUpdate
 from services import audit, settings
-from services.common import target_cooperative
+from services.common import SyncOrigin, target_cooperative
 
 AUDITED = (
     "quantity_litres", "fat_percentage", "snf_percentage", "temperature_c", "quality_status",
@@ -131,6 +131,10 @@ def collection_json(row) -> dict:
         "rejection_reason": collection.rejection_reason,
         "notes": collection.notes,
         "recorded_by": str(collection.recorded_by) if collection.recorded_by else None,
+        "centre_id": str(collection.centre_id) if collection.centre_id else None,
+        "device_id": str(collection.device_id) if collection.device_id else None,
+        "client_recorded_at": iso(collection.client_recorded_at),
+        "sync_version": collection.sync_version,
         "created_at": iso(collection.created_at),
         "updated_at": iso(collection.updated_at),
     }
@@ -164,7 +168,9 @@ def _check_quality(quality_status: str, reason: Optional[str]) -> None:
         raise field_error("rejection_reason", "Say why this milk was rejected.")
 
 
-def create(db: Session, principal: Principal, payload: CollectionCreate) -> MilkCollection:
+def create(
+    db: Session, principal: Principal, payload: CollectionCreate, origin: Optional[SyncOrigin] = None,
+) -> MilkCollection:
     cooperative = target_cooperative(db, principal, payload.cooperative_id)
 
     farmer = db.get(Farmer, payload.farmer_id)
@@ -204,6 +210,9 @@ def create(db: Session, principal: Principal, payload: CollectionCreate) -> Milk
     now = datetime.datetime.utcnow()
     day = payload.collection_date or now.date()
     collection = MilkCollection(
+        **(origin.id_kwargs() if origin else {}),
+        device_id=origin.device_id if origin else None,
+        client_recorded_at=origin.client_recorded_at if origin else None,
         reference=_reference(db, day),
         cooperative_id=cooperative.id,
         farmer_id=farmer.id,

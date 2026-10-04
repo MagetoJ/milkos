@@ -9,6 +9,8 @@ import { formatNumber, formatPhone } from '../_lib/format';
 import { useResource } from '../_lib/use-resource';
 import { useSubmit } from '../_lib/use-submit';
 import type { ActiveStatus, Centre, Farmer, FarmerInput } from '../_types/coop-types';
+import { SyncPill } from '@/components/offline/status';
+import { useReloadOn } from '@/lib/sync/hooks';
 import { useCoop } from './coop-context';
 import {
   ConfirmModal,
@@ -53,6 +55,7 @@ export function FarmersView() {
     () => listFarmers({ search: debouncedSearch, centre, status, page, pageSize: PAGE_SIZE }),
     [debouncedSearch, centre, status, page],
   );
+  useReloadOn(['farmers', 'centres'], () => Promise.all([farmers.reload(), centres.reload()]));
 
   // Links from the overview: ?centre=none shows farmers without a centre, ?new=1 opens the form.
   useEffect(() => {
@@ -164,8 +167,10 @@ export function FarmersView() {
                 {farmers.data.items.map((f) => (
                   <tr key={f.id} className={f.status === 'INACTIVE' ? 'text-[#8A968F]' : ''}>
                     <td className="px-5 py-3.5">
-                      <p className="font-medium text-[#17221D]">{f.full_name}</p>
-                      <p className="text-xs text-[#8A968F]">{f.farmer_number}</p>
+                      <p className="flex flex-wrap items-center gap-2 font-medium text-[#17221D]">
+                        {f.full_name} <SyncPill status={f.sync_status} error={f.sync_error} />
+                      </p>
+                      <p className="text-xs text-[#8A968F]">{f.sync_status && f.sync_status !== 'synced' && f.farmer_number === 'Pending' ? 'Number assigned when synced' : f.farmer_number}</p>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3.5 tabular-nums">{formatPhone(f.phone)}</td>
                     <td className="px-3 py-3.5">{f.village ?? <span className="text-[#B7C0BA]">–</span>}</td>
@@ -248,17 +253,26 @@ function FarmerForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    let saved: Farmer | undefined;
     const ok = await run(async () => {
-      if (farmer) await updateFarmer(farmer.id, payload());
-      else await createFarmer(payload());
+      saved = farmer ? await updateFarmer(farmer.id, payload()) : await createFarmer(payload());
     });
-    if (ok) await onSaved(`${`${firstName} ${lastName}`.trim()} ${farmer ? 'updated' : 'added'}.`);
+    const pending = saved?.sync_status && saved.sync_status !== 'synced';
+    if (ok) {
+      await onSaved(
+        `${`${firstName} ${lastName}`.trim()} ${farmer ? 'updated' : 'added'}${pending ? ' · Pending synchronization' : '.'}`,
+      );
+    }
   }
 
   async function setStatus(status: ActiveStatus) {
     if (!farmer) return;
-    const ok = await run(async () => void (await updateFarmer(farmer.id, { status })));
-    if (ok) await onSaved(`${farmer.full_name} ${status === 'INACTIVE' ? 'deactivated' : 'reactivated'}.`);
+    let saved: Farmer | undefined;
+    const ok = await run(async () => {
+      saved = await updateFarmer(farmer.id, { status });
+    });
+    const pending = saved?.sync_status && saved.sync_status !== 'synced';
+    if (ok) await onSaved(`${farmer.full_name} ${status === 'INACTIVE' ? 'deactivated' : 'reactivated'}${pending ? ' · Pending synchronization' : '.'}`);
     else setConfirming(false);
   }
 

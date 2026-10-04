@@ -45,6 +45,8 @@ class Principal:
     db: Session
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
+    # The registered device a sync request came from (set by routers/sync.py); noted in audit entries.
+    device: Optional[object] = None
     _collector: Optional[Collector] = field(default=None, repr=False)
     _farmer: Optional[Farmer] = field(default=None, repr=False)
 

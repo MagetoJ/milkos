@@ -1,5 +1,6 @@
 'use client';
 
+import { useReloadOn } from '@/lib/sync/hooks';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Pencil, Plus, Snowflake, Truck } from 'lucide-react';
@@ -22,7 +23,7 @@ import { useToast } from '@/app/superadmin/_components/toast';
 import { formatLitres, formatNumber, formatPhone } from '@/lib/format';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
-import { createCooler, listCollectors, listCoolers, updateCollector, updateCooler } from '../_api/coop-client';
+import { createCooler, listCollectors, listCoolers, listTeam, updateCollector, updateCooler } from '../_api/coop-client';
 import { useCoop } from './coop-context';
 
 /** Coolers and which collector delivers where. Collectors themselves are added on the Team page. */
@@ -32,6 +33,7 @@ export function OperationsView() {
   const toast = useToast();
   const coolers = useResource(listCoolers, []);
   const collectors = useResource(listCollectors, []);
+  useReloadOn(['coolers', 'collectors'], () => Promise.all([coolers.reload(), collectors.reload()]));
   const [editingCooler, setEditingCooler] = useState<Cooler | 'new' | null>(null);
   const [assigning, setAssigning] = useState<Collector | null>(null);
 
@@ -186,14 +188,31 @@ function CoolerDialog({ cooler, onClose, onSaved }: { cooler: Cooler | null; onC
     location: cooler?.location ?? '',
     capacity_litres: cooler?.capacity_litres?.toString() ?? '',
     scale_device_id: cooler?.scale_device_id ?? '',
+    manager_user_id: cooler?.manager_user_id ?? '',
+    low_volume_alert_litres: cooler?.low_volume_alert_litres?.toString() ?? '',
+    high_volume_alert_litres: cooler?.high_volume_alert_litres?.toString() ?? '',
+    min_temperature_c: cooler?.min_temperature_c?.toString() ?? '',
+    max_temperature_c: cooler?.max_temperature_c?.toString() ?? '',
+    stale_after_minutes: cooler?.stale_after_minutes?.toString() ?? '',
+    low_battery_percent: cooler?.low_battery_percent?.toString() ?? '',
   });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const team = useResource(listTeam, []);
+  const managers = (team.data ?? []).filter((m) => m.is_active && (m.role === 'MANAGER' || m.role === 'COOP_ADMIN'));
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const num = (v: string) => (v.trim() ? Number(v) : null);
   async function submit() {
     const body = {
       name: f.name,
       location: f.location || null,
       capacity_litres: f.capacity_litres ? Number(f.capacity_litres) : null,
       scale_device_id: f.scale_device_id || null,
+      manager_user_id: f.manager_user_id || null,
+      low_volume_alert_litres: num(f.low_volume_alert_litres),
+      high_volume_alert_litres: num(f.high_volume_alert_litres),
+      min_temperature_c: num(f.min_temperature_c),
+      max_temperature_c: num(f.max_temperature_c),
+      stale_after_minutes: num(f.stale_after_minutes),
+      low_battery_percent: num(f.low_battery_percent),
     };
     if (await run(async () => void (cooler ? await updateCooler(cooler.id, body) : await createCooler(body)))) {
       await onSaved(`${f.name} ${cooler ? 'updated' : 'added'}.`);
@@ -215,6 +234,37 @@ function CoolerDialog({ cooler, onClose, onSaved }: { cooler: Cooler | null; onC
           {(p) => <input {...p} className={inputClass} value={f.scale_device_id} onChange={set('scale_device_id')} />}
         </Field>
       </div>
+      <Field label="Manager in charge" error={fieldErrors.manager_user_id} hint="Receives this cooler's SMS alerts with the cooperative admins.">
+        {(p) => (
+          <select {...p} className={inputClass} value={f.manager_user_id} onChange={set('manager_user_id')}>
+            <option value="">Centre&apos;s manager (or none)</option>
+            {managers.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
+        )}
+      </Field>
+      <fieldset className="space-y-3 rounded-lg border border-[#DDE3DE] px-3 pb-3 pt-2">
+        <legend className="px-1 text-sm font-medium">Alerts (leave empty to switch one off)</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Alert below (litres)" error={fieldErrors.low_volume_alert_litres}>
+            {(p) => <input {...p} inputMode="decimal" className={inputClass} value={f.low_volume_alert_litres} onChange={set('low_volume_alert_litres')} />}
+          </Field>
+          <Field label="Alert above (litres)" error={fieldErrors.high_volume_alert_litres}>
+            {(p) => <input {...p} inputMode="decimal" className={inputClass} value={f.high_volume_alert_litres} onChange={set('high_volume_alert_litres')} />}
+          </Field>
+          <Field label="Min. temperature °C" error={fieldErrors.min_temperature_c}>
+            {(p) => <input {...p} inputMode="decimal" className={inputClass} value={f.min_temperature_c} onChange={set('min_temperature_c')} />}
+          </Field>
+          <Field label="Max. temperature °C" error={fieldErrors.max_temperature_c}>
+            {(p) => <input {...p} inputMode="decimal" className={inputClass} value={f.max_temperature_c} onChange={set('max_temperature_c')} />}
+          </Field>
+          <Field label="No reading for (minutes)" error={fieldErrors.stale_after_minutes}>
+            {(p) => <input {...p} inputMode="numeric" className={inputClass} value={f.stale_after_minutes} onChange={set('stale_after_minutes')} />}
+          </Field>
+          <Field label="Sensor battery below (%)" error={fieldErrors.low_battery_percent}>
+            {(p) => <input {...p} inputMode="numeric" className={inputClass} value={f.low_battery_percent} onChange={set('low_battery_percent')} />}
+          </Field>
+        </div>
+      </fieldset>
     </FormDialog>
   );
 }

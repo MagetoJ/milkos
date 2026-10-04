@@ -19,6 +19,7 @@ from routers.superadmin import (
     payments,
     reports,
     settings,
+    sync,
     users,
 )
 
@@ -26,6 +27,6 @@ router = APIRouter(prefix="/api/v1/superadmin", tags=["Super Admin"], dependenci
 
 for module in (
     dashboard, applications, cooperatives, users, farmers, collectors, coolers, collections, payments,
-    reports, audit, settings,
+    reports, audit, settings, sync,
 ):
     router.include_router(module.router)

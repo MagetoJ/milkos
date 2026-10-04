@@ -1,5 +1,5 @@
-"""Cooperative workspace API: overview, collection centres, farmers, team, collectors, coolers, activity
-and SMS credits.
+"""Cooperative workspace API: overview, collection centres, farmers, team, collectors, coolers, activity,
+SMS credits, and cooler monitoring (readings, sensors, alert notifications) and the cooperative's devices.
 
 Every endpoint works on the logged-in user's own cooperative (users.cooperative_id). The cooperative is
 never taken from the URL; a body naming a different cooperative is refused. One cooperative therefore
@@ -23,13 +23,16 @@ from core.access import Principal, ensure_same_cooperative, load_principal, requ
 from core.pagination import PageParams, page_params, paginate
 from core.permissions import Permission
 from core.security import hash_password
-from core.utils import field_error, iso, next_sequence, num, parse_uuid, reject_nulls
+from core.utils import iso, num, parse_uuid, reject_nulls
 from db import get_db
 from models.admin import AuditLog, Cooler, CoolerStatus, SMSCreditPackage, SMSCreditPayment
 from models.centre import CollectionCentre
 from models.cooperative import Cooperative
 from models.farmer import Farmer
+from models.notifications import Notification
 from models.operations import Collector
+from models.sensors import CoolerReading, SensorDevice
+from models.sync import Device
 from models.user import User
 from routers.auth import conflict_error
 from schemas.auth import UserRole
@@ -42,7 +45,12 @@ from schemas.cooperative_module import (
     TeamUpdate,
 )
 from schemas.platform import CollectorCreate, CollectorUpdate, CoolerCreate, CoolerUpdate, SmsTopUpCreate
-from services import audit, collectors, coolers, cooperatives, farmers, payments
+from schemas.sync import DeviceUpdate, SensorCreate, SensorUpdate
+from services import (
+    audit, centres, collectors, cooler_alerts, cooler_readings, coolers, cooperatives, farmers, notifications, payments,
+    sensors,
+)
+from services.sync import devices
 from services.users import account_conflict
 
 router = APIRouter(prefix="/api/v1/cooperative", tags=["Cooperative"])
@@ -100,19 +108,6 @@ def _staff_with(permission: Permission):
 def _own(db: Session, model, raw_id: str, ctx: Ctx, what: str):
     # Someone else's row looks exactly like a missing one.
     return ensure_same_cooperative(ctx.principal, db.get(model, parse_uuid(raw_id, what)), what)
-
-
-def _check_manager(db: Session, ctx: Ctx, manager_user_id: Optional[UUID]) -> None:
-    if manager_user_id is None:
-        return
-    manager = db.get(User, manager_user_id)
-    if (
-        manager is None
-        or manager.cooperative_id != ctx.cooperative.id
-        or manager.role_value != UserRole.MANAGER.value
-        or not manager.is_active
-    ):
-        raise field_error("manager_user_id", "Choose an active manager from your team.")
 
 
 # ---------------- overview ----------------
@@ -185,134 +180,26 @@ def overview(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
 
 # ---------------- collection centres ----------------
 
-def _centre_json(centre: CollectionCentre, farmer_count: int = 0, manager_name: Optional[str] = None) -> dict:
-    return {
-        "id": str(centre.id),
-        "name": centre.name,
-        "code": centre.code,
-        "county": centre.county,
-        "location_description": centre.location_description,
-        "manager_user_id": str(centre.manager_user_id) if centre.manager_user_id else None,
-        "manager_name": manager_name,
-        "has_cooler": bool(centre.has_cooler),
-        "cooler_capacity_litres": num(centre.cooler_capacity_litres),
-        "status": centre.status,
-        "farmer_count": farmer_count,
-        "created_at": iso(centre.created_at),
-    }
-
-
-def _manager_names(db: Session, ids: set) -> dict:
-    if not ids:
-        return {}
-    return {u.id: u.full_name for u in db.query(User).filter(User.id.in_(ids)).all()}
-
-
-def _centre_code_taken(db: Session, ctx: Ctx, code: str, exclude_id: Optional[UUID] = None) -> bool:
-    query = db.query(CollectionCentre.id).filter(
-        CollectionCentre.cooperative_id == ctx.cooperative.id, CollectionCentre.code == code
-    )
-    if exclude_id:
-        query = query.filter(CollectionCentre.id != exclude_id)
-    return query.first() is not None
-
-
 @router.get("/centres")
 def list_centres(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
-    centres = (
+    rows = (
         db.query(CollectionCentre)
         .filter(CollectionCentre.cooperative_id == ctx.cooperative.id)
         .order_by(CollectionCentre.name)
         .all()
     )
-    farmer_counts = dict(
-        db.query(Farmer.centre_id, func.count(Farmer.id))
-        .filter(Farmer.cooperative_id == ctx.cooperative.id, Farmer.status == "ACTIVE", Farmer.centre_id.isnot(None))
-        .group_by(Farmer.centre_id)
-        .all()
-    )
-    names = _manager_names(db, {c.manager_user_id for c in centres if c.manager_user_id})
-    return [_centre_json(c, farmer_counts.get(c.id, 0), names.get(c.manager_user_id)) for c in centres]
+    return centres.serialize(db, rows)
 
 
 @router.post("/centres", status_code=status.HTTP_201_CREATED)
 def create_centre(payload: CentreCreate, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
-    _check_manager(db, ctx, payload.manager_user_id)
-    explicit_code = payload.code is not None
-
-    for attempt in range(3):
-        code = payload.code or next_sequence(
-            (row[0] for row in db.query(CollectionCentre.code).filter(CollectionCentre.cooperative_id == ctx.cooperative.id)),
-            "CTR", 3,
-        )
-        if _centre_code_taken(db, ctx, code):
-            raise conflict_error("code", "Another centre in your cooperative already uses this code.")
-        centre = CollectionCentre(
-            cooperative_id=ctx.cooperative.id,
-            name=payload.name,
-            code=code,
-            county=payload.county or ctx.cooperative.county,
-            location_description=payload.location_description,
-            manager_user_id=payload.manager_user_id,
-            has_cooler=payload.has_cooler,
-            cooler_capacity_litres=payload.cooler_capacity_litres if payload.has_cooler else None,
-            status="ACTIVE",
-        )
-        db.add(centre)
-        try:
-            db.flush()
-            audit.record(
-                db, ctx.principal, "CENTRE_CREATED", target=f"{centre.name} ({centre.code})",
-                entity_type="centre", entity_id=centre.id, cooperative_id=ctx.cooperative.id,
-            )
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            if explicit_code or attempt == 2:
-                raise conflict_error("code", "Another centre in your cooperative already uses this code.")
-            continue
-        db.refresh(centre)
-        names = _manager_names(db, {centre.manager_user_id} if centre.manager_user_id else set())
-        return _centre_json(centre, 0, names.get(centre.manager_user_id))
+    return centres.serialize(db, [centres.create(db, ctx.principal, payload)])[0]
 
 
 @router.patch("/centres/{centre_id}")
 def update_centre(centre_id: str, payload: CentreUpdate, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
     centre = _own(db, CollectionCentre, centre_id, ctx, "Collection centre")
-    data = payload.model_dump(exclude_unset=True)
-    reject_nulls(data, "name", "code", "county", "has_cooler", "status")
-
-    if "manager_user_id" in data:
-        _check_manager(db, ctx, data["manager_user_id"])
-    if "code" in data and _centre_code_taken(db, ctx, data["code"], exclude_id=centre.id):
-        raise conflict_error("code", "Another centre in your cooperative already uses this code.")
-
-    for field, value in data.items():
-        setattr(centre, field, value)
-    if not centre.has_cooler:
-        centre.cooler_capacity_litres = None
-    if data:
-        audit.record(
-            db, ctx.principal, "CENTRE_UPDATED", target=f"{centre.name} ({centre.code})",
-            entity_type="centre", entity_id=centre.id, cooperative_id=ctx.cooperative.id,
-            new_values={k: (str(v) if isinstance(v, UUID) else v) for k, v in data.items()},
-        )
-
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise conflict_error("code", "Another centre in your cooperative already uses this code.")
-    db.refresh(centre)
-
-    count = (
-        db.query(func.count(Farmer.id))
-        .filter(Farmer.centre_id == centre.id, Farmer.status == "ACTIVE")
-        .scalar()
-        or 0
-    )
-    names = _manager_names(db, {centre.manager_user_id} if centre.manager_user_id else set())
-    return _centre_json(centre, count, names.get(centre.manager_user_id))
+    return centres.serialize(db, [centres.update(db, ctx.principal, centre, payload)])[0]
 
 
 # ---------------- farmers ----------------
@@ -551,8 +438,17 @@ def _cooler_rows(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID] = 
     if cooler_id:
         query = query.filter(Cooler.id == cooler_id)
     rows = query.order_by(Cooler.status, Cooler.code).all()
-    today = coolers.litres_today(db, [c.id for c, _ in rows])
-    return [coolers.cooler_json(c, centre_name=centre, litres_today=today.get(c.id, 0.0)) for c, centre in rows]
+    ids = [c.id for c, _ in rows]
+    today = coolers.litres_today(db, ids)
+    managers = centres.manager_names(db, {c.manager_user_id for c, _ in rows})
+    bound = sensors.for_coolers(db, ids)
+    return [
+        coolers.cooler_json(
+            c, centre_name=centre, litres_today=today.get(c.id, 0.0), manager_name=managers.get(c.manager_user_id),
+            sensors=bound.get(c.id),
+        )
+        for c, centre in rows
+    ]
 
 
 @router.get("/coolers")
@@ -627,3 +523,106 @@ def submit_sms_payment(payload: SmsTopUpCreate, ctx: Ctx = Depends(admin_only), 
     payment = payments.submit(db, ctx.principal, payload)
     package = db.get(SMSCreditPackage, payment.package_id) if payment.package_id else None
     return payments.payment_json(payment, ctx.cooperative, package)
+
+
+# ---------------- cooler monitoring: readings, sensors, alerts ----------------
+
+@router.get("/coolers/{cooler_id}/readings")
+def list_cooler_readings(
+    cooler_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    principal: Principal = Depends(require_permission(Permission.COOLER_READ)),
+    db: Session = Depends(get_db),
+):
+    """Most recent readings first (append-only history; suspicious ones included and flagged)."""
+    if principal.cooperative is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions for this action")
+    cooler = ensure_same_cooperative(principal, db.get(Cooler, parse_uuid(cooler_id, "Cooler")), "Cooler")
+    rows = (
+        db.query(CoolerReading).filter(CoolerReading.cooler_id == cooler.id)
+        .order_by(CoolerReading.measured_at.desc(), CoolerReading.id).limit(limit).all()
+    )
+    return [cooler_readings.reading_json(r) for r in rows]
+
+
+@router.get("/sensors")
+def list_sensors(principal: Principal = Depends(require_permission(Permission.COOLER_READ)), db: Session = Depends(get_db)):
+    if principal.cooperative is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions for this action")
+    rows = (
+        db.query(SensorDevice, Cooler.name)
+        .outerjoin(Cooler, Cooler.id == SensorDevice.cooler_id)
+        .filter(SensorDevice.cooperative_id == principal.cooperative.id)
+        .order_by(SensorDevice.name)
+        .all()
+    )
+    return [sensors.sensor_json(s, cooler_name) for s, cooler_name in rows]
+
+
+@router.post("/sensors", status_code=status.HTTP_201_CREATED)
+def register_sensor(
+    payload: SensorCreate, ctx: Ctx = Depends(_staff_with(Permission.COOLER_UPDATE)), db: Session = Depends(get_db)
+):
+    """Register a sensor (optionally binding it to a cooler). Needs a connection: server-authoritative."""
+    return sensors.sensor_json(sensors.register(db, ctx.principal, payload))
+
+
+@router.patch("/sensors/{sensor_id}")
+def update_sensor(
+    sensor_id: str, payload: SensorUpdate,
+    ctx: Ctx = Depends(_staff_with(Permission.COOLER_UPDATE)), db: Session = Depends(get_db),
+):
+    """Rename, (re)bind to a cooler (`cooler_id`, null unbinds), set protocol/calibration, deactivate."""
+    sensor = _own(db, SensorDevice, sensor_id, ctx, "Sensor")
+    return sensors.sensor_json(sensors.update(db, ctx.principal, sensor, payload))
+
+
+@router.get("/notifications")
+def list_notifications(
+    params: PageParams = Depends(page_params),
+    notification_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|SENT|FAILED|SKIPPED)$"),
+    ctx: Ctx = Depends(staff),
+    db: Session = Depends(get_db),
+):
+    """Cooler alert notifications and their SMS delivery state."""
+    query = db.query(Notification).filter(Notification.cooperative_id == ctx.cooperative.id)
+    if notification_status:
+        query = query.filter(Notification.status == notification_status)
+    query = query.order_by(Notification.created_at.desc(), Notification.id)
+    return paginate(query, params, notifications.notification_json)
+
+
+@router.post("/notifications/{notification_id}/retry")
+def retry_notification(notification_id: str, ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
+    notification = _own(db, Notification, notification_id, ctx, "Notification")
+    return notifications.notification_json(notifications.retry(db, ctx.principal, notification))
+
+
+@router.post("/coolers/alerts/check")
+def check_cooler_alerts(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
+    """Raise stale-reading alerts now and retry due SMS deliveries (also done on every device sync)."""
+    created = cooler_alerts.evaluate_staleness(db, ctx.cooperative.id)
+    db.commit()
+    sent = notifications.dispatch(db, [n.id for n in created], ctx.principal)
+    retried = notifications.dispatch_due(db, ctx.cooperative.id, ctx.principal)
+    return {"created": len(created), "delivered": [notifications.notification_json(n) for n in sent + retried]}
+
+
+# ---------------- devices ----------------
+
+@router.get("/devices")
+def list_devices(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
+    """Devices registered to this cooperative, newest activity first."""
+    rows = (
+        db.query(Device).filter(Device.cooperative_id == ctx.cooperative.id)
+        .order_by(Device.last_seen_at.desc().nullslast(), Device.created_at.desc()).all()
+    )
+    return [devices.device_json(d, ctx.cooperative.name) for d in rows]
+
+
+@router.patch("/devices/{device_id}")
+def update_device(device_id: str, payload: DeviceUpdate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    """Rename a device, or deactivate it (ends its offline sessions; it can't sync until reactivated)."""
+    device = _own(db, Device, device_id, ctx, "Device")
+    active = device.is_active if payload.is_active is None else payload.is_active
+    return devices.device_json(devices.set_active(db, ctx.principal, device, active, payload.label), ctx.cooperative.name)

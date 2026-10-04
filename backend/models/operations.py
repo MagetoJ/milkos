@@ -3,7 +3,7 @@ import datetime
 import uuid
 
 from sqlalchemy import (
-    Column, Date, DateTime, ForeignKey, Index, Numeric, String, Text, Time, Uuid, text,
+    Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Time, Uuid, text,
 )
 from sqlalchemy.orm import relationship
 
@@ -28,6 +28,7 @@ class Collector(Base):
     centre_id = Column(Uuid, ForeignKey("collection_centres.id", ondelete="SET NULL"), nullable=True)
     cooler_id = Column(Uuid, ForeignKey("coolers.id", ondelete="SET NULL"), nullable=True)
     status = Column(String(20), nullable=False, default="ACTIVE", server_default=text("'ACTIVE'"))
+    sync_version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
@@ -72,6 +73,11 @@ class MilkCollection(Base):
     rejection_reason = Column(Text)
     notes = Column(Text)
     recorded_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Offline capture: the device that recorded it and the device's own clock at that moment (metadata
+    # only; created_at/updated_at are always server time).
+    device_id = Column(Uuid, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    client_recorded_at = Column(DateTime, nullable=True)
+    sync_version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

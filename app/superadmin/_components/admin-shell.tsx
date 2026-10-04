@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   Milk,
+  RefreshCw,
   ScrollText,
   Settings,
   Snowflake,
@@ -21,8 +22,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { authHeaders } from '@/lib/api-client';
-import { clearSession } from '@/lib/auth';
+import { signOutEverywhere } from '@/lib/offline/auth';
 import { useSuperadminData } from './superadmin-data';
 import { GlobalSearch } from './global-search';
 
@@ -35,9 +35,8 @@ interface NavItem {
 
 async function signOut() {
   try {
-    await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
+    await signOutEverywhere(); // also ends this device's offline session and removes cached data
   } finally {
-    clearSession();
     window.location.assign('/login');
   }
 }
@@ -62,6 +61,7 @@ export function AdminShell({ email, children }: { email?: string; children: Reac
         { href: '/superadmin/collectors', label: 'Collectors', icon: Truck },
         { href: '/superadmin/coolers', label: 'Coolers', icon: Snowflake },
         { href: '/superadmin/collections', label: 'Milk collections', icon: Milk },
+        { href: '/superadmin/sync', label: 'Sync & devices', icon: RefreshCw },
       ],
     },
     {

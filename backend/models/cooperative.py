@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Numeric, DateTime, Text, Uuid, text
+from sqlalchemy import Boolean, Column, String, Integer, Numeric, DateTime, Text, Uuid, text, true
 from sqlalchemy.orm import relationship
 import uuid
 import datetime
@@ -30,6 +30,8 @@ class Cooperative(Base):
     suspended_at = Column(DateTime)
     sms_credit_balance = Column(Integer, nullable=False, default=0, server_default=text("0"))
     estimated_daily_liters = Column(Numeric(12, 2))
+    # Cooler alert SMS to the cooperative's admins and the responsible manager (see services/cooler_alerts).
+    alert_sms_enabled = Column(Boolean, nullable=False, default=True, server_default=true())
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

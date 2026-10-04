@@ -1,5 +1,6 @@
 'use client';
 
+import { useReloadOn } from '@/lib/sync/hooks';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Pencil, Plus, Snowflake } from 'lucide-react';
@@ -32,6 +33,7 @@ export function CentresView() {
   const params = useSearchParams();
   const centres = useResource(listCentres, []);
   const team = useResource(listTeam, []);
+  useReloadOn(['centres', 'team', 'farmers'], () => Promise.all([centres.reload(), team.reload()]));
   const [editing, setEditing] = useState<Centre | 'new' | null>(null);
   const [showInactive, setShowInactive] = useState(true);
 

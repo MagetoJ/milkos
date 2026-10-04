@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { loginUser } from '../_api/auth-client';
 import { getSession, homeFor, postLoginRedirect } from '@/lib/auth';
+import { provisionDevice } from '@/lib/offline/auth';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -35,6 +36,9 @@ export function LoginForm() {
         setError(result.message || 'Sign in failed.');
         return;
       }
+
+      // Set this device up for offline use (best effort; the workspace retries if it fails).
+      await provisionDevice(result.token);
 
       const next = new URLSearchParams(window.location.search).get('next');
       window.location.assign(postLoginRedirect(result.role, next));

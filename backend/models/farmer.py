@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Uuid, text
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -32,6 +32,8 @@ class Farmer(Base):
     payment_account = Column(String(100), nullable=True)
     bank_name = Column(String(100), nullable=True)
     status = Column(String(30), nullable=False, default="ACTIVE")
+    # Bumped on every change; offline clients send the version they edited (see services/sync).
+    sync_version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

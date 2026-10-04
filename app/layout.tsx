@@ -1,11 +1,14 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { ServiceWorkerRegistrar } from '@/components/offline/service-worker'
 
 export const metadata: Metadata = {
   title: 'MilkOS — Collection OS',
   description: 'The operating system for modern milk collection networks.',
   generator: 'v0.app',
+  applicationName: 'MilkOS',
+  appleWebApp: { capable: true, title: 'MilkOS', statusBarStyle: 'default' },
   icons: {
     icon: [
       {
@@ -42,6 +45,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         {children}
+        <ServiceWorkerRegistrar />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

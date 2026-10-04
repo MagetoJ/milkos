@@ -17,7 +17,7 @@ from models.farmer import Farmer
 from models.operations import MilkCollection, QualityStatus
 from schemas.cooperative_module import FarmerCreate, FarmerUpdate
 from services import audit
-from services.common import check_centre, target_cooperative
+from services.common import SyncOrigin, check_centre, target_cooperative
 
 AUDITED = (
     "farmer_number", "first_name", "last_name", "phone", "national_id", "village", "centre_id",
@@ -46,6 +46,7 @@ def farmer_json(farmer: Farmer, centre_name: Optional[str] = None, cooperative: 
         "has_account": farmer.user_id is not None,
         "created_at": iso(farmer.created_at),
         "updated_at": iso(farmer.updated_at),
+        "sync_version": farmer.sync_version,
     }
     if cooperative is not None:
         data["cooperative_name"] = cooperative.name
@@ -104,7 +105,9 @@ def search_filter(query, search: Optional[str]):
     return query
 
 
-def create(db: Session, principal: Principal, payload: FarmerCreate) -> tuple[Farmer, Optional[CollectionCentre]]:
+def create(
+    db: Session, principal: Principal, payload: FarmerCreate, origin: Optional[SyncOrigin] = None,
+) -> tuple[Farmer, Optional[CollectionCentre]]:
     cooperative = target_cooperative(db, principal, payload.cooperative_id)
     centre = check_centre(db, cooperative.id, payload.centre_id)
     explicit_number = payload.farmer_number is not None
@@ -122,6 +125,7 @@ def create(db: Session, principal: Principal, payload: FarmerCreate) -> tuple[Fa
             raise conflict(*found)
 
         farmer = Farmer(
+            **(origin.id_kwargs() if origin else {}),
             cooperative_id=cooperative.id,
             centre_id=payload.centre_id,
             farmer_number=number,

@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    JSON, Column, String, Numeric, Boolean, DateTime, ForeignKey, Index, Integer, Text, Uuid, text,
+    JSON, Column, String, Numeric, Boolean, DateTime, ForeignKey, Index, Integer, Text, Uuid, text, true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -76,6 +76,20 @@ class Cooler(Base):
     is_operational = Column(Boolean, default=True)
     last_temperature_c = Column(Numeric(5, 2))
     last_reading_at = Column(DateTime)
+    # The staff member in charge of this cooler (falls back to the centre's manager for alerts).
+    manager_user_id = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Latest accepted level reading (cooler_readings keeps the full history).
+    current_volume_litres = Column(Numeric(10, 2))
+    last_seen_at = Column(DateTime)  # last time any sensor or device reported for this cooler
+    # Alert thresholds; NULL = that alert is off.
+    low_volume_alert_litres = Column(Numeric(10, 2))
+    high_volume_alert_litres = Column(Numeric(10, 2))
+    min_temperature_c = Column(Numeric(5, 2))
+    max_temperature_c = Column(Numeric(5, 2))
+    stale_after_minutes = Column(Integer)
+    low_battery_percent = Column(Integer)
+    alerts_enabled = Column(Boolean, nullable=False, default=True, server_default=true())
+    sync_version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

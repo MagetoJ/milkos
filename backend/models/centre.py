@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Numeric, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Uuid, text
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -23,6 +23,8 @@ class CollectionCentre(Base):
     has_cooler = Column(Boolean, nullable=False, default=False)
     cooler_capacity_litres = Column(Numeric(10, 2), nullable=True)
     status = Column(String(30), nullable=False, default="ACTIVE")
+    # Bumped on every change; offline clients send the version they edited (see services/sync).
+    sync_version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

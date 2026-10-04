@@ -3,6 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
+import { ConnectionStatus, LocalDataNote, SyncPill, SyncStatus } from '@/components/offline/status';
+import { formatDateTime, formatLitres } from '@/lib/format';
+import { hasUserDb } from '@/lib/offline/db';
+import { latestReadings, recentCollections, recentNotifications } from '@/lib/offline/repositories';
+import { useLocalQuery } from '@/lib/sync/hooks';
+import type { AlertNotification, Collection, CoolerReading } from '@/app/superadmin/_types/platform-types';
 import { formatDate, formatNumber, formatPhone, greeting } from '../_lib/format';
 import { useCoop } from './coop-context';
 import { primaryButton, secondaryButton } from './ui';
@@ -24,8 +30,16 @@ interface Attention {
 }
 
 export function Overview() {
-  const { overview, canManageTeam, refresh } = useCoop();
-  const { cooperative, farmers, centres, team, coolers, recent_farmers } = overview;
+  const { overview, canManageTeam, refresh, offlineCapable } = useCoop();
+  const { cooperative, farmers, centres, team, coolers, recent_farmers, milk } = overview;
+  const local = offlineCapable && hasUserDb();
+  const collections = useLocalQuery(() => (local ? recentCollections<Collection>(5) : Promise.resolve([])), ['collections'], [local]);
+  const readings = useLocalQuery(() => (local ? latestReadings<CoolerReading>(5) : Promise.resolve([])), ['readings'], [local]);
+  const alerts = useLocalQuery(
+    async () => (local ? (await recentNotifications<AlertNotification>(20)).filter((n) => Date.now() - Date.parse(n.created_at ?? '') < 86_400_000) : []),
+    ['notifications'],
+    [local],
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   const credits = cooperative.sms_credit_balance;
@@ -62,6 +76,7 @@ export function Overview() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{greeting()}.</h1>
+          <LocalDataNote show={overview.offline} />
           <p className="mt-1 text-[#5E6B64]">
             {cooperative.name}
             <span className="text-[#8A968F]">
@@ -112,6 +127,28 @@ export function Overview() {
           tone={credits < 100 ? 'warn' : undefined}
         />
       </dl>
+
+      <dl className="grid grid-cols-2 divide-[#EEF1EC] rounded-xl border border-[#DDE3DE] bg-white md:grid-cols-4 md:divide-x [&>*:nth-child(-n+2)]:border-b [&>*:nth-child(-n+2)]:border-[#EEF1EC] md:[&>*:nth-child(-n+2)]:border-b-0">
+        <Metric label="Milk today" value={formatLitres(milk.today)} note={`${formatNumber(milk.collections_today)} collections`} />
+        <Metric label="Milk this month" value={formatLitres(milk.month)} note={overview.offline ? 'From this device’s recent history' : undefined} />
+        <Metric label="Coolers" value={formatNumber(coolers.total)} note={`${formatNumber(coolers.operational)} operational`} />
+        <Metric
+          label="Cooler alerts (24 h)"
+          value={local ? formatNumber(alerts.data?.length ?? 0) : '–'}
+          note={local && (alerts.data?.length ?? 0) > 0 ? 'See Cooler monitoring' : undefined}
+          tone={(alerts.data?.length ?? 0) > 0 ? 'warn' : undefined}
+        />
+      </dl>
+
+      <section aria-label="Connection and synchronization" className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-[#DDE3DE] bg-white px-5 py-4">
+        <ConnectionStatus />
+        {offlineCapable ? <SyncStatus /> : <p className="text-xs text-[#8A968F]">This device isn&apos;t set up for offline use.</p>}
+        {offlineCapable && (
+          <Link href="/cooperatives/sync" className="text-sm font-medium text-[#176044] hover:underline">
+            Sync center
+          </Link>
+        )}
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-labelledby="attention-title" className="self-start rounded-xl border border-[#DDE3DE] bg-white">
@@ -165,6 +202,56 @@ export function Overview() {
           )}
         </section>
       </div>
+
+      {local && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section aria-labelledby="recent-collections" className="self-start rounded-xl border border-[#DDE3DE] bg-white">
+            <div className="flex items-baseline justify-between px-5 pb-2 pt-5">
+              <h2 id="recent-collections" className="text-base font-semibold">Recent collections</h2>
+              <Link href="/collections" className="text-sm font-medium text-[#176044] hover:underline">View all</Link>
+            </div>
+            {(collections.data ?? []).length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-[#5E6B64]">No collections recorded recently.</p>
+            ) : (
+              <ul className="divide-y divide-[#EEF1EC]">
+                {(collections.data ?? []).map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{c.farmer_name}</span>
+                      <span className="text-xs text-[#8A968F]">{formatDate(c.collection_date)} {c.collection_time ?? ''}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <SyncPill status={c.sync_status} />
+                      <span className="tabular-nums">{formatLitres(c.quantity_litres)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section aria-labelledby="recent-readings" className="self-start rounded-xl border border-[#DDE3DE] bg-white">
+            <div className="flex items-baseline justify-between px-5 pb-2 pt-5">
+              <h2 id="recent-readings" className="text-base font-semibold">Recent cooler readings</h2>
+              <Link href="/cooperatives/coolers" className="text-sm font-medium text-[#176044] hover:underline">Monitor coolers</Link>
+            </div>
+            {(readings.data ?? []).length === 0 ? (
+              <p className="px-5 pb-5 text-sm text-[#5E6B64]">No cooler readings on this device yet.</p>
+            ) : (
+              <ul className="divide-y divide-[#EEF1EC]">
+                {(readings.data ?? []).map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <span className="text-xs text-[#8A968F]">{formatDateTime(r.measured_at)}{r.source === 'SIMULATED' ? ' · simulated' : ''}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <SyncPill status={r.sync_status} />
+                      <span className="tabular-nums">{r.volume_litres == null ? '–' : formatLitres(r.volume_litres)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

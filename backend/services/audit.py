@@ -34,6 +34,10 @@ def record(
     """`actor` is a core.access.Principal (or anything with .user, .ip_address, .user_agent)."""
     user = actor.user
     summary = f"{target} (reason: {reason})" if reason else target
+    device = getattr(actor, "device", None)
+    if device is not None:
+        # Changes that arrived through offline sync say which device captured them.
+        new_values = {**(new_values or {}), "synced_from_device": device.device_identifier}
     entry = AuditLog(
         admin_id=user.id,
         actor_email=user.email,

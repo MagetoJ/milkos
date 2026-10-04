@@ -5,6 +5,7 @@ import type {
   PaymentVerificationItem,
 } from '../_types/superadmin-types';
 import type {
+  AlertNotification,
   AuditEntry,
   Collection,
   CollectionSummary,
@@ -13,10 +14,12 @@ import type {
   CollectorInput,
   Cooler,
   CoolerInput,
+  CoolerReading,
   Cooperative,
   CooperativeDetail,
   CooperativeInput,
   Dashboard,
+  Device,
   Farmer,
   FarmerDetail,
   FarmerInput,
@@ -28,6 +31,8 @@ import type {
   PlatformUserDetail,
   RolesMatrix,
   SearchResult,
+  SensorDevice,
+  SyncHealth,
   Setting,
   SmsPackage,
   UserInput,
@@ -127,3 +132,12 @@ export const listSmsPackages = () => request<SmsPackage[]>('/sms-packages');
 export const createSmsPackage = (data: Omit<SmsPackage, 'id'>) => request<SmsPackage>('/sms-packages', send('POST', data));
 export const updateSmsPackage = (id: string, data: Partial<Omit<SmsPackage, 'id'>>) =>
   request<SmsPackage>(`/sms-packages/${id}`, send('PUT', data));
+
+// ---- offline sync: health, devices, sensors, cooler readings, notifications ----
+export const getSyncHealth = () => request<SyncHealth>('/sync/health');
+export const listDevices = (params: Params) => request<Page<Device>>(`/sync/devices${toQuery(params)}`);
+export const updateDevice = (id: string, data: { is_active?: boolean; label?: string }, release = false) =>
+  request<Device>(`/sync/devices/${id}${release ? '?release=true' : ''}`, send('PATCH', data));
+export const listSensorDevices = (params: Params) => request<Page<SensorDevice>>(`/sensors${toQuery(params)}`);
+export const listCoolerReadings = (params: Params) => request<Page<CoolerReading>>(`/cooler-readings${toQuery(params)}`);
+export const listNotifications = (params: Params) => request<Page<AlertNotification>>(`/notifications${toQuery(params)}`);

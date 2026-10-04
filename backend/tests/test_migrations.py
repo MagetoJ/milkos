@@ -99,3 +99,38 @@ def test_0005_keeps_and_backfills_existing_rows(tmp_path):
     for step in (["downgrade", "-1"], ["upgrade", "head"]):
         res = run(["-m", "alembic", *step], url)
         assert res.returncode == 0, res.stderr
+
+
+SEED_0005 = """
+    import sqlite3, sys, uuid
+    c = sqlite3.connect(sys.argv[1])
+    coop = uuid.uuid4().hex
+    c.execute("INSERT INTO cooperatives (id, name, code, registration_number, kra_pin, county, status, sms_credit_balance)"
+              " VALUES (?, 'C', 'C-1', 'CS/1', 'P000000001A', 'Kiambu', 'ACTIVE', 0)", (coop,))
+    c.execute("INSERT INTO farmers (id, cooperative_id, farmer_number, first_name, last_name, phone, status)"
+              " VALUES (?, ?, 'F-0001', 'Jane', 'W', '+254712345678', 'ACTIVE')", (uuid.uuid4().hex, coop))
+    c.commit()
+"""
+
+CHECK_0006 = """
+    import sqlite3, sys
+    c = sqlite3.connect(sys.argv[1])
+    print(sorted(r[0] for r in c.execute("SELECT entity_type FROM sync_changes")))
+    print(c.execute("SELECT sync_version FROM farmers").fetchall())
+"""
+
+
+def test_0006_backfills_the_change_log(tmp_path):
+    """Records that existed before offline sync must reach a device's first pull."""
+    path = (tmp_path / "data.db").as_posix()
+    url = f"sqlite:///{path}"
+    assert run(["-m", "alembic", "upgrade", "0005_platform_admin"], url).returncode == 0
+    seed = run(["-c", textwrap.dedent(SEED_0005), path], url)
+    assert seed.returncode == 0, seed.stderr
+    upgrade = run(["-m", "alembic", "upgrade", "head"], url)
+    assert upgrade.returncode == 0, upgrade.stderr
+    check = run(["-c", textwrap.dedent(CHECK_0006), path], url)
+    assert check.stdout.split("\n")[:2] == ["['cooperative', 'farmer']", "[(1,)]"], check.stdout + check.stderr
+    for step in (["downgrade", "-1"], ["upgrade", "head"]):
+        res = run(["-m", "alembic", *step], url)
+        assert res.returncode == 0, res.stderr
