@@ -18,8 +18,12 @@ Conflict rules
               changed that the server ALSO changed is a conflict if it's administrative (status, number,
               centre, national ID, payout details); for other fields the device's edit wins.
   centre      server-authoritative: any field changed on both sides is a conflict.
-  collection  append-only. A correction (update) only applies to the exact version it was made from;
-              otherwise conflict. Corrections are recorded in the audit log with old and new values.
+  collection_batch  create only: a confirmed collection (captured weight + allocation lines). Resending it is a
+              duplicate, never a second batch; its lines reuse the device's line ids.
+  collection  create (one farmer, litres; the original form) -> a one-line batch. Confirmed collections are
+              immutable: an update is accepted only to complete a PENDING lab test, on the exact version it
+              was made from; anything else is rejected ("immutable") - corrections go through a reviewed
+              correction request online.
   cooler_reading, sensor_event   append-only events; duplicates collapse onto the original.
   Team members, coolers, payments and settings are server-authoritative and never accepted from sync.
 
@@ -42,14 +46,15 @@ from core.access import Principal
 from core.permissions import Permission
 from models.centre import CollectionCentre
 from models.farmer import Farmer
-from models.operations import MilkCollection
+from models.operations import CollectionBatch, MilkCollection
 from models.sensors import CoolerReading
 from models.sync import Device, MutationStatus, SyncMutation
 from schemas.auth import UserRole
 from schemas.cooperative_module import CentreCreate, CentreUpdate, FarmerCreate, FarmerUpdate
+from schemas.collections import BatchCreate
 from schemas.platform import CollectionCreate, CollectionUpdate
 from schemas.sync import CoolerReadingIn, Mutation, SensorEventIn
-from services import audit, centres, collections, cooler_readings, farmers, notifications, sensors
+from services import audit, batches, centres, collections, cooler_readings, farmers, notifications, sensors
 from services.common import SyncOrigin
 from services.sync import serializers
 
@@ -251,14 +256,53 @@ def collection_update(ctx: Ctx) -> Applied:
     _no_foreign_cooperative(ctx)
     row = _own_row(ctx, MilkCollection, "Collection")
     payload = _parse(CollectionUpdate, ctx.payload)
+    lab = collections.lab_result_from_update(payload.model_dump(exclude_unset=True))
+    if lab is None:
+        raise _rejected("immutable", collections.IMMUTABLE)
     if ctx.mutation.base_version is None or row.sync_version != ctx.mutation.base_version:
         raise Refused(
             "conflict", "conflict",
-            "This collection was corrected on the server since you edited it. Review it before correcting again.",
+            "This collection changed on the server since you edited it. Review it before changing it again.",
             {name: "Changed on the server." for name in payload.model_dump(exclude_unset=True)},
         )
-    collections.update(ctx.db, ctx.principal, row, payload)
+    collections.record_lab_result(ctx.db, ctx.principal, row, lab)
     return Applied("collection", str(row.id))
+
+
+def _map_allocation_refs(ctx: Ctx) -> None:
+    """Allocation lines may name farmers created offline whose server id differs (rare)."""
+    allocations = ctx.payload.get("allocations") or []
+    values = [str(a.get("farmer_id")) for a in allocations if isinstance(a, dict) and a.get("farmer_id")]
+    if not values:
+        return
+    mapping = dict(
+        ctx.db.query(SyncMutation.local_id, SyncMutation.server_id).filter(
+            SyncMutation.device_id == ctx.device.id, SyncMutation.local_id.in_(values),
+            SyncMutation.status == MutationStatus.APPLIED, SyncMutation.server_id != SyncMutation.local_id,
+        ).all()
+    )
+    for a in allocations:
+        if isinstance(a, dict) and str(a.get("farmer_id")) in mapping:
+            a["farmer_id"] = mapping[str(a["farmer_id"])]
+
+
+def batch_create(ctx: Ctx) -> Applied:
+    _require_role(ctx, FIELD_STAFF, Permission.COLLECTION_CREATE)
+    _no_foreign_cooperative(ctx)
+    _map_allocation_refs(ctx)
+    ctx.payload.pop("id", None)  # the batch id is the mutation's local_id
+    payload = _parse(BatchCreate, ctx.payload)
+    server_id, existing = _server_id_for_create(ctx, CollectionBatch)
+    if existing is not None:
+        return Applied("collection_batch", str(existing.id), duplicate=True)
+    ctx.record.server_id = str(server_id)
+    origin = SyncOrigin(
+        entity_id=server_id, device_id=ctx.device.id,
+        client_recorded_at=ctx.mutation.client_timestamp.replace(tzinfo=None) if ctx.mutation.client_timestamp else None,
+    )
+    batch, receipts = batches.create(ctx.db, ctx.principal, payload, origin)
+    ctx.notifications += [n.id for n in receipts]
+    return Applied("collection_batch", str(batch.id))
 
 
 def reading_create(ctx: Ctx) -> Applied:
@@ -296,6 +340,7 @@ HANDLERS: dict[tuple[str, str], Callable[[Ctx], Applied]] = {
     ("centre", "update"): centre_update,
     ("collection", "create"): collection_create,
     ("collection", "update"): collection_update,
+    ("collection_batch", "create"): batch_create,
     ("cooler_reading", "create"): reading_create,
     ("sensor_event", "create"): sensor_event_create,
 }
@@ -415,6 +460,15 @@ def _record_failure(db: Session, principal: Principal, device: Device, m: Mutati
     record.error_code = refusal.code
     record.error_message = refusal.message[:2000]
     record.received_at = datetime.datetime.utcnow()
+    from services import inbox
+
+    inbox.notify(
+        db, cooperative_id=principal.cooperative_id, recipient_user_id=principal.user.id, category="SYNC",
+        type="SYNC_CONFLICT" if refusal.status == "conflict" else "SYNC_REJECTED",
+        severity="WARNING", title=f"An offline {m.entity_type.replace('_', ' ')} change needs your attention",
+        body=refusal.message[:500], entity_type="sync_mutation", entity_id=m.mutation_id,
+        link="/cooperatives/sync" if principal.role in STAFF else "/collector/sync",
+    )
     if refusal.status == "conflict":
         audit.record(
             db, principal, "SYNC_CONFLICT", target=f"{m.entity_type} {m.operation}: {refusal.message}",

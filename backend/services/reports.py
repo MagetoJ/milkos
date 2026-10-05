@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import case, distinct, func
+from sqlalchemy import and_, case, distinct, func
 from sqlalchemy.orm import Session
 
 from core.utils import iso, num
@@ -30,12 +30,14 @@ def collections_report(
     db: Session, *, cooperative_id: Optional[UUID], date_from: Optional[datetime.date], date_to: Optional[datetime.date],
 ) -> dict:
     start, end = resolve_range(date_from, date_to)
-    accepted = MilkCollection.quality_status == QualityStatus.ACCEPTED
-    rejected = MilkCollection.quality_status == QualityStatus.REJECTED
+    # Superseded (corrected) and reversed lines never count.
+    effective = MilkCollection.record_status == "ACTIVE"
+    accepted = and_(effective, MilkCollection.quality_status == QualityStatus.ACCEPTED)
+    rejected = and_(effective, MilkCollection.quality_status == QualityStatus.REJECTED)
     litres = MilkCollection.quantity_litres
 
     def scoped(query):
-        query = query.filter(MilkCollection.collection_date >= start, MilkCollection.collection_date <= end)
+        query = query.filter(MilkCollection.collection_date >= start, MilkCollection.collection_date <= end, effective)
         if cooperative_id is not None:
             query = query.filter(MilkCollection.cooperative_id == cooperative_id)
         return query

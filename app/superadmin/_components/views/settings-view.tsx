@@ -114,7 +114,15 @@ function SettingsForm({ settings, reload }: { settings: Setting[]; reload: () =>
                 </label>
               ) : (
                 <Field key={s.key} label={s.label} hint={s.help + (s.updated_at ? ` Last changed ${formatDateTime(s.updated_at)}.` : '')} error={fieldErrors[s.key]}>
-                  {(p) => (
+                  {(p) => s.type === 'text' ? (
+                    <textarea
+                      {...p}
+                      rows={5}
+                      className={`${inputClass} font-mono`}
+                      value={String(values[s.key] ?? '')}
+                      onChange={(e) => setValues({ ...values, [s.key]: e.target.value })}
+                    />
+                  ) : (
                     <input
                       {...p}
                       className={inputClass}

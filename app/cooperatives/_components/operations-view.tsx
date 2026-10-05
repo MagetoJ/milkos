@@ -133,6 +133,7 @@ export function OperationsView() {
             error={coolers.error}
             onRetry={coolers.reload}
             minWidth="720px"
+            mobileCards
             empty={<EmptyState icon={<Snowflake className="size-8" />} title="No coolers yet" body={isAdmin ? 'Add the coolers your collectors deliver to.' : 'Your cooperative admin adds coolers.'} />}
           />
         </section>
@@ -149,6 +150,7 @@ export function OperationsView() {
             error={collectors.error}
             onRetry={collectors.reload}
             minWidth="720px"
+            mobileCards
             empty={<EmptyState icon={<Truck className="size-8" />} title="No collectors yet" body="Add a team member with the Collector role." />}
           />
         </section>

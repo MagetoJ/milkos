@@ -131,12 +131,29 @@ def _message(cooler: Cooler, centre, manager, volume: Optional[float], headline:
     return "\n".join(lines)
 
 
+def _in_app(db: Session, cooler: Cooler, alert: Alert, skip_reason: Optional[str]) -> None:
+    """In-app alert for the cooperative's staff (independent of SMS settings; not for simulated readings)."""
+    if skip_reason is not None:
+        return
+    from services import inbox
+
+    inbox.notify(
+        db, cooperative_id=cooler.cooperative_id, roles=("COOP_ADMIN", "MANAGER", "COLLECTOR"), category="COOLER",
+        type=alert.type, severity=alert.severity, title=f"{cooler.name}: {alert.type.replace('_', ' ').title()}",
+        body=alert.headline, entity_type="cooler", entity_id=cooler.id, link="/cooperatives/coolers",
+        dedupe_minutes=int(_cooldown().total_seconds() // 60),
+    )
+
+
 def _create(
     db: Session, cooler: Cooler, alert: Alert, *, reading: Optional[CoolerReading], at: datetime.datetime,
     skip_reason: Optional[str] = None,
 ) -> list[Notification]:
     cooperative = db.get(Cooperative, cooler.cooperative_id)
-    if not cooler.alerts_enabled or not cooperative.alert_sms_enabled:
+    if not cooler.alerts_enabled:
+        return []
+    _in_app(db, cooler, alert, skip_reason)
+    if not cooperative.alert_sms_enabled:
         return []
     now = datetime.datetime.utcnow()
     if skip_reason is None and _recently_alerted(db, cooler, alert.type, now):

@@ -51,7 +51,7 @@ def summary(db: Session) -> dict:
     start = today - datetime.timedelta(days=13)
     daily = dict(
         db.query(MilkCollection.collection_date, func.coalesce(func.sum(MilkCollection.quantity_litres), 0))
-        .filter(MilkCollection.collection_date >= start, MilkCollection.quality_status == QualityStatus.ACCEPTED)
+        .filter(MilkCollection.collection_date >= start, MilkCollection.quality_status == QualityStatus.ACCEPTED, MilkCollection.record_status == "ACTIVE")
         .group_by(MilkCollection.collection_date)
         .all()
     )
@@ -64,7 +64,7 @@ def summary(db: Session) -> dict:
     top = (
         db.query(Cooperative.id, Cooperative.name, Cooperative.code, func.sum(MilkCollection.quantity_litres).label("litres"))
         .join(MilkCollection, MilkCollection.cooperative_id == Cooperative.id)
-        .filter(MilkCollection.collection_date >= month_start, MilkCollection.quality_status == QualityStatus.ACCEPTED)
+        .filter(MilkCollection.collection_date >= month_start, MilkCollection.quality_status == QualityStatus.ACCEPTED, MilkCollection.record_status == "ACTIVE")
         .group_by(Cooperative.id, Cooperative.name, Cooperative.code)
         .order_by(func.sum(MilkCollection.quantity_litres).desc())
         .limit(5)

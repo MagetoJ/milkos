@@ -4,7 +4,7 @@
 export type RecordSyncStatus = 'synced' | 'pending' | 'syncing' | 'failed' | 'conflict';
 
 /** Entities the server accepts from devices (see backend/schemas/sync.py). */
-export type MutationEntity = 'farmer' | 'centre' | 'collection' | 'cooler_reading' | 'sensor_event';
+export type MutationEntity = 'farmer' | 'centre' | 'collection' | 'collection_batch' | 'cooler_reading' | 'sensor_event';
 export type MutationOperation = 'create' | 'update';
 
 /** Entities the server sends to devices. */
@@ -16,6 +16,7 @@ export type PulledEntity =
   | 'collector'
   | 'team_member'
   | 'collection'
+  | 'collection_batch'
   | 'cooler_reading'
   | 'sensor'
   | 'notification';
@@ -81,6 +82,7 @@ export type LocalTable =
   | 'collectors'
   | 'team'
   | 'collections'
+  | 'batches'
   | 'readings'
   | 'sensors'
   | 'notifications';

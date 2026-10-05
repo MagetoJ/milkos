@@ -28,6 +28,18 @@ REGISTRY: dict[str, dict[str, Any]] = {
         "label": "Reject milk with butterfat below (%)",
         "help": "Collections recorded below this fat percentage are marked rejected automatically. Empty = no limit.",
     },
+    "collection.density_kg_per_litre": {
+        "type": "number", "default": 1.03, "min": 0.9, "max": 1.2, "group": "Milk quality",
+        "label": "Milk density (KG per litre)",
+        "help": "Converts between KG (what scales weigh) and litres (what coolers hold). Each collection keeps the factor it was recorded with.",
+    },
+    "sms.receipt_template": {
+        "type": "text",
+        "default": "MilkOS:\nCollection received: {kg} KG\nCentre: {centre}\nDate: {date}\nCollection Ref: {reference}",
+        "max_length": 300, "group": "SMS credits",
+        "label": "Collection receipt SMS",
+        "help": "Placeholders: {kg}, {farmer}, {centre}, {cooler}, {date}, {reference}, {cooperative}. One SMS credit per receipt.",
+    },
     "sms.low_balance_threshold": {
         "type": "integer", "default": 100, "min": 0, "max": 10_000_000, "group": "SMS credits",
         "label": "Low SMS balance warning at",
@@ -72,6 +84,16 @@ def _validate(key: str, value: Any) -> Any:
             return email
         if kind == "phone":
             return normalize_phone(str(value))
+        if kind == "text":
+            text = str(value).strip()
+            if len(text) > spec.get("max_length", 1000):
+                raise ValueError(f"Use at most {spec.get('max_length', 1000)} characters.")
+            if key == "sms.receipt_template":
+                try:
+                    text.format(kg="1", farmer="", centre="", cooler="", date="", reference="", cooperative="")
+                except (KeyError, IndexError, ValueError):
+                    raise ValueError("Use only the listed placeholders, in braces, e.g. {kg}.")
+            return text
     except (TypeError, ValueError) as exc:
         message = str(exc) if str(exc) and not str(exc).startswith(("invalid literal", "could not convert")) else "Enter a valid value."
         raise field_error(key, message)

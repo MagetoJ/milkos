@@ -1,9 +1,9 @@
 'use client';
 
 import { useReloadOn } from '@/lib/sync/hooks';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Milk, Plus } from 'lucide-react';
+import { Milk, Plus, Smartphone } from 'lucide-react';
 import {
   DataTable,
   EmptyState,
@@ -19,6 +19,7 @@ import {
   StatusBadge,
   inputClass,
   primaryButton,
+  secondaryButton,
   type Column,
 } from '@/components/admin';
 import { ToastProvider, useToast } from '@/app/superadmin/_components/toast';
@@ -30,6 +31,7 @@ import { useListState } from '@/lib/hooks/use-list-state';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
 import { listCollections, recordCollection, recordingOptions, type CollectionInput } from '../_api/collection-client';
+import { BatchDetailDialog } from './batch-detail-dialog';
 
 const SUBTITLE: Record<string, string> = {
   COOP_ADMIN: "Every delivery recorded in your cooperative.",
@@ -48,10 +50,17 @@ export function CollectionsWorkspace() {
 
 function Workspace() {
   const toast = useToast();
-  const list = useListState({ filters: { quality_status: '', date_from: '', date_to: '' } });
+  const list = useListState({ filters: { quality_status: '', date_from: '', date_to: '', include_history: '' } });
   const data = useResource(() => listCollections(list.params), [JSON.stringify(list.params)]);
-  useReloadOn(['collections'], data.reload);
+  useReloadOn(['collections', 'batches'], data.reload);
   const [recording, setRecording] = useState(false);
+  const [openBatch, setOpenBatch] = useState<string | null>(null);
+  // Links from search (?search=MC-...) open the list already filtered.
+  const { setSearch } = list;
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('search');
+    if (q) setSearch(q);
+  }, [setSearch]);
   const role = data.data?.role ?? '';
   const s = data.data?.summary;
   const isFarmer = role === 'FARMER';
@@ -71,14 +80,24 @@ function Workspace() {
     { key: 'farmer', header: 'Farmer', hidden: isFarmer, cell: (c) => <PrimaryCell title={c.farmer_name} subtitle={c.farmer_number} /> },
     { key: 'collector', header: 'Collector', hidden: role === 'COLLECTOR', cell: (c) => c.collector_name ?? <Muted>Staff</Muted> },
     { key: 'cooler', header: 'Cooler', cell: (c) => c.cooler_name ?? <Muted /> },
+    {
+      key: 'kg', header: 'KG', align: 'right',
+      cell: (c) => (
+        <span className={c.record_status && c.record_status !== 'ACTIVE' ? 'text-[#8A968F] line-through' : ''} title={c.weight_source === 'LITRES' ? 'Derived from litres' : undefined}>
+          {c.quantity_kg != null ? `${formatNumber(c.quantity_kg)} KG` : '–'}
+        </span>
+      ),
+    },
     { key: 'qty', header: 'Litres', sortKey: 'quantity_litres', align: 'right', cell: (c) => formatLitres(c.quantity_litres) },
     { key: 'fat', header: 'Fat', align: 'right', cell: (c) => formatPercent(c.fat_percentage) },
     {
       key: 'quality',
       header: 'Quality',
       cell: (c) => (
-        <span title={c.rejection_reason ?? undefined}>
+        <span title={c.rejection_reason ?? undefined} className="flex flex-wrap gap-1">
           <StatusBadge status={c.quality_status} />
+          {c.record_status && c.record_status !== 'ACTIVE' && <StatusBadge status={c.record_status} tone={c.record_status === 'REVERSED' ? 'red' : 'grey'} />}
+          {c.weight_source === 'MANUAL' && <StatusBadge status="MANUAL" label="Manual weight" tone="amber" />}
         </span>
       ),
     },
@@ -99,16 +118,23 @@ function Workspace() {
             {data.data?.offline && <p className="mt-1 text-xs text-[#8A968F]">Showing collections saved on this device (recent history kept for offline use).</p>}
           </div>
           {data.data?.can_record && (
-            <button onClick={() => setRecording(true)} className={primaryButton}>
-              <Plus className="size-4" /> Record collection
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/collector/new" className={primaryButton}>
+                <Smartphone className="size-4" /> New collection (weigh & allocate)
+              </Link>
+              {!isFarmer && role !== 'COLLECTOR' && (
+                <button onClick={() => setRecording(true)} className={secondaryButton}>
+                  <Plus className="size-4" /> Single entry in litres
+                </button>
+              )}
+            </div>
           )}
         </div>
 
         <dl className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             ['Collections', s ? formatNumber(s.collections) : '–'],
-            ['Accepted milk', s ? formatLitres(s.accepted_litres) : '–'],
+            ['Accepted milk', s ? (s.accepted_kg != null ? `${formatNumber(s.accepted_kg)} KG` : formatLitres(s.accepted_litres)) : '–'],
             ['Rejected', s ? formatLitres(s.rejected_litres) : '–'],
             ['Average fat', s ? formatPercent(s.average_fat_percentage) : '–'],
           ].map(([label, value]) => (
@@ -128,13 +154,19 @@ function Workspace() {
           onRetry={data.reload}
           sort={list.sort}
           onSort={list.setSort}
-          minWidth="680px"
+          minWidth="760px"
+          mobileCards
+          onRowClick={(c) => c.batch_id && (!c.sync_status || c.sync_status === 'synced') && role !== 'FARMER' ? setOpenBatch(c.batch_id) : undefined}
           toolbar={
             <FilterBar onReset={list.reset} filtered={list.isFiltered}>
               <SearchInput value={list.search} onChange={list.setSearch} placeholder={isFarmer ? 'Search reference' : 'Search reference, farmer name or number'} label="Search collections" />
               <FilterSelect label="Quality" value={list.filters.quality_status} onChange={(v) => list.setFilter('quality_status', v)} allLabel="Any quality" options={[{ value: 'ACCEPTED', label: 'Accepted' }, { value: 'REJECTED', label: 'Rejected' }, { value: 'PENDING', label: 'Pending lab' }]} />
               <FilterDate label="From" value={list.filters.date_from} onChange={(v) => list.setFilter('date_from', v)} />
               <FilterDate label="To" value={list.filters.date_to} onChange={(v) => list.setFilter('date_to', v)} />
+              <label className="flex min-h-9 items-center gap-2 text-sm text-[#3C4A43]">
+                <input type="checkbox" className="size-4 accent-[#176044]" checked={list.filters.include_history === 'true'} onChange={(e) => list.setFilter('include_history', e.target.checked ? 'true' : '')} />
+                Show corrected & reversed
+              </label>
             </FilterBar>
           }
           empty={<EmptyState icon={<Milk className="size-8" />} title={list.isFiltered ? 'No collections match' : 'No collections yet'} body={data.data?.can_record && !list.isFiltered ? 'Record the first delivery with “Record collection”.' : undefined} />}
@@ -142,6 +174,7 @@ function Workspace() {
         />
       </div>
 
+      {openBatch && <BatchDetailDialog batchId={openBatch} onClose={() => setOpenBatch(null)} onChanged={() => void data.reload()} />}
       {recording && (
         <RecordForm
           showCollector={role === 'COOP_ADMIN' || role === 'MANAGER'}

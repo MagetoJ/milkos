@@ -22,7 +22,20 @@ const SHELL_PAGES = [
   '/cooperatives/operations',
   '/cooperatives/coolers',
   '/cooperatives/sync',
+  '/cooperatives/notifications',
+  '/cooperatives/corrections',
+  '/cooperatives/payments',
+  '/cooperatives/pricing',
+  '/cooperatives/sms-credits',
+  '/cooperatives/reports',
   '/collections',
+  // The collector's mobile app: every screen must open with no connection.
+  '/collector',
+  '/collector/new',
+  '/collector/collections',
+  '/collector/farmers',
+  '/collector/sync',
+  '/collector/notifications',
   '/superadmin',
 ];
 const SHELL_ASSETS = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icon.svg'];

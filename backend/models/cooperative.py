@@ -28,10 +28,14 @@ class Cooperative(Base):
     status = Column(String(20), nullable=False, default=CooperativeStatus.ACTIVE, server_default=text("'ACTIVE'"))
     suspension_reason = Column(Text)
     suspended_at = Column(DateTime)
+    # Cache of the available balance; the authoritative figure is derived from sms_credit_transactions
+    # (services/sms_credits.py) and this column is rewritten in the same transaction as every ledger entry.
     sms_credit_balance = Column(Integer, nullable=False, default=0, server_default=text("0"))
     estimated_daily_liters = Column(Numeric(12, 2))
     # Cooler alert SMS to the cooperative's admins and the responsible manager (see services/cooler_alerts).
     alert_sms_enabled = Column(Boolean, nullable=False, default=True, server_default=true())
+    # SMS receipt to the farmer for every confirmed collection allocation (costs one credit each).
+    receipt_sms_enabled = Column(Boolean, nullable=False, default=True, server_default=true())
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 

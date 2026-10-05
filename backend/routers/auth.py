@@ -124,6 +124,15 @@ def register_cooperative_application(
             flags=flags,
         )
         db.add(new_app)
+        db.flush()
+        from services import inbox
+
+        inbox.platform(
+            db, category="SYSTEM", type="APPLICATION_SUBMITTED", title=f"New cooperative application: {payload.cooperative_name}",
+            body=f"{payload.admin_full_name}, {payload.county}" + (f" ({len(flags)} flag(s) to check)" if flags else ""),
+            severity="WARNING" if flags else "INFO", entity_type="application", entity_id=new_app.id,
+            link="/superadmin/onboarding",
+        )
         db.commit()
     except IntegrityError:
         # A simultaneous submission won the race for a unique value (email, phone, reg. no., KRA PIN).

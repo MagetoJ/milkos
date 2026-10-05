@@ -19,7 +19,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-EntityType = Literal["farmer", "centre", "collection", "cooler_reading", "sensor_event"]
+EntityType = Literal["farmer", "centre", "collection", "collection_batch", "cooler_reading", "sensor_event"]
 Operation = Literal["create", "update"]
 MutationOutcome = Literal["applied", "duplicate", "conflict", "rejected", "error"]
 

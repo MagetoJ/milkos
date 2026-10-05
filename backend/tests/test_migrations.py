@@ -134,3 +134,66 @@ def test_0006_backfills_the_change_log(tmp_path):
     for step in (["downgrade", "-1"], ["upgrade", "head"]):
         res = run(["-m", "alembic", *step], url)
         assert res.returncode == 0, res.stderr
+
+
+SEED_0006 = """
+    import sqlite3, sys, uuid
+    c = sqlite3.connect(sys.argv[1])
+    coop, farmer = uuid.uuid4().hex, uuid.uuid4().hex
+    c.execute("INSERT INTO cooperatives (id, name, code, registration_number, kra_pin, county, status, sms_credit_balance)"
+              " VALUES (?, 'C', 'C-1', 'CS/1', 'P000000001A', 'Kiambu', 'ACTIVE', 37)", (coop,))
+    c.execute("INSERT INTO farmers (id, cooperative_id, farmer_number, first_name, last_name, phone, status)"
+              " VALUES (?, ?, 'F-0001', 'Jane', 'W', '+254712345678', 'ACTIVE')", (farmer, coop))
+    c.execute("INSERT INTO milk_collections (id, reference, cooperative_id, farmer_id, collection_date, collection_time,"
+              " quantity_litres, quality_status) VALUES (?, 'MC-261001-ABC123', ?, ?, '2026-10-01', '06:30:00', 12.5, 'ACCEPTED')",
+              (uuid.uuid4().hex, coop, farmer))
+    c.commit()
+"""
+
+CHECK_0007 = """
+    import sqlite3, sys
+    c = sqlite3.connect(sys.argv[1])
+    print(c.execute("SELECT reference, captured_weight_kg, weight_source, status FROM collection_batches").fetchall())
+    print(c.execute("SELECT quantity_litres, quantity_kg, batch_id = id, record_status FROM milk_collections").fetchall())
+    print(c.execute("SELECT transaction_type, amount FROM sms_credit_transactions").fetchall())
+    print(c.execute("SELECT COUNT(*) FROM sync_changes WHERE entity_type = 'collection_batch'").fetchone()[0])
+"""
+
+
+def test_0007_turns_collections_into_batches_and_balances_into_the_ledger(tmp_path):
+    """Existing collections keep their litres and ids; each becomes a one-line batch; balances become ledger entries."""
+    path = (tmp_path / "data.db").as_posix()
+    url = f"sqlite:///{path}"
+    assert run(["-m", "alembic", "upgrade", "0006_offline_sync"], url).returncode == 0
+    seed = run(["-c", textwrap.dedent(SEED_0006), path], url)
+    assert seed.returncode == 0, seed.stderr
+    upgrade = run(["-m", "alembic", "upgrade", "head"], url)
+    assert upgrade.returncode == 0, upgrade.stderr
+    check = run(["-c", textwrap.dedent(CHECK_0007), path], url)
+    assert check.stdout.split("\n")[:4] == [
+        "[('CB-261001-ABC123', 12.88, 'LITRES', 'CONFIRMED')]", "[(12.5, 12.88, 1, 'ACTIVE')]",
+        "[('ADJUSTMENT', 37)]", "1",
+    ], check.stdout + check.stderr
+    for step in (["downgrade", "-1"], ["upgrade", "head"]):
+        res = run(["-m", "alembic", *step], url)
+        assert res.returncode == 0, res.stderr
+
+
+PARITY = """
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+    import db, models
+    with db.engine.connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), db.Base.metadata)
+    # SQLite can't report server defaults / check constraints reliably; tables, columns and indexes must match.
+    relevant = [d for d in diff if not (isinstance(d, list)) and d[0] in ("add_table", "remove_table", "add_column", "remove_column", "add_index", "remove_index")]
+    print("DIFF", relevant)
+"""
+
+
+def test_models_match_the_migrations(tmp_path):
+    url = f"sqlite:///{(tmp_path / 'parity.db').as_posix()}"
+    assert run(["-m", "alembic", "upgrade", "head"], url).returncode == 0
+    res = run(PARITY, url)
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip().endswith("DIFF []"), res.stdout

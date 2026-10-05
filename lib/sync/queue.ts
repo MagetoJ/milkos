@@ -181,7 +181,7 @@ export async function retryNow(db: UserDB, mutationIds?: string[]): Promise<numb
 export async function discardItem(db: UserDB, mutationId: string): Promise<QueueItem[]> {
   const dropped: QueueItem[] = [];
   const tables = new Set<LocalTable>();
-  await db.transaction('rw', db.queue, db.farmers, db.centres, db.collections, db.readings, async () => {
+  await db.transaction('rw', [db.queue, db.farmers, db.centres, db.collections, db.batches, db.readings], async () => {
     const queue = [mutationId];
     while (queue.length) {
       const id = queue.shift()!;

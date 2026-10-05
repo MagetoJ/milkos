@@ -37,10 +37,23 @@ class Permission(str, Enum):
     COLLECTION_READ = "collection.read"
     COLLECTION_CREATE = "collection.create"
     COLLECTION_UPDATE = "collection.update"
+    CORRECTION_REQUEST = "collection.correction.request"
+    CORRECTION_APPROVE = "collection.correction.approve"
+    REVERSAL_REQUEST = "collection.reversal.request"
+    REVERSAL_APPROVE = "collection.reversal.approve"
 
     PAYMENT_READ = "payment.read"
     PAYMENT_VERIFY = "payment.verify"
     PAYMENT_REJECT = "payment.reject"
+
+    SMS_CREDIT_READ = "sms_credit.read"
+    SMS_CREDIT_PURCHASE = "sms_credit.purchase"
+    SMS_CREDIT_ADJUST = "sms_credit.adjust"
+
+    PRICING_READ = "pricing.read"
+    PRICING_MANAGE = "pricing.manage"
+    FARMER_PAYMENT_READ = "farmer_payment.read"
+    FARMER_PAYMENT_MANAGE = "farmer_payment.manage"
 
     REPORT_READ = "report.read"
     AUDIT_READ = "audit.read"
@@ -59,7 +72,10 @@ ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {
         P.COLLECTOR_READ, P.COLLECTOR_CREATE, P.COLLECTOR_UPDATE, P.COLLECTOR_DISABLE,
         P.COOLER_READ, P.COOLER_CREATE, P.COOLER_UPDATE, P.COOLER_DISABLE,
         P.COLLECTION_READ, P.COLLECTION_CREATE, P.COLLECTION_UPDATE,
+        P.CORRECTION_REQUEST, P.CORRECTION_APPROVE, P.REVERSAL_REQUEST, P.REVERSAL_APPROVE,
         P.PAYMENT_READ, P.REPORT_READ, P.AUDIT_READ,
+        P.SMS_CREDIT_READ, P.SMS_CREDIT_PURCHASE,
+        P.PRICING_READ, P.PRICING_MANAGE, P.FARMER_PAYMENT_READ, P.FARMER_PAYMENT_MANAGE,
     }),
     # Day-to-day operations; cannot manage the team, collectors' accounts or decommission equipment.
     UserRole.MANAGER: frozenset({
@@ -68,11 +84,15 @@ ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {
         P.COLLECTOR_READ, P.COLLECTOR_UPDATE,
         P.COOLER_READ, P.COOLER_UPDATE,
         P.COLLECTION_READ, P.COLLECTION_CREATE, P.COLLECTION_UPDATE,
-        P.REPORT_READ,
+        # Managers may request and review corrections, but only an admin may approve a reversal.
+        P.CORRECTION_REQUEST, P.CORRECTION_APPROVE, P.REVERSAL_REQUEST,
+        P.REPORT_READ, P.SMS_CREDIT_READ, P.PRICING_READ, P.FARMER_PAYMENT_READ,
     }),
     # Records milk; sees farmers and coolers of their cooperative and only their own collections.
     UserRole.COLLECTOR: frozenset({
         P.FARMER_READ, P.COOLER_READ, P.COLLECTION_READ, P.COLLECTION_CREATE,
+        # ...and may ask for a correction or reversal of their own collections (never approve one).
+        P.CORRECTION_REQUEST, P.REVERSAL_REQUEST,
     }),
     # Sees only their own deliveries.
     UserRole.FARMER: frozenset({P.COLLECTION_READ}),

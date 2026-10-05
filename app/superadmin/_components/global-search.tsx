@@ -14,6 +14,15 @@ const TYPE_LABEL: Record<SearchType, string> = {
   COLLECTOR: 'Collector',
   COOLER: 'Cooler',
   COLLECTION: 'Collection',
+  BATCH: 'Collection batch',
+  FARMER_PAYMENT: 'Farmer payment',
+  SMS_PAYMENT: 'SMS payment',
+  SMS_TRANSACTION: 'SMS credits',
+  APPLICATION: 'Application',
+  CORRECTION: 'Correction',
+  REVERSAL: 'Reversal',
+  DEVICE: 'Device',
+  SCALE: 'Scale',
 };
 
 /** Where each kind of result opens. List pages open the record's panel from ?focus=<id>. */
@@ -31,6 +40,18 @@ export function resultHref(r: SearchResult): string {
       return `/superadmin/coolers?focus=${r.id}`;
     case 'COLLECTION':
       return `/superadmin/collections?focus=${r.id}`;
+    case 'SMS_PAYMENT':
+      return `/superadmin/payments?focus=${r.id}`;
+    case 'APPLICATION':
+      return `/superadmin/onboarding?focus=${r.id}`;
+    case 'DEVICE':
+      return '/superadmin/sync';
+    case 'BATCH':
+    case 'SCALE':
+      return `/superadmin/collections?search=${encodeURIComponent(r.title)}`;
+    default:
+      // Payments, credits, corrections: the cooperative they belong to.
+      return r.cooperative_id ? `/superadmin/cooperatives/${r.cooperative_id}` : '/superadmin';
   }
 }
 

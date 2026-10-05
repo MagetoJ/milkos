@@ -55,6 +55,7 @@ export async function listCollections(params: Record<string, string | number>): 
     date_from: String(params.date_from ?? ''),
     date_to: String(params.date_to ?? ''),
     sort: params.sort ? String(params.sort) : undefined,
+    include_history: params.include_history === 'true',
     page: Number(params.page ?? 1),
     page_size: Number(params.page_size ?? 25),
   });

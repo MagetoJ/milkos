@@ -84,8 +84,7 @@ def pull_all(client, headers, device, cursor=0):
 @pytest.fixture
 def world(client, session):
     a, b = make_coop(session, 1), make_coop(session, 2)
-    a.sms_credit_balance = 10
-    session.commit()
+    grant_credits(session, a, 10)
     make_user(session, a, UserRole.COOP_ADMIN, "admin@a.coop", "+254700000011")
     make_user(session, a, UserRole.MANAGER, "manager@a.coop", "+254700000012")
     make_user(session, b, UserRole.COOP_ADMIN, "admin@b.coop", "+254700000021")
@@ -94,6 +93,14 @@ def world(client, session):
     w["dev_a"], _ = register(client, w["admin_a"])
     w["dev_b"], _ = register(client, w["admin_b"])
     return w
+
+
+def grant_credits(session, coop, credits, reference="test-grant"):
+    """SMS credits through the ledger (the balance column is only a cache of it)."""
+    from services import sms_credits
+
+    sms_credits.adjust(session, coop.id, credits, "Test credits", None, reference)
+    session.commit()
 
 
 def farmer_payload(**overrides):
@@ -299,15 +306,14 @@ def test_offline_collection_for_offline_farmer_in_one_batch(client, session, wor
     assert row.device_id is not None and row.client_recorded_at is not None
     assert row.cooperative_id == world["a"].id
 
-    # Corrections apply only to the version they were made from.
+    # Confirmed collections are never overwritten: an offline edit of the quantity is refused.
     entity = results[1]["entity"]
-    [ok] = push(client, world["admin_a"], world["dev_a"], mutation(
+    assert entity["batch_id"] and entity["quantity_kg"] == 12.88 and entity["weight_source"] == "LITRES"
+    [refused] = push(client, world["admin_a"], world["dev_a"], mutation(
         "collection", {"quantity_litres": 13}, operation="update", local_id=collection_local, base_version=entity["sync_version"]))
-    assert ok["status"] == "applied" and ok["entity"]["quantity_litres"] == 13
-    [stale] = push(client, world["admin_a"], world["dev_a"], mutation(
-        "collection", {"quantity_litres": 14}, operation="update", local_id=collection_local, base_version=entity["sync_version"]))
-    assert stale["status"] == "conflict"
-    assert session.query(AuditLog).filter_by(action="COLLECTION_UPDATED").count() == 1
+    assert refused["status"] == "rejected" and refused["error"]["code"] == "immutable"
+    session.expire_all()
+    assert float(session.get(MilkCollection, collection_local).quantity_litres) == 12.5
 
 
 # ---------------- pull ----------------
@@ -483,9 +489,11 @@ def test_no_provider_or_no_credits_is_failed_not_sent(client, session, world):
     cooler = make_cooler(client, world["admin_a"], low_volume_alert_litres=2000)
     push(client, world["admin_a"], world["dev_a"], mutation("cooler_reading", reading(cooler["id"], 100)))
     n = session.query(Notification).one()
-    assert n.status == "FAILED" and "not configured" in n.error
+    assert n.status == "PENDING_PROVIDER" and "not configured" in n.error
 
-    world["a"].sms_credit_balance = 0
+    from services import sms_credits
+
+    sms_credits.adjust(session, world["a"].id, -10, "Drain for the test", None, "test-drain")
     session.commit()
     sms.set_provider(FakeSms())
     retried = client.post(f"{COOP}/notifications/{n.id}/retry", headers=world["admin_a"]).json()

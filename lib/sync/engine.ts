@@ -329,7 +329,7 @@ class SyncEngine {
     if (!this.state.initialSyncDone) {
       await setMeta(db, 'initial_sync_done', true);
       this.set({ initialSyncDone: true });
-      emitLocalChange('cooperative', 'farmers', 'centres', 'coolers', 'collectors', 'team', 'collections', 'readings', 'sensors', 'notifications');
+      emitLocalChange('cooperative', 'farmers', 'centres', 'coolers', 'collectors', 'team', 'collections', 'batches', 'readings', 'sensors', 'notifications');
     }
     this.set({ lastPullAt: at });
     return applied;

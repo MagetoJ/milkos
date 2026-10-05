@@ -22,7 +22,7 @@ import {
 import { formatDate, formatDateTime, formatKes, formatLitres, formatNumber, formatPhone } from '@/lib/format';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
-import { adjustSmsCredits, getCooperative, setCooperativeStatus } from '../../_api/superadmin-client';
+import { adjustSmsCredits, getCooperative, getSmsLedger, setCooperativeStatus } from '../../_api/superadmin-client';
 import type { CooperativeDetail } from '../../_types/platform-types';
 import { useToast } from '../toast';
 import { AuditView } from './audit-view';
@@ -214,6 +214,7 @@ function Settings({ c, onChanged }: { c: CooperativeDetail; onChanged: () => Pro
           </p>
         </div>
         <button onClick={() => setCredits(true)} className={secondaryButton}>Adjust credits</button>
+        <SmsLedgerPanel cooperativeId={c.id} version={c.sms_credit_balance} />
       </section>
 
       <section className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border p-5 ${suspended ? 'border-[#DDE3DE] bg-white' : 'border-[#F4C7C3] bg-[#FFFAF9]'}`}>
@@ -298,5 +299,36 @@ function CreditsDialog({ balance, onClose, onSave }: { balance: number; onClose:
         New balance: <strong className="tabular-nums text-[#17221D]">{formatNumber(balance + delta)}</strong>
       </p>
     </FormDialog>
+  );
+}
+
+
+/** The cooperative's SMS credit ledger: balances derived from entries, and the latest entries. */
+function SmsLedgerPanel({ cooperativeId, version }: { cooperativeId: string; version: number }) {
+  const ledger = useResource(() => getSmsLedger(cooperativeId), [cooperativeId, version]);
+  const b = ledger.data?.balances;
+  return (
+    <div className="w-full">
+      {b && (
+        <dl className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
+          {([['Available', b.available], ['Reserved', b.reserved], ['Consumed', b.consumed], ['Refunded', b.refunded], ['Purchased', b.purchased]] as const).map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-[#F6F7F4] px-3 py-2">
+              <dt className="text-xs text-[#5E6B64]">{label}</dt>
+              <dd className="font-semibold tabular-nums">{formatNumber(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {ledger.data && ledger.data.transactions.length > 0 && (
+        <ul className="mt-3 divide-y divide-[#EEF1EC] text-sm">
+          {ledger.data.transactions.map((t) => (
+            <li key={t.id} className="flex flex-wrap justify-between gap-2 py-1.5">
+              <span>{t.transaction_type.charAt(0) + t.transaction_type.slice(1).toLowerCase()} <span className="font-mono text-xs text-[#8A968F]">{t.reference}</span></span>
+              <span className="tabular-nums">{t.amount > 0 ? '+' : ''}{formatNumber(t.amount)} · {formatDateTime(t.created_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

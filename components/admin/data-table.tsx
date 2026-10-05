@@ -13,6 +13,8 @@ export interface Column<T> {
   align?: 'left' | 'right';
   className?: string;
   hidden?: boolean;
+  /** Leave this column out of the mobile card (e.g. an icon-only column). */
+  hideOnCard?: boolean;
 }
 
 interface DataTableProps<T> {
@@ -34,6 +36,11 @@ interface DataTableProps<T> {
   /** Pagination or a summary, below the table. */
   footer?: ReactNode;
   caption?: string;
+  /**
+   * Below the `md` breakpoint, show each row as a card instead of a wide table. `true` builds the card from
+   * the columns (first column as the title, the rest as label/value pairs); a function renders a custom card.
+   */
+  mobileCards?: boolean | ((row: T) => ReactNode);
 }
 
 /** One table architecture for every list in the admin: cooperatives, users, farmers, collections... */
@@ -53,6 +60,7 @@ export function DataTable<T>({
   toolbar,
   footer,
   caption,
+  mobileCards,
 }: DataTableProps<T>) {
   const visible = columns.filter((c) => !c.hidden);
   const sortField = sort?.replace(/^-/, '');
@@ -76,7 +84,21 @@ export function DataTable<T>({
   else if (!rows || rows.length === 0) body = empty;
   else
     body = (
-      <div className={`overflow-x-auto ${loading ? 'opacity-60 transition-opacity' : ''}`}>
+      <>
+      {mobileCards && (
+        <ul className={`divide-y divide-[#EEF1EC] md:hidden ${loading ? 'opacity-60' : ''}`} aria-label={caption}>
+          {rows.map((row) => (
+            <li key={rowKey(row)}>
+              {typeof mobileCards === 'function' ? (
+                mobileCards(row)
+              ) : (
+                <AutoCard row={row} columns={visible} onClick={onRowClick ? () => onRowClick(row) : undefined} />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className={`overflow-x-auto ${mobileCards ? 'hidden md:block' : ''} ${loading ? 'opacity-60 transition-opacity' : ''}`}>
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead className="border-b border-[#EEF1EC] text-xs uppercase tracking-wide text-[#8A968F]">
@@ -134,6 +156,7 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
+      </>
     );
 
   return (
@@ -147,6 +170,33 @@ export function DataTable<T>({
       {body}
       {footer}
     </section>
+  );
+}
+
+/** A row as a card: the first column is the title, the others are label / value pairs. */
+function AutoCard<T>({ row, columns, onClick }: { row: T; columns: Column<T>[]; onClick?: () => void }) {
+  const [first, ...rest] = columns.filter((c) => !c.hideOnCard);
+  const content = (
+    <>
+      {first && <div className="mb-2 text-sm">{first.cell(row)}</div>}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+        {rest.map((col) => {
+          const value = col.cell(row);
+          if (value === null || value === undefined || value === '') return null;
+          return (
+            <div key={col.key} className={col.header ? '' : 'col-span-2'}>
+              {col.header ? <dt className="text-xs text-[#8A968F]">{col.header}</dt> : null}
+              <dd className="min-w-0 break-words">{value}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    </>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className="block w-full px-4 py-3 text-left hover:bg-[#F6F7F4]">{content}</button>
+  ) : (
+    <div className="px-4 py-3">{content}</div>
   );
 }
 

@@ -10,7 +10,14 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 _TMP = Path(tempfile.mkdtemp(prefix="milkos-tests-"))
-os.environ["DATABASE_URL"] = f"sqlite:///{(_TMP / 'test.db').as_posix()}"
+# Opt-in: run the suite against a THROWAWAY local Postgres (its tables are emptied after every test), e.g.
+#   MILKOS_TEST_POSTGRES_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/milkos_test
+_PG = os.environ.get("MILKOS_TEST_POSTGRES_URL", "")
+if _PG:
+    from urllib.parse import urlparse
+
+    assert urlparse(_PG).hostname in ("127.0.0.1", "localhost"), "MILKOS_TEST_POSTGRES_URL must be a local throwaway database"
+os.environ["DATABASE_URL"] = _PG or f"sqlite:///{(_TMP / 'test.db').as_posix()}"
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 import pytest  # noqa: E402
@@ -19,7 +26,8 @@ from alembic.config import Config  # noqa: E402
 
 import db  # noqa: E402
 
-assert db.engine.dialect.name == "sqlite", "tests must never run against a real database"
+assert db.engine.dialect.name == "sqlite" or (_PG and db.engine.url.host in ("127.0.0.1", "localhost")), \
+    "tests must never run against a real database"
 
 
 @pytest.fixture(scope="session", autouse=True)

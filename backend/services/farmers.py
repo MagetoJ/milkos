@@ -222,7 +222,8 @@ def collection_stats(db: Session, farmer_ids: list[UUID]) -> dict[UUID, dict]:
             func.count(MilkCollection.id),
             func.max(MilkCollection.collection_date),
         )
-        .filter(MilkCollection.farmer_id.in_(farmer_ids), MilkCollection.quality_status == QualityStatus.ACCEPTED)
+        .filter(MilkCollection.farmer_id.in_(farmer_ids), MilkCollection.quality_status == QualityStatus.ACCEPTED,
+                MilkCollection.record_status == "ACTIVE")
         .group_by(MilkCollection.farmer_id)
         .all()
     )

@@ -67,6 +67,7 @@ export function PaymentsView({ cooperativeId, embedded }: { cooperativeId?: stri
           { value: 'PENDING', label: 'Pending', count: s?.pending.count },
           { value: 'VERIFIED', label: 'Verified', count: s?.verified.count },
           { value: 'REJECTED', label: 'Rejected', count: s?.rejected.count },
+          { value: 'CANCELLED', label: 'Cancelled', count: s?.cancelled?.count },
           { value: 'ALL', label: 'All' },
         ]}
       />

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import models  # noqa: F401  (registers every table on Base.metadata)
-from routers import auth, collections, cooperative, devices, superadmin, sync
+from routers import auth, batches, collections, cooperative, devices, finance, inbox, reports, superadmin, sync, workspace
 
 # The schema is managed by Alembic (`alembic upgrade head`), never created at startup.
 
@@ -43,6 +43,12 @@ app.include_router(cooperative.router)
 app.include_router(collections.router)
 app.include_router(devices.router)
 app.include_router(sync.router)
+app.include_router(batches.router)
+app.include_router(batches.requests_router)
+app.include_router(finance.router)
+app.include_router(inbox.router)
+app.include_router(reports.router)
+app.include_router(workspace.router)
 
 
 @app.get("/api/v1/health", tags=["Health"])

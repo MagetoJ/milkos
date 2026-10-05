@@ -1,7 +1,8 @@
 """Milk collections for cooperative staff, collectors and farmers: /api/v1/collections.
 
 What each caller sees is decided by services.collections.scope (from the database, never the request):
-  COOP_ADMIN / MANAGER   their cooperative's collections; may record and correct
+  COOP_ADMIN / MANAGER   their cooperative's collections; may record (and request corrections through
+                         /api/v1/collection-batches/{id}/corrections - confirmed records are never edited)
   COLLECTOR              only collections recorded under their own profile; may record
   FARMER                 only their own deliveries; read-only
 Superadmins use /api/v1/superadmin/collections instead.
@@ -18,6 +19,7 @@ from core.permissions import Permission
 from core.utils import parse_uuid
 from db import get_db
 from models.admin import Cooler, CoolerStatus
+from models.centre import CollectionCentre
 from models.farmer import Farmer
 from models.operations import Collector, MilkCollection
 from models.user import User
@@ -50,6 +52,9 @@ def list_collections(
     date_from: Optional[datetime.date] = None,
     date_to: Optional[datetime.date] = None,
     quality_status: Optional[str] = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
+    batch_id: Optional[str] = None,
+    centre_id: Optional[str] = None,
+    include_history: bool = Query(False, description="Also list superseded and reversed lines"),
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.COLLECTION_READ)),
     db: Session = Depends(get_db),
@@ -65,11 +70,15 @@ def list_collections(
         collector_id=parse_uuid(collector_id, "Collector") if collector_id else None,
         cooler_id=parse_uuid(cooler_id, "Cooler") if cooler_id else None,
         date_from=date_from, date_to=date_to, quality_status=quality_status, search=search,
+        batch_id=parse_uuid(batch_id, "Collection") if batch_id else None,
+        centre_id=parse_uuid(centre_id, "Centre") if centre_id else None,
+        include_history=include_history or bool(batch_id),
     )
     result = paginate(apply_sort(query, params.sort, SORTS, DEFAULT_ORDER), params, collections.collection_json)
     result["summary"] = collections.summarize(query)
     result["role"] = principal.role
     result["can_record"] = principal.can(Permission.COLLECTION_CREATE)
+    result["can_request_correction"] = principal.can(Permission.CORRECTION_REQUEST)
     return result
 
 
@@ -90,7 +99,7 @@ def recording_options(
     principal: Principal = Depends(require_permission(Permission.COLLECTION_CREATE)),
     db: Session = Depends(get_db),
 ):
-    """Active farmers (searchable), coolers and collectors to choose from when recording milk."""
+    """Active farmers (searchable), coolers, centres and collectors to choose from when recording milk."""
     _tenant(principal)
     coop_id = principal.cooperative_id
     farmer_rows = (
@@ -100,14 +109,29 @@ def recording_options(
         .all()
     )
     cooler_rows = (
-        db.query(Cooler).filter(Cooler.cooperative_id == coop_id, Cooler.status == CoolerStatus.ACTIVE)
+        db.query(Cooler, CollectionCentre.name).outerjoin(CollectionCentre, CollectionCentre.id == Cooler.centre_id)
+        .filter(Cooler.cooperative_id == coop_id, Cooler.status == CoolerStatus.ACTIVE)
         .order_by(Cooler.code).all()
     )
+    centre_rows = (
+        db.query(CollectionCentre).filter(CollectionCentre.cooperative_id == coop_id, CollectionCentre.status == "ACTIVE")
+        .order_by(CollectionCentre.name).all()
+    )
     data = {
-        "farmers": [{"id": str(f.id), "label": f"{f.full_name} ({f.farmer_number})"} for f in farmer_rows],
-        "coolers": [
-            {"id": str(c.id), "label": f"{c.name} ({c.code})", "is_operational": bool(c.is_operational)} for c in cooler_rows
+        "farmers": [
+            {"id": str(f.id), "label": f"{f.full_name} ({f.farmer_number})", "full_name": f.full_name,
+             "farmer_number": f.farmer_number, "phone": f.phone, "centre_id": str(f.centre_id) if f.centre_id else None}
+            for f in farmer_rows
         ],
+        "coolers": [
+            {"id": str(c.id), "label": f"{c.name} ({c.code})", "is_operational": bool(c.is_operational),
+             "name": c.name, "code": c.code, "centre_id": str(c.centre_id) if c.centre_id else None, "centre_name": centre,
+             "scale_device_id": c.scale_device_id, "current_volume_litres": float(c.current_volume_litres) if c.current_volume_litres is not None else None,
+             "capacity_litres": float(c.capacity_litres) if c.capacity_litres is not None else None,
+             "last_temperature_c": float(c.last_temperature_c) if c.last_temperature_c is not None else None}
+            for c, centre in cooler_rows
+        ],
+        "centres": [{"id": str(c.id), "label": f"{c.name} ({c.code})", "name": c.name} for c in centre_rows],
         "collectors": [],
     }
     if principal.role == UserRole.COLLECTOR.value:
@@ -140,15 +164,21 @@ def get_collection(
 
 
 @router.patch("/{collection_id}")
-def correct_collection(
+def complete_lab_result(
     collection_id: str,
     payload: CollectionUpdate,
     principal: Principal = Depends(require_permission(Permission.COLLECTION_UPDATE)),
     db: Session = Depends(get_db),
 ):
+    """Confirmed collections are immutable. The only accepted change is completing a PENDING lab test
+    (quality_status ACCEPTED/REJECTED with fat, SNF or a rejection reason); anything else is 409 and needs a
+    correction request (POST /api/v1/collection-batches/{batch_id}/corrections)."""
     _tenant(principal)
     collection = ensure_same_cooperative(
         principal, db.get(MilkCollection, parse_uuid(collection_id, "Collection")), "Collection"
     )
-    collection = collections.update(db, principal, collection, payload)
+    lab = collections.lab_result_from_update(payload.model_dump(exclude_unset=True))
+    if lab is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, collections.IMMUTABLE)
+    collection = collections.record_lab_result(db, principal, collection, lab)
     return collections.collection_json(collections.load_row(db, collection.id))

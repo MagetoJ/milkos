@@ -50,6 +50,24 @@ def _user_related(session: Session, user) -> Iterable[tuple[str, uuid.UUID, uuid
         yield "collector", profile.id, profile.cooperative_id
 
 
+def _line_related(_session: Session, line) -> Iterable[tuple[str, uuid.UUID, uuid.UUID]]:
+    # A batch's synced form embeds its lines (quality results, record status).
+    if line.batch_id is not None:
+        yield "collection_batch", line.batch_id, line.cooperative_id
+
+
+def _receipt_related(session: Session, notification) -> Iterable[tuple[str, uuid.UUID, uuid.UUID]]:
+    # A batch's synced form shows each line's SMS receipt status.
+    if notification.collection_id is None:
+        return
+    from models.operations import MilkCollection
+
+    with session.no_autoflush:
+        row = session.query(MilkCollection.batch_id).filter(MilkCollection.id == notification.collection_id).first()
+    if row is not None:
+        yield "collection_batch", row[0], notification.cooperative_id
+
+
 def _registry() -> dict[type, Tracked]:
     if _REGISTRY:
         return _REGISTRY
@@ -58,7 +76,7 @@ def _registry() -> dict[type, Tracked]:
     from models.cooperative import Cooperative
     from models.farmer import Farmer
     from models.notifications import Notification
-    from models.operations import Collector, MilkCollection
+    from models.operations import CollectionBatch, Collector, MilkCollection
     from models.sensors import CoolerReading, SensorDevice
     from models.user import User
 
@@ -69,10 +87,11 @@ def _registry() -> dict[type, Tracked]:
         CollectionCentre: Tracked("centre", by_coop),
         Cooler: Tracked("cooler", by_coop),
         Collector: Tracked("collector", by_coop),
-        MilkCollection: Tracked("collection", by_coop),
+        MilkCollection: Tracked("collection", by_coop, related=_line_related),
+        CollectionBatch: Tracked("collection_batch", by_coop),
         CoolerReading: Tracked("cooler_reading", by_coop),
         SensorDevice: Tracked("sensor", by_coop),
-        Notification: Tracked("notification", by_coop),
+        Notification: Tracked("notification", by_coop, related=_receipt_related),
         User: Tracked(
             "team_member", by_coop,
             ignored=frozenset({"updated_at", "last_login_at", "password_hash"}),

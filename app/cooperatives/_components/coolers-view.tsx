@@ -3,7 +3,7 @@
 // Cooler monitoring: level, temperature, battery and sensor state per cooler, from this device's data
 // (so it keeps working offline). A reading is only called "live" when it is less than 2 minutes old.
 import { useState, useSyncExternalStore } from 'react';
-import { Bluetooth, Gauge, History, PenLine } from 'lucide-react';
+import { AlertTriangle, Bluetooth, Gauge, History, PenLine, Scale, Users } from 'lucide-react';
 import { EmptyState, Muted, PageHeader, StatusBadge, secondaryButton } from '@/components/admin';
 import { LocalDataNote, SyncPill } from '@/components/offline/status';
 import { formatDateTime, formatLitres, formatNumber } from '@/lib/format';
@@ -141,7 +141,26 @@ function CoolerCard({ cooler, live, onOpen }: { cooler: Cooler; live?: LiveSenso
         <dt className="text-[#5E6B64]">Temperature</dt>
         <dd>{(useReading ? reading?.temperature_celsius : cooler.last_temperature_c) != null ? `${useReading ? reading?.temperature_celsius : cooler.last_temperature_c} °C` : <Muted />}</dd>
         <dt className="text-[#5E6B64]">Battery</dt>
-        <dd>{reading?.battery_percent != null ? `${formatNumber(reading.battery_percent)}%` : <Muted />}</dd>
+        <dd>{reading?.battery_percent != null ? `${formatNumber(reading.battery_percent)}%` : cooler.battery_percent != null ? `${formatNumber(cooler.battery_percent)}%` : <Muted />}</dd>
+        <dt className="text-[#5E6B64]">Sensor status</dt>
+        <dd>{cooler.sensor_status ? cooler.sensor_status.charAt(0) + cooler.sensor_status.slice(1).toLowerCase() : <Muted>No sensor</Muted>}</dd>
+        <dt className="text-[#5E6B64]">Last seen</dt>
+        <dd>{cooler.last_seen_at ? formatDateTime(cooler.last_seen_at) : <Muted>Never</Muted>}</dd>
+      </dl>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-[#EEF1EC] px-5 py-4 text-sm">
+        <dt className="text-[#5E6B64]">Milk today</dt>
+        <dd className="tabular-nums">{cooler.kg_today != null ? `${formatNumber(cooler.kg_today)} KG · ${formatNumber(cooler.collections_today ?? 0)} collections` : <Muted />}</dd>
+        <dt className="flex items-center gap-1 text-[#5E6B64]"><Users aria-hidden className="size-3.5" /> Collectors</dt>
+        <dd>{formatNumber(cooler.collector_count ?? 0)}</dd>
+        <dt className="flex items-center gap-1 text-[#5E6B64]"><Scale aria-hidden className="size-3.5" /> Scale</dt>
+        <dd>
+          {cooler.scale
+            ? `${cooler.scale.source === 'MANUAL' ? 'Manual entry' : cooler.scale.source === 'SIMULATED' ? 'Simulator' : cooler.scale.source === 'LITRES' ? 'Litres entry' : cooler.scale.name ?? 'Scale'} · ${formatDateTime(cooler.scale.last_used_at)}`
+            : cooler.scale_device_id ?? <Muted>Not used yet</Muted>}
+        </dd>
+        <dt className="flex items-center gap-1 text-[#5E6B64]"><AlertTriangle aria-hidden className="size-3.5" /> Alerts (24 h)</dt>
+        <dd className={cooler.alerts_24h ? 'font-medium text-[#9A5B00]' : ''}>{formatNumber(cooler.alerts_24h ?? 0)}</dd>
       </dl>
 
       <footer className="mt-auto flex flex-wrap gap-2 border-t border-[#EEF1EC] px-5 py-3">

@@ -11,7 +11,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   SUPER_ADMIN: '/superadmin',
   COOP_ADMIN: '/cooperatives',
   MANAGER: '/cooperatives',
-  COLLECTOR: '/collections',
+  COLLECTOR: '/collector',
   FARMER: '/collections',
 };
 
@@ -21,6 +21,8 @@ export const ROUTE_ACCESS: Record<string, UserRole[]> = {
   // A cooperative's own workspace: platform staff have no cooperative of their own, so they stay in /superadmin.
   '/cooperatives': ['COOP_ADMIN', 'MANAGER'],
   '/collections': ['COOP_ADMIN', 'MANAGER', 'COLLECTOR', 'FARMER'],
+  // The collector's mobile app (cooperative staff may use it too, e.g. at a centre without a collector).
+  '/collector': ['COLLECTOR', 'COOP_ADMIN', 'MANAGER'],
 };
 
 const ROLES = Object.keys(ROLE_HOME) as UserRole[];

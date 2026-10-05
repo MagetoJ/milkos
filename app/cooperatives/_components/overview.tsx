@@ -11,6 +11,7 @@ import { useLocalQuery } from '@/lib/sync/hooks';
 import type { AlertNotification, Collection, CoolerReading } from '@/app/superadmin/_types/platform-types';
 import { formatDate, formatNumber, formatPhone, greeting } from '../_lib/format';
 import { useCoop } from './coop-context';
+import { DashboardCharts, DashboardKpiGrid } from './dashboard-insights';
 import { primaryButton, secondaryButton } from './ui';
 
 function Metric({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: 'warn' }) {
@@ -60,9 +61,16 @@ export function Overview() {
     attention.push({ text: 'Add a collector who will record milk at your centres.', href: '/cooperatives/team?new=1', action: 'Add collector' });
   }
   if (credits === 0) {
-    attention.push({ text: 'You have no SMS credits, so farmers won’t receive notifications. Contact the platform administrator to top up.' });
+    attention.push({ text: 'You have no SMS credits, so farmers won’t receive SMS receipts or alerts.', href: '/cooperatives/sms-credits', action: 'Buy credits' });
   } else if (credits < 100) {
-    attention.push({ text: `Only ${formatNumber(credits)} SMS credits left. Ask the platform administrator to top up soon.` });
+    attention.push({ text: `Only ${formatNumber(credits)} SMS credits left.`, href: '/cooperatives/sms-credits', action: 'Buy credits' });
+  }
+  const k = overview.kpis;
+  if (k?.pending_corrections) {
+    attention.push({ text: `${formatNumber(k.pending_corrections)} correction or reversal request${k.pending_corrections === 1 ? '' : 's'} waiting for review.`, href: '/cooperatives/corrections', action: 'Review' });
+  }
+  if (k?.pending_payments) {
+    attention.push({ text: `${formatNumber(k.pending_payments)} farmer payment${k.pending_payments === 1 ? '' : 's'} not yet recorded as paid.`, href: '/cooperatives/payments', action: 'Open' });
   }
 
   async function onRefresh() {
@@ -139,6 +147,9 @@ export function Overview() {
           tone={(alerts.data?.length ?? 0) > 0 ? 'warn' : undefined}
         />
       </dl>
+
+      {overview.kpis && <DashboardKpiGrid kpis={overview.kpis} />}
+      {overview.charts && <DashboardCharts charts={overview.charts} />}
 
       <section aria-label="Connection and synchronization" className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-[#DDE3DE] bg-white px-5 py-4">
         <ConnectionStatus />

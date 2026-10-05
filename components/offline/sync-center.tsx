@@ -18,6 +18,7 @@ const ENTITY_LABEL: Record<string, string> = {
   farmer: 'Farmer',
   centre: 'Collection centre',
   collection: 'Milk collection',
+  collection_batch: 'Collection',
   cooler_reading: 'Cooler reading',
   sensor_event: 'Sensor connection',
 };
@@ -27,6 +28,10 @@ function describe(item: QueueItem): string {
   const what = ENTITY_LABEL[item.entity_type] ?? item.entity_type;
   if (item.entity_type === 'farmer') return `${what} ${item.operation === 'create' ? 'added' : 'edited'}: ${[p.first_name, p.last_name].filter(Boolean).join(' ') || '(no name change)'}`;
   if (item.entity_type === 'collection') return `${what}: ${p.quantity_litres ?? '?'} L on ${p.collection_date ?? ''}`;
+  if (item.entity_type === 'collection_batch') {
+    const lines = Array.isArray(p.allocations) ? p.allocations.length : 0;
+    return `${what}: ${p.captured_weight_kg ?? '?'} KG to ${lines} farmer${lines === 1 ? '' : 's'}${p.weight_source === 'MANUAL' ? ' (manual weight)' : ''}`;
+  }
   if (item.entity_type === 'cooler_reading') return `${what}: ${p.volume_litres ?? '–'} L at ${new Date(String(p.measured_at)).toLocaleString()}`;
   if (item.entity_type === 'centre') return `${what} ${item.operation === 'create' ? 'added' : 'edited'}: ${p.name ?? ''}`;
   return `${what} (${p.event ?? item.operation})`;

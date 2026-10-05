@@ -43,7 +43,7 @@ def get_pending_payments(db: Session = Depends(get_db), _: Principal = Depends(r
 
 @router.get("")
 def list_payments(
-    payment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|VERIFIED|REJECTED)$"),
+    payment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|VERIFIED|REJECTED|CANCELLED)$"),
     cooperative_id: Optional[str] = None,
     search: Optional[str] = Query(None, max_length=100),
     params: PageParams = Depends(page_params),
@@ -75,7 +75,7 @@ def list_payments(
     )
     result["summary"] = {
         key.lower(): {"count": totals.get(key, (0, 0.0))[0], "amount_kes": totals.get(key, (0, 0.0))[1]}
-        for key in ("PENDING", "VERIFIED", "REJECTED")
+        for key in ("PENDING", "VERIFIED", "REJECTED", "CANCELLED")
     }
     return result
 

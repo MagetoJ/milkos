@@ -1,7 +1,7 @@
 """Cooperatives as managed by the superadmin."""
 import datetime
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_
@@ -88,7 +88,7 @@ def counts_for(db: Session, coop_ids: list[UUID]) -> dict[UUID, dict]:
     for cid, litres in (
         db.query(MilkCollection.cooperative_id, func.coalesce(func.sum(MilkCollection.quantity_litres), 0))
         .filter(MilkCollection.cooperative_id.in_(coop_ids), MilkCollection.collection_date >= since,
-                MilkCollection.quality_status == QualityStatus.ACCEPTED)
+                MilkCollection.quality_status == QualityStatus.ACCEPTED, MilkCollection.record_status == "ACTIVE")
         .group_by(MilkCollection.cooperative_id)
     ):
         out[cid]["litres_30d"] = num(litres) or 0.0
@@ -106,7 +106,7 @@ def milk_volumes(db: Session, cooperative_id: Optional[UUID] = None) -> dict:
         func.coalesce(func.sum(case((d >= week, q), else_=0)), 0),
         func.coalesce(func.sum(case((d >= month, q), else_=0)), 0),
         func.coalesce(func.sum(case((d == today, 1), else_=0)), 0),
-    ).filter(MilkCollection.quality_status == QualityStatus.ACCEPTED, d >= month)
+    ).filter(MilkCollection.quality_status == QualityStatus.ACCEPTED, MilkCollection.record_status == "ACTIVE", d >= month)
     if cooperative_id is not None:
         query = query.filter(MilkCollection.cooperative_id == cooperative_id)
     t, w, m, n = query.one()
@@ -233,22 +233,20 @@ def set_status(db: Session, principal: Principal, coop_id: UUID, new_status: str
 
 
 def adjust_sms_credits(db: Session, principal: Principal, coop_id: UUID, delta: int, reason: str) -> Cooperative:
+    """A platform adjustment, written to the SMS credit ledger (never by overwriting the balance)."""
+    from services import sms_credits
+
     coop = db.get(Cooperative, coop_id, with_for_update=True)
     if coop is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cooperative not found")
-    before = coop.sms_credit_balance or 0
-    if before + delta < 0:
-        raise HTTPException(
-            422,
-            f"The balance is {before:,} credits; you can remove at most that many.",
-        )
-    coop.sms_credit_balance = before + delta
+    reference = f"adjustment:{uuid4()}"
+    before, after = sms_credits.adjust(db, coop.id, delta, reason.strip(), principal.user.id, reference)
     audit.record(
         db, principal, "SMS_CREDITS_ADJUSTED",
-        target=f"{coop.name} ({coop.code}): {delta:+,} credits, balance {before:,} → {coop.sms_credit_balance:,}",
+        target=f"{coop.name} ({coop.code}): {delta:+,} credits, balance {before:,} → {after:,}",
         entity_type="cooperative", entity_id=coop.id, cooperative_id=coop.id,
         old_values={"sms_credit_balance": before},
-        new_values={"sms_credit_balance": coop.sms_credit_balance, "delta": delta}, reason=reason.strip(),
+        new_values={"sms_credit_balance": after, "delta": delta}, reason=reason.strip(),
     )
     db.commit()
     db.refresh(coop)

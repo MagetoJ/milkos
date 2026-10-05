@@ -110,6 +110,8 @@ export interface CollectionFilter {
   collector_id?: string;
   cooler_id?: string;
   sort?: string;
+  /** Also list superseded (corrected) and reversed lines; they never count in the summary. */
+  include_history?: boolean;
   page: number;
   page_size: number;
 }
@@ -126,6 +128,7 @@ export async function listCollections<T>(q: CollectionFilter) {
       if (q.farmer_id && row.farmer_id !== q.farmer_id) return false;
       if (q.collector_id && row.collector_id !== q.collector_id) return false;
       if (q.cooler_id && row.cooler_id !== q.cooler_id) return false;
+      if (!q.include_history && row.record_status && row.record_status !== 'ACTIVE') return false;
       return terms.every((t) => [row.reference, row.farmer_name, row.farmer_number].some((f) => lower(f).includes(t)));
     })
     .toArray()) as Row[];
@@ -139,8 +142,9 @@ export async function listCollections<T>(q: CollectionFilter) {
     return ka.localeCompare(kb) * (desc ? -1 : 1);
   });
 
-  const accepted = rows.filter((r) => r.quality_status === 'ACCEPTED');
-  const rejected = rows.filter((r) => r.quality_status === 'REJECTED');
+  const effective = rows.filter((r) => !r.record_status || r.record_status === 'ACTIVE');
+  const accepted = effective.filter((r) => r.quality_status === 'ACCEPTED');
+  const rejected = effective.filter((r) => r.quality_status === 'REJECTED');
   const fats = accepted.map((r) => r.fat_percentage).filter((v): v is number => typeof v === 'number');
   const sum = (list: Row[]) => list.reduce((s, r) => s + Number(r.quantity_litres || 0), 0);
   const start = (q.page - 1) * q.page_size;
@@ -151,8 +155,9 @@ export async function listCollections<T>(q: CollectionFilter) {
     page_size: q.page_size,
     pages: Math.max(1, Math.ceil(rows.length / q.page_size)),
     summary: {
-      collections: rows.length,
+      collections: effective.length,
       accepted_litres: Math.round(sum(accepted) * 100) / 100,
+      accepted_kg: Math.round(accepted.reduce((s, r) => s + Number(r.quantity_kg || 0), 0) * 100) / 100,
       rejected_collections: rejected.length,
       rejected_litres: Math.round(sum(rejected) * 100) / 100,
       average_fat_percentage: fats.length ? Math.round((fats.reduce((s, v) => s + v, 0) / fats.length) * 100) / 100 : null,

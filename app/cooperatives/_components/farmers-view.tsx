@@ -151,7 +151,27 @@ export function FarmersView() {
             />
           )
         ) : (
-          <div className={`overflow-x-auto ${farmers.loading ? 'opacity-60' : ''}`}>
+          <>
+          <ul className={`divide-y divide-[#EEF1EC] md:hidden ${farmers.loading ? 'opacity-60' : ''}`} aria-label="Farmers">
+            {farmers.data.items.map((f) => (
+              <li key={f.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 text-sm">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-[#17221D]">
+                    {f.full_name} <SyncPill status={f.sync_status} error={f.sync_error} />
+                  </p>
+                  <p className="text-xs text-[#8A968F]">
+                    {f.sync_status && f.sync_status !== 'synced' && f.farmer_number === 'Pending' ? 'Number assigned when synced' : f.farmer_number} · {formatPhone(f.phone)}
+                  </p>
+                  <p className="text-xs text-[#5E6B64]">{[f.village, f.centre_name ?? 'No centre'].filter(Boolean).join(' · ')}</p>
+                  <div className="mt-1"><StatusPill active={f.status === 'ACTIVE'} /></div>
+                </div>
+                <button onClick={() => setEditing(f)} className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-[#176044] hover:bg-[#EEF1EC]" aria-label={`Edit ${f.full_name}`}>
+                  <Pencil className="size-4" /> Edit
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className={`hidden overflow-x-auto md:block ${farmers.loading ? 'opacity-60' : ''}`}>
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="border-b border-[#EEF1EC] text-xs uppercase tracking-wide text-[#8A968F]">
                 <tr>
@@ -186,6 +206,7 @@ export function FarmersView() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {total > 0 && (

@@ -47,8 +47,8 @@ from schemas.cooperative_module import (
 from schemas.platform import CollectorCreate, CollectorUpdate, CoolerCreate, CoolerUpdate, SmsTopUpCreate
 from schemas.sync import DeviceUpdate, SensorCreate, SensorUpdate
 from services import (
-    audit, centres, collectors, cooler_alerts, cooler_readings, coolers, cooperatives, farmers, notifications, payments,
-    sensors,
+    audit, centres, collectors, coop_dashboard, cooler_alerts, cooler_readings, coolers, cooperatives, farmers,
+    notifications, payments, sensors,
 )
 from services.sync import devices
 from services.users import account_conflict
@@ -165,6 +165,8 @@ def overview(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
             "collectors": team_counts.get(UserRole.COLLECTOR, 0),
         },
         "milk": cooperatives.milk_volumes(db, coop.id),
+        "kpis": coop_dashboard.kpis(db, coop.id),
+        "charts": coop_dashboard.charts(db, coop.id),
         "recent_farmers": [
             {
                 "id": str(f.id),
@@ -442,10 +444,11 @@ def _cooler_rows(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID] = 
     today = coolers.litres_today(db, ids)
     managers = centres.manager_names(db, {c.manager_user_id for c, _ in rows})
     bound = sensors.for_coolers(db, ids)
+    context = coolers.context_for(db, [c for c, _ in rows], bound)
     return [
         coolers.cooler_json(
             c, centre_name=centre, litres_today=today.get(c.id, 0.0), manager_name=managers.get(c.manager_user_id),
-            sensors=bound.get(c.id),
+            sensors=bound.get(c.id), context=context.get(c.id),
         )
         for c, centre in rows
     ]
@@ -508,8 +511,10 @@ def sms_credits(ctx: Ctx = Depends(_staff_with(Permission.PAYMENT_READ)), db: Se
         .limit(50)
         .all()
     )
+    from services import sms_credits
+
     return {
-        "balance": ctx.cooperative.sms_credit_balance or 0,
+        "balance": sms_credits.available(db, ctx.cooperative.id),
         "packages": [
             {"id": str(p.id), "name": p.name, "credits_amount": p.credits_amount, "price_kes": num(p.price_kes)}
             for p in packages
@@ -580,7 +585,9 @@ def update_sensor(
 @router.get("/notifications")
 def list_notifications(
     params: PageParams = Depends(page_params),
-    notification_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|SENT|FAILED|SKIPPED)$"),
+    notification_status: Optional[str] = Query(
+        None, alias="status", pattern="^(PENDING|PENDING_PROVIDER|RESERVED|SENDING|SENT|FAILED|REFUNDED|SKIPPED)$",
+    ),
     ctx: Ctx = Depends(staff),
     db: Session = Depends(get_db),
 ):

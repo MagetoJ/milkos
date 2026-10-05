@@ -122,6 +122,24 @@ def change_cooperative_status(
     return cooperatives.cooperative_json(coop)
 
 
+@router.get("/{coop_id}/sms-ledger")
+def sms_ledger(coop_id: str, limit: int = 50, db: Session = Depends(get_db), _: Principal = Depends(require_superadmin)):
+    """Derived balances and the latest ledger entries of one cooperative."""
+    from models.finance import SmsCreditTransaction
+    from models.user import User
+    from services import sms_credits
+
+    coop = db.get(Cooperative, parse_uuid(coop_id, "Cooperative"))
+    if coop is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cooperative not found")
+    rows = (
+        db.query(SmsCreditTransaction, User.email).outerjoin(User, User.id == SmsCreditTransaction.actor_user_id)
+        .filter(SmsCreditTransaction.cooperative_id == coop.id)
+        .order_by(SmsCreditTransaction.created_at.desc()).limit(max(1, min(limit, 200))).all()
+    )
+    return {"balances": sms_credits.balances(db, coop.id), "transactions": [sms_credits.transaction_json(t, e) for t, e in rows]}
+
+
 @router.post("/{coop_id}/sms-credits")
 def adjust_sms_credits(
     coop_id: str, payload: SmsCreditAdjustment, db: Session = Depends(get_db),

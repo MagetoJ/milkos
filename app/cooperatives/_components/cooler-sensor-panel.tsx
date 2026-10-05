@@ -239,7 +239,22 @@ export function ReadingHistory({ cooler, onClose }: { cooler: Cooler; onClose: (
         <p className="text-sm text-[#5E6B64]">No readings on this device yet.</p>
       ) : (
         <div className="max-h-[60vh] overflow-y-auto">
-          <table className="w-full text-left text-sm">
+          <ul className="divide-y divide-[#EEF1EC] text-sm sm:hidden" aria-label="Readings">
+            {(readings.data ?? []).map((r) => (
+              <li key={r.id} className="flex items-start justify-between gap-3 py-2">
+                <span>
+                  <span className="block">{formatDateTime(r.measured_at)}</span>
+                  <span className="text-xs text-[#5E6B64]">{r.source === 'SIMULATED' ? 'Simulated' : r.source.toLowerCase()}{r.quality === 'SUSPICIOUS' ? ' · suspicious' : ''}</span>
+                </span>
+                <span className="text-right tabular-nums">
+                  <span className="block">{r.volume_litres == null ? '–' : formatLitres(r.volume_litres)}</span>
+                  <span className="text-xs text-[#5E6B64]">{r.temperature_celsius == null ? '' : `${r.temperature_celsius} °C`}</span>
+                  {r.sync_status && r.sync_status !== 'synced' && <SyncPill status={r.sync_status} />}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden w-full text-left text-sm sm:table">
             <thead className="text-xs uppercase tracking-wide text-[#8A968F]">
               <tr>
                 <th className="py-2 font-medium">Measured</th>

@@ -21,11 +21,11 @@ from models.centre import CollectionCentre
 from models.cooperative import Cooperative
 from models.farmer import Farmer
 from models.notifications import Notification
-from models.operations import Collector, MilkCollection
+from models.operations import CollectionBatch, Collector, MilkCollection
 from models.sensors import CoolerReading, SensorDevice
 from models.user import User
 from schemas.auth import UserRole
-from services import centres, collections, collectors, cooler_readings, coolers, farmers, notifications, sensors
+from services import batches, centres, collections, collectors, cooler_readings, coolers, farmers, notifications, sensors
 
 MISSING = object()
 SKIP = object()
@@ -38,14 +38,15 @@ TEAM_ROLES = (UserRole.COOP_ADMIN, UserRole.MANAGER, UserRole.COLLECTOR)
 ROLE_TYPES: dict[str, frozenset[str]] = {
     UserRole.COOP_ADMIN.value: frozenset({
         "cooperative", "farmer", "centre", "cooler", "collector", "team_member", "collection",
-        "cooler_reading", "sensor", "notification",
+        "collection_batch", "cooler_reading", "sensor", "notification",
     }),
     UserRole.MANAGER.value: frozenset({
         "cooperative", "farmer", "centre", "cooler", "collector", "team_member", "collection",
-        "cooler_reading", "sensor", "notification",
+        "collection_batch", "cooler_reading", "sensor", "notification",
     }),
     UserRole.COLLECTOR.value: frozenset({
-        "cooperative", "farmer", "centre", "cooler", "collector", "collection", "cooler_reading", "sensor",
+        "cooperative", "farmer", "centre", "cooler", "collector", "collection", "collection_batch",
+        "cooler_reading", "sensor",
     }),
     UserRole.SUPER_ADMIN.value: frozenset({"cooperative"}),
 }
@@ -84,6 +85,7 @@ def cooperative(db: Session, principal: Principal, ids: list[str]) -> dict:
             found[str(coop.id)] = {
                 "id": str(coop.id), "name": coop.name, "code": coop.code, "county": coop.county,
                 "location": coop.location, "status": coop.status, "sms_credit_balance": coop.sms_credit_balance or 0,
+                "receipt_sms_enabled": bool(coop.receipt_sms_enabled),
                 "estimated_daily_liters": num(coop.estimated_daily_liters),
                 "alert_sms_enabled": bool(coop.alert_sms_enabled), "created_at": iso(coop.created_at),
             }
@@ -134,10 +136,11 @@ def cooler(db: Session, principal: Principal, ids: list[str]) -> dict:
     today = coolers.litres_today(db, cooler_ids)
     managers = centres.manager_names(db, {c.manager_user_id for c, _ in rows})
     bound = sensors.for_coolers(db, cooler_ids)
+    context = coolers.context_for(db, [c for c, _ in rows], bound)
     found = {
         str(c.id): coolers.cooler_json(
             c, centre_name=name, litres_today=today.get(c.id, 0.0), manager_name=managers.get(c.manager_user_id),
-            sensors=bound.get(c.id),
+            sensors=bound.get(c.id), context=context.get(c.id),
         )
         for c, name in rows
     }
@@ -191,6 +194,21 @@ def collection(db: Session, principal: Principal, ids: list[str]) -> dict:
     return _result(ids, found)
 
 
+def collection_batch(db: Session, principal: Principal, ids: list[str]) -> dict:
+    since = datetime.datetime.utcnow().date() - datetime.timedelta(days=window()["collection_days"])
+    rows = db.query(CollectionBatch).filter(CollectionBatch.id.in_(_uuids(ids))).all()
+    own_collector = principal.collector_profile().id if principal.role == UserRole.COLLECTOR.value else None
+    visible = [
+        b for b in rows
+        if _mine(principal, b) and (own_collector is None or b.collector_id == own_collector)
+    ]
+    recent = [b for b in visible if b.collection_date >= since]
+    found: dict = {str(b.id): SKIP for b in visible if b.collection_date < since}
+    for data in batches.serialize_many(db, recent):
+        found[data["id"]] = data
+    return _result(ids, found)
+
+
 def cooler_reading(db: Session, principal: Principal, ids: list[str]) -> dict:
     since = datetime.datetime.utcnow() - datetime.timedelta(days=window()["reading_days"])
     found = {}
@@ -216,7 +234,8 @@ def notification(db: Session, principal: Principal, ids: list[str]) -> dict:
 
 SERIALIZERS: dict[str, Callable[[Session, Principal, list[str]], dict]] = {
     "cooperative": cooperative, "farmer": farmer, "centre": centre, "cooler": cooler, "collector": collector,
-    "team_member": team_member, "collection": collection, "cooler_reading": cooler_reading, "sensor": sensor,
+    "team_member": team_member, "collection": collection, "collection_batch": collection_batch,
+    "cooler_reading": cooler_reading, "sensor": sensor,
     "notification": notification,
 }
 

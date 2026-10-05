@@ -32,6 +32,7 @@ ALERT_FIELDS = (
 def cooler_json(
     cooler: Cooler, *, cooperative: Optional[Cooperative] = None, centre_name: Optional[str] = None,
     litres_today: float = 0.0, manager_name: Optional[str] = None, sensors: Optional[list[dict]] = None,
+    context: Optional[dict] = None,
 ) -> dict:
     data = {
         "id": str(cooler.id),
@@ -64,10 +65,71 @@ def cooler_json(
         "created_at": iso(cooler.created_at),
         "updated_at": iso(cooler.updated_at),
     }
+    data.update(context or {
+        "kg_today": 0.0, "collections_today": 0, "collector_count": 0, "scale": None, "battery_percent": None,
+        "alerts_24h": 0, "sensor_status": None,
+    })
     if cooperative is not None:
         data["cooperative_name"] = cooperative.name
         data["cooperative_code"] = cooperative.code
     return data
+
+
+def context_for(db: Session, coolers: list[Cooler], sensors_by_cooler: Optional[dict] = None) -> dict[UUID, dict]:
+    """Operational context for cooler cards, one grouped query per source."""
+    from models.inbox import InboxNotification
+    from models.operations import BatchStatus, CollectionBatch, Collector
+    from models.sensors import CoolerReading
+
+    ids = [c.id for c in coolers]
+    if not ids:
+        return {}
+    today = datetime.datetime.utcnow().date()
+    today_rows = {
+        cid: (num(kg) or 0.0, n) for cid, kg, n in db.query(
+            CollectionBatch.cooler_id, func.coalesce(func.sum(CollectionBatch.allocated_weight_kg), 0), func.count(CollectionBatch.id),
+        ).filter(CollectionBatch.cooler_id.in_(ids), CollectionBatch.collection_date == today,
+                 CollectionBatch.status.in_(BatchStatus.EFFECTIVE)).group_by(CollectionBatch.cooler_id)
+    }
+    collectors = dict(
+        db.query(Collector.cooler_id, func.count(Collector.id))
+        .filter(Collector.cooler_id.in_(ids), Collector.status == "ACTIVE").group_by(Collector.cooler_id).all()
+    )
+    last_scale: dict = {}
+    for b in (
+        db.query(CollectionBatch.cooler_id, CollectionBatch.weight_source, CollectionBatch.scale_name,
+                 CollectionBatch.scale_identifier, CollectionBatch.captured_at, CollectionBatch.created_at)
+        .filter(CollectionBatch.cooler_id.in_(ids)).order_by(CollectionBatch.created_at.desc()).limit(200)
+    ):
+        if b.cooler_id not in last_scale:
+            last_scale[b.cooler_id] = {
+                "source": b.weight_source, "name": b.scale_name, "identifier": b.scale_identifier,
+                "last_used_at": iso(b.captured_at or b.created_at),
+            }
+    battery: dict = {}
+    for r in (
+        db.query(CoolerReading.cooler_id, CoolerReading.battery_percent)
+        .filter(CoolerReading.cooler_id.in_(ids), CoolerReading.battery_percent.isnot(None))
+        .order_by(CoolerReading.measured_at.desc()).limit(500)
+    ):
+        battery.setdefault(r.cooler_id, r.battery_percent)
+    since = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+    alerts = dict(
+        (str(eid), n) for eid, n in db.query(InboxNotification.entity_id, func.count(InboxNotification.id))
+        .filter(InboxNotification.entity_type == "cooler", InboxNotification.entity_id.in_([str(i) for i in ids]),
+                InboxNotification.created_at >= since).group_by(InboxNotification.entity_id)
+    )
+    out = {}
+    for c in coolers:
+        bound = (sensors_by_cooler or {}).get(c.id) or []
+        states = {s.get("last_connection_state") for s in bound if s.get("is_active", True)}
+        kg, n = today_rows.get(c.id, (0.0, 0))
+        out[c.id] = {
+            "kg_today": kg, "collections_today": n, "collector_count": int(collectors.get(c.id, 0)),
+            "scale": last_scale.get(c.id), "battery_percent": battery.get(c.id), "alerts_24h": int(alerts.get(str(c.id), 0)),
+            "sensor_status": None if not bound else ("CONNECTED" if "CONNECTED" in states else "DISCONNECTED" if "DISCONNECTED" in states else "UNKNOWN"),
+        }
+    return out
 
 
 def litres_today(db: Session, cooler_ids: list[UUID]) -> dict[UUID, float]:
@@ -78,7 +140,7 @@ def litres_today(db: Session, cooler_ids: list[UUID]) -> dict[UUID, float]:
         db.query(MilkCollection.cooler_id, func.coalesce(func.sum(MilkCollection.quantity_litres), 0))
         .filter(
             MilkCollection.cooler_id.in_(cooler_ids), MilkCollection.collection_date == today,
-            MilkCollection.quality_status == QualityStatus.ACCEPTED,
+            MilkCollection.quality_status == QualityStatus.ACCEPTED, MilkCollection.record_status == "ACTIVE",
         )
         .group_by(MilkCollection.cooler_id)
         .all()

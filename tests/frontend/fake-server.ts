@@ -97,6 +97,38 @@ export function installFakeServer(): FakeServer {
       server.applied.set(String(m.mutation_id), { status: 'applied', server_id: id });
       return { ...base, status: 'applied', server_id: id, entity, error: null };
     }
+    if (m.entity_type === 'collection_batch') {
+      // Like the server: the batch id is the device's, a resend with a new mutation id is a duplicate,
+      // allocations can't exceed the captured weight, and receipts are never "sent" by the fake.
+      const existing = server.entities.get(`collection_batch:${id}`);
+      if (existing) {
+        server.applied.set(String(m.mutation_id), { status: 'duplicate', server_id: id });
+        return { ...base, status: 'duplicate', server_id: id, entity: existing, error: null };
+      }
+      const allocations = (p.allocations as { id: string; farmer_id: string; quantity_kg: number }[]) ?? [];
+      const allocated = allocations.reduce((s, a) => s + Math.round(a.quantity_kg * 100), 0);
+      if (allocated > Math.round(Number(p.captured_weight_kg) * 100)) {
+        return { ...base, status: 'rejected', entity: null, error: { code: 'validation', message: 'The allocated weight is more than the captured weight.', fields: { allocations: 'Over-allocated' } } };
+      }
+      const missing = allocations.find((a) => !server.entities.has(`farmer:${a.farmer_id}`));
+      if (missing) {
+        return { ...base, status: 'rejected', entity: null, error: { code: 'validation', message: 'Choose a farmer from this cooperative.', fields: { 'allocations.0.farmer_id': 'Unknown farmer' } } };
+      }
+      const lines = allocations.map((a, i) => {
+        const farmer = server.entities.get(`farmer:${a.farmer_id}`)!;
+        return { id: a.id, reference: `MC-${id.slice(0, 4)}-${i}`, farmer_id: a.farmer_id, farmer_name: farmer.full_name, farmer_number: farmer.farmer_number, quantity_kg: a.quantity_kg, receipt_status: p.send_receipts ? 'PENDING_PROVIDER' : null, record_status: 'ACTIVE' };
+      });
+      const entity = {
+        id, reference: `CB-${id.slice(0, 6).toUpperCase()}`, status: 'CONFIRMED', cooperative_id: COOP, cooler_id: p.cooler_id,
+        captured_weight_kg: p.captured_weight_kg, allocated_weight_kg: allocated / 100,
+        remaining_weight_kg: Math.round(Number(p.captured_weight_kg) * 100 - allocated) / 100, weight_source: p.weight_source,
+        scale_name: p.scale_name ?? null, send_receipts: p.send_receipts, collection_date: new Date().toISOString().slice(0, 10),
+        collection_time: '06:30', farmer_count: lines.length, lines, sync_version: 1,
+      } as Entity;
+      server.put('collection_batch', entity);
+      server.applied.set(String(m.mutation_id), { status: 'applied', server_id: id });
+      return { ...base, status: 'applied', server_id: id, server_version: 1, entity, error: null };
+    }
     if (m.entity_type === 'cooler_reading') {
       const entity = { ...p, id, quality: p.source === 'SIMULATED' ? 'SIMULATED' : 'VALID', quality_flags: [], received_at: new Date().toISOString() } as Entity;
       server.put('cooler_reading', entity);

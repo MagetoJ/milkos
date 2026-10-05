@@ -27,8 +27,38 @@ export interface Overview {
   team: { admins: number; managers: number; collectors: number };
   milk: { today: number; week: number; month: number; collections_today: number };
   recent_farmers: { id: string; farmer_number: string; full_name: string; phone: string; created_at: string | null }[];
+  /** Dashboard figures (absent when built offline from local data). */
+  kpis?: DashboardKpis;
+  charts?: DashboardCharts;
   /** True when built from this device's local data because the server couldn't be reached. */
   offline?: boolean;
+}
+
+export interface DashboardKpis {
+  milk_kg_today: number;
+  milk_kg_month: number;
+  milk_kg_30d: number;
+  collections_today: number;
+  active_farmers_30d: number;
+  active_collectors: number;
+  collectors_today: number;
+  active_coolers: number;
+  coolers_online: number;
+  sms_available: number;
+  sms_reserved: number;
+  sms_success_rate_30d: number | null;
+  sms_sent_30d: number;
+  sms_failed_30d: number;
+  pending_corrections: number;
+  pending_payments: number;
+  pending_payments_amount: number;
+  cooler_alerts_24h: number;
+}
+
+export interface DashboardCharts {
+  trend: { date: string; kg: number; farmers: number; sms_sent: number; sms_failed: number }[];
+  coolers: { id: string; name: string; code: string; kg_30d: number }[];
+  top_farmers: { id: string; name: string; farmer_number: string; kg_30d: number }[];
 }
 
 export type ActiveStatus = 'ACTIVE' | 'INACTIVE';

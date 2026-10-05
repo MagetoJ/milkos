@@ -34,6 +34,8 @@ export class UserDB extends Dexie {
   collectors!: Table<Row, string>;
   team!: Table<Row, string>;
   collections!: Table<Row, string>;
+  /** Collection batches (one weighing allocated to farmers); their lines arrive as `collections`. */
+  batches!: Table<Row, string>;
   readings!: Table<Row, string>;
   sensors!: Table<Row, string>;
   notifications!: Table<Row, string>;
@@ -55,6 +57,10 @@ export class UserDB extends Dexie {
       notifications: 'id, cooler_id, created_at, status',
       queue: '++seq, &mutation_id, status, local_id, entity_type',
       meta: 'key',
+    });
+    // v2: collection batches. Adding a table keeps every existing row and the queue untouched.
+    this.version(2).stores({
+      batches: 'id, collection_date, collector_id, cooler_id, status, _status',
     });
   }
 }

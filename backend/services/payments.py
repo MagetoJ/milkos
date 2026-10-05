@@ -1,7 +1,12 @@
 """SMS credit top-ups paid by M-Pesa: submitted by a cooperative, verified or rejected by the superadmin.
 
-Verifying adds the credits to the cooperative's balance in the same transaction as the decision and its
-audit entry, with both rows locked, so a payment can never be credited twice.
+    PENDING --verified by platform staff--> VERIFIED   (a PURCHASE entry in the SMS credit ledger)
+       |-----rejected by platform staff---> REJECTED
+       '-----withdrawn by the cooperative--> CANCELLED
+
+Nothing here talks to M-Pesa: the cooperative reports a confirmation code and platform staff check it
+against the till statement. Only VERIFIED adds credits, in the same transaction as the decision and its
+audit entry; the ledger's unique (payment, PURCHASE) entry means a payment can never be credited twice.
 """
 import datetime
 from typing import Optional
@@ -15,9 +20,9 @@ from core.utils import conflict, field_error, iso, num
 from models.admin import SMSCreditPackage, SMSCreditPayment
 from models.cooperative import Cooperative
 from schemas.platform import SmsTopUpCreate
-from services import audit
+from services import audit, inbox, sms_credits
 
-PENDING, VERIFIED, REJECTED = "PENDING", "VERIFIED", "REJECTED"
+PENDING, VERIFIED, REJECTED, CANCELLED = "PENDING", "VERIFIED", "REJECTED", "CANCELLED"
 
 
 def mask_reference(reference: str) -> str:
@@ -65,11 +70,14 @@ def decide(db: Session, principal: Principal, payment_id: UUID, action: str, rea
     payment.verified_by = principal.user.id
     payment.verified_at = datetime.datetime.utcnow()
     if verified:
-        before = coop.sms_credit_balance or 0
-        coop.sms_credit_balance = before + int(payment.credits_requested)
+        before = sms_credits.available(db, coop.id)
+        sms_credits.purchase(
+            db, coop.id, int(payment.credits_requested), payment.id, principal.user.id,
+            details={"amount_kes": float(payment.amount_kes), "masked_mpesa_ref": payment.masked_mpesa_ref},
+        )
         payment.status = VERIFIED
         old_values["sms_credit_balance"] = before
-        new_values = {"status": VERIFIED, "sms_credit_balance": coop.sms_credit_balance}
+        new_values = {"status": VERIFIED, "sms_credit_balance": sms_credits.available(db, coop.id)}
     else:
         payment.status = REJECTED
         payment.rejection_reason = reason
@@ -79,6 +87,16 @@ def decide(db: Session, principal: Principal, payment_id: UUID, action: str, rea
         entity_type="payment", entity_id=payment.id, cooperative_id=payment.cooperative_id,
         old_values=old_values, new_values=new_values, reason=reason,
     )
+    if payment.cooperative_id:
+        inbox.notify(
+            db, cooperative_id=payment.cooperative_id, roles=("COOP_ADMIN",), category="PAYMENT",
+            type="SMS_PAYMENT_VERIFIED" if verified else "SMS_PAYMENT_REJECTED",
+            severity="INFO" if verified else "WARNING",
+            title=(f"{int(payment.credits_requested):,} SMS credits added" if verified
+                   else f"SMS credit payment {payment.masked_mpesa_ref} was rejected"),
+            body=None if verified else reason, entity_type="payment", entity_id=payment.id,
+            link="/cooperatives/sms-credits",
+        )
     try:
         db.commit()
     except Exception:
@@ -117,6 +135,29 @@ def submit(db: Session, principal: Principal, payload: SmsTopUpCreate) -> SMSCre
         target=f"{credits:,} credits, KES {amount:,.0f}, ref {payment.masked_mpesa_ref} for {coop.name}",
         entity_type="payment", entity_id=payment.id, cooperative_id=coop.id,
         new_values={"credits": credits, "amount_kes": amount},
+    )
+    inbox.platform(
+        db, category="PAYMENT", type="SMS_PAYMENT_SUBMITTED", title=f"{coop.name} submitted an SMS credit payment",
+        body=f"{credits:,} credits, KES {amount:,.0f}, ref {payment.masked_mpesa_ref}. Verify it against the M-Pesa statement.",
+        entity_type="payment", entity_id=payment.id, link="/superadmin/payments",
+    )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def cancel(db: Session, principal: Principal, payment: SMSCreditPayment, reason: Optional[str]) -> SMSCreditPayment:
+    """The cooperative withdraws a payment it submitted that hasn't been reviewed yet."""
+    payment = db.get(SMSCreditPayment, payment.id, with_for_update=True)
+    if payment.status != PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"This payment was already {payment.status.lower()}.")
+    payment.status = CANCELLED
+    payment.rejection_reason = reason
+    audit.record(
+        db, principal, "PAYMENT_CANCELLED",
+        target=f"{int(payment.credits_requested):,} credits, ref {payment.masked_mpesa_ref}",
+        entity_type="payment", entity_id=payment.id, cooperative_id=payment.cooperative_id,
+        old_values={"status": PENDING}, new_values={"status": CANCELLED}, reason=reason,
     )
     db.commit()
     db.refresh(payment)

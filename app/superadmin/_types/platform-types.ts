@@ -251,6 +251,14 @@ export interface Cooler {
   low_battery_percent?: number | null;
   alerts_enabled?: boolean;
   sensors?: SensorDevice[];
+  /** Operational context (collections, scale, alerts). */
+  kg_today?: number;
+  collections_today?: number;
+  collector_count?: number;
+  scale?: { source: string; name: string | null; identifier: string | null; last_used_at: string | null } | null;
+  battery_percent?: number | null;
+  alerts_24h?: number;
+  sensor_status?: 'CONNECTED' | 'DISCONNECTED' | 'UNKNOWN' | null;
   sync_version?: number;
   sync_status?: SyncStatus;
   created_at: string | null;
@@ -390,6 +398,14 @@ export interface Collection {
   collection_date: string;
   collection_time: string | null;
   quantity_litres: number;
+  /** Allocation line of a collection batch (absent on records created offline before syncing). */
+  quantity_kg?: number | null;
+  batch_id?: string | null;
+  batch_reference?: string | null;
+  batch_status?: string | null;
+  weight_source?: 'SCALE' | 'MANUAL' | 'SIMULATED' | 'LITRES' | null;
+  /** ACTIVE, or SUPERSEDED / REVERSED (kept for history, excluded from totals). */
+  record_status?: 'ACTIVE' | 'SUPERSEDED' | 'REVERSED' | null;
   fat_percentage: number | null;
   snf_percentage: number | null;
   temperature_c: number | null;
@@ -407,6 +423,7 @@ export interface Collection {
 export interface CollectionSummary {
   collections: number;
   accepted_litres: number;
+  accepted_kg?: number;
   rejected_collections: number;
   rejected_litres: number;
   average_fat_percentage: number | null;
@@ -436,6 +453,7 @@ export interface PaymentSummary {
   pending: { count: number; amount_kes: number };
   verified: { count: number; amount_kes: number };
   rejected: { count: number; amount_kes: number };
+  cancelled?: { count: number; amount_kes: number };
 }
 
 export interface CollectionsReport {
@@ -465,7 +483,10 @@ export interface CollectionsReport {
   top_farmers: { id: string; full_name: string; farmer_number: string; cooperative_name: string; accepted_litres: number; collections: number }[];
 }
 
-export type SearchType = 'COOPERATIVE' | 'USER' | 'FARMER' | 'COLLECTOR' | 'COOLER' | 'COLLECTION';
+export type SearchType =
+  | 'COOPERATIVE' | 'USER' | 'FARMER' | 'COLLECTOR' | 'COOLER' | 'COLLECTION'
+  | 'BATCH' | 'FARMER_PAYMENT' | 'SMS_PAYMENT' | 'SMS_TRANSACTION' | 'APPLICATION' | 'CORRECTION' | 'REVERSAL'
+  | 'DEVICE' | 'SCALE';
 
 export interface SearchResult {
   type: SearchType;
@@ -480,7 +501,7 @@ export interface Setting {
   key: string;
   value: unknown;
   default: unknown;
-  type: 'boolean' | 'number' | 'integer' | 'email' | 'phone';
+  type: 'boolean' | 'number' | 'integer' | 'email' | 'phone' | 'text';
   group: string;
   label: string;
   help: string;

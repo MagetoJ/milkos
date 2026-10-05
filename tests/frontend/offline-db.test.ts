@@ -15,7 +15,7 @@ describe('offline database', () => {
     expect(db.name).toBe(userDbName('user-a'));
     const tables = db.tables.map((t) => t.name).sort();
     expect(tables).toEqual(
-      ['centres', 'collections', 'collectors', 'cooperative', 'coolers', 'farmers', 'meta', 'notifications', 'queue', 'readings', 'sensors', 'team'].sort(),
+      ['batches', 'centres', 'collections', 'collectors', 'cooperative', 'coolers', 'farmers', 'meta', 'notifications', 'queue', 'readings', 'sensors', 'team'].sort(),
     );
     // Another user's data lives in another database.
     const other = openUserDb('user-b');

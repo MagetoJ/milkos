@@ -14,6 +14,7 @@ export const TABLE_OF: Record<PulledEntity, LocalTable> = {
   collector: 'collectors',
   team_member: 'team',
   collection: 'collections',
+  collection_batch: 'batches',
   cooler_reading: 'readings',
   sensor: 'sensors',
   notification: 'notifications',
@@ -23,6 +24,7 @@ export const PULLED_OF_MUTATION: Record<MutationEntity, PulledEntity> = {
   farmer: 'farmer',
   centre: 'centre',
   collection: 'collection',
+  collection_batch: 'collection_batch',
   cooler_reading: 'cooler_reading',
   sensor_event: 'sensor',
 };
@@ -30,6 +32,7 @@ export const PULLED_OF_MUTATION: Record<MutationEntity, PulledEntity> = {
 /** Fields that point at other records, rewritten if the server gave a record a different id. */
 const REFERENCES: Partial<Record<LocalTable, string[]>> = {
   collections: ['farmer_id', 'cooler_id', 'collector_id', 'centre_id'],
+  batches: ['cooler_id', 'collector_id', 'centre_id'],
   farmers: ['centre_id'],
   readings: ['cooler_id', 'sensor_id'],
 };
@@ -160,6 +163,7 @@ export async function pruneHistory(db: UserDB, window: { collection_days: number
   const readingsBefore = new Date(Date.now() - window.reading_days * day).toISOString();
   const notificationsBefore = new Date(Date.now() - window.notification_days * day).toISOString();
   await db.collections.where('collection_date').below(collectionsBefore).filter((r) => r._status === 'synced').delete();
+  await db.batches.where('collection_date').below(collectionsBefore).filter((r) => r._status === 'synced').delete();
   await db.readings.where('measured_at').below(readingsBefore).filter((r) => r._status === 'synced').delete();
   await db.notifications.where('created_at').below(notificationsBefore).filter((r) => r._status === 'synced').delete();
 }

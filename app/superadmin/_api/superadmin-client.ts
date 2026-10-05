@@ -67,6 +67,12 @@ export const createCooperative = (data: CooperativeInput) => request<Cooperative
 export const updateCooperative = (id: string, data: CooperativeInput) => request<Cooperative>(`/cooperatives/${id}`, send('PUT', data));
 export const setCooperativeStatus = (id: string, status: 'ACTIVE' | 'SUSPENDED', reason?: string) =>
   request<Cooperative>(`/cooperatives/${id}/status`, send('PATCH', { status, reason }));
+export interface SmsLedger {
+  balances: { available: number; reserved: number; consumed: number; refunded: number; purchased: number; adjusted: number; balance: number };
+  transactions: { id: string; transaction_type: string; amount: number; reference: string; reason: string | null; actor_email: string | null; created_at: string }[];
+}
+export const getSmsLedger = (id: string) => request<SmsLedger>(`/cooperatives/${id}/sms-ledger?limit=20`);
+
 export const adjustSmsCredits = (id: string, delta: number, reason: string) =>
   request<Cooperative>(`/cooperatives/${id}/sms-credits`, send('POST', { delta, reason }));
 
