@@ -175,7 +175,7 @@ export async function searchFarmers(search: string, limit = 20): Promise<FarmerO
       .sort((a, b) => String(a.last_name).localeCompare(String(b.last_name)) || String(a.first_name).localeCompare(String(b.first_name)))
       .slice(0, limit);
     return rows.map((f) => ({
-      id: f.id, full_name: String(f.full_name), farmer_number: String(f.farmer_number), phone: masked(f),
+      id: f.id, full_name: String(f.full_name), farmer_number: String(f.farmer_number), phone: masked({ phone: f.phone, phone_masked: f.phone_masked }),
       centre_id: (f.centre_id as string) ?? null,
     }));
   }

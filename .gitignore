@@ -21,3 +21,6 @@ __pycache__/
 *.tsbuildinfo
 *.log
 *.patch
+
+# pnpm local store
+.pnpm-store/

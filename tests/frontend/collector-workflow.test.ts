@@ -111,7 +111,7 @@ describe('collection draft state machine', () => {
     expect(canGo(d, 'allocate')).toBe(false);
     d = reduceDraft(d, { type: 'capture', weight: { kg: 100, source: 'MANUAL', tare_kg: null, captured_at: 'now' } });
     expect(d).toMatchObject({ status: 'CAPTURED', step: 'allocate' });
-    d = reduceDraft(d, { type: 'add_farmer', farmer: farmer('a'), quantity_kg: '60' });
+    d = reduceDraft(d, { type: 'add_farmer', farmer: farmer('a'), quantity_kg: '100' });
     d = reduceDraft(d, { type: 'add_farmer', farmer: farmer('a'), quantity_kg: '10' }); // same farmer again: ignored
     expect(d.lines).toHaveLength(1);
     expect(d.status).toBe('ALLOCATING');
