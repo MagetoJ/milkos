@@ -10,6 +10,7 @@ import {
 } from '@/components/admin';
 import { useToast } from '@/app/superadmin/_components/toast';
 import { formatDate, formatDateTime, formatKes, isoDay } from '@/lib/format';
+import { useOpenFromLink } from '@/lib/hooks/use-open-from-link';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
 import { cancelPrice, createPrice, listPrices, type MilkPrice } from '../_api/finance-client';
@@ -23,6 +24,8 @@ export function PricingView() {
   const [adding, setAdding] = useState(false);
   const [cancelling, setCancelling] = useState<MilkPrice | null>(null);
   const d = prices.data;
+  // Quick action "Set monthly price" (?new=1), once we know this person may manage prices.
+  useOpenFromLink(!!d?.can_manage, () => setAdding(true));
   if (prices.error && !d) return <ErrorState message={prices.error} onRetry={prices.reload} />;
 
   return (

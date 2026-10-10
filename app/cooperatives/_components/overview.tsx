@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, RefreshCw } from 'lucide-react';
 import { ConnectionStatus, LocalDataNote, SyncPill, SyncStatus } from '@/components/offline/status';
 import { formatDateTime, formatLitres } from '@/lib/format';
 import { hasUserDb } from '@/lib/offline/db';
@@ -12,7 +12,8 @@ import type { AlertNotification, Collection, CoolerReading } from '@/app/superad
 import { formatDate, formatNumber, formatPhone, greeting } from '../_lib/format';
 import { useCoop } from './coop-context';
 import { DashboardCharts, DashboardKpiGrid } from './dashboard-insights';
-import { primaryButton, secondaryButton } from './ui';
+import { QuickActions } from './quick-actions';
+import { secondaryButton } from './ui';
 
 function Metric({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: 'warn' }) {
   return (
@@ -99,12 +100,10 @@ export function Overview() {
             <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <Link href="/cooperatives/farmers?new=1" className={primaryButton}>
-            <Plus className="size-4" />
-            Add farmer
-          </Link>
         </div>
       </header>
+
+      <QuickActions role={overview.role} />
 
       <dl className="grid grid-cols-2 divide-[#EEF1EC] rounded-xl border border-[#DDE3DE] bg-white md:grid-cols-4 md:divide-x [&>*:nth-child(-n+2)]:border-b [&>*:nth-child(-n+2)]:border-[#EEF1EC] md:[&>*:nth-child(-n+2)]:border-b-0">
         <Metric

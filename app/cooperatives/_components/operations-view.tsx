@@ -21,6 +21,7 @@ import {
 import type { Collector, Cooler } from '@/app/superadmin/_types/platform-types';
 import { useToast } from '@/app/superadmin/_components/toast';
 import { formatLitres, formatNumber, formatPhone } from '@/lib/format';
+import { useOpenFromLink } from '@/lib/hooks/use-open-from-link';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
 import { createCooler, listCollectors, listCoolers, listTeam, updateCollector, updateCooler } from '../_api/coop-client';
@@ -36,6 +37,8 @@ export function OperationsView() {
   useReloadOn(['coolers', 'collectors'], () => Promise.all([coolers.reload(), collectors.reload()]));
   const [editingCooler, setEditingCooler] = useState<Cooler | 'new' | null>(null);
   const [assigning, setAssigning] = useState<Collector | null>(null);
+  // Quick action "Add cooler" (?new=1); only the administrator may add one.
+  useOpenFromLink(isAdmin, () => setEditingCooler('new'));
 
   async function toggle(cooler: Cooler, data: { is_operational?: boolean; status?: 'ACTIVE' | 'INACTIVE' }, message: string) {
     try {

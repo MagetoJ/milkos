@@ -10,6 +10,7 @@ import {
 } from '@/components/admin';
 import { useToast } from '@/app/superadmin/_components/toast';
 import { formatDateTime, formatKes, formatNumber, humanize } from '@/lib/format';
+import { useOpenFromLink } from '@/lib/hooks/use-open-from-link';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
 import {
@@ -38,6 +39,8 @@ export function SmsCreditCenter() {
   const [cancelling, setCancelling] = useState<SmsPayment | null>(null);
   const [answering, setAnswering] = useState<SmsPayment | null>(null);
   const c = center.data;
+  // Quick action "Buy SMS credits" (?new=1), once we know this person may purchase.
+  useOpenFromLink(!!c?.can_purchase, () => setBuying(true));
 
   if (center.error && !c) return <ErrorState message={center.error} onRetry={center.reload} />;
 

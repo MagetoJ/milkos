@@ -39,7 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 type Dialog =
-  | { kind: 'add' }
+  | { kind: 'add'; role?: TeamRole }
   | { kind: 'edit'; member: TeamMember }
   | { kind: 'status'; member: TeamMember; to: 'ACTIVE' | 'SUSPENDED' | 'DISABLED' }
   | { kind: 'revoke'; member: TeamMember }
@@ -59,9 +59,11 @@ export function TeamView() {
   const [filter, setFilter] = useState<Filter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // ?new=1 opens the add form; ?new=collector opens it with the Collector role chosen (quick action "Add collector").
   useEffect(() => {
-    if (params.get('new') === '1') {
-      if (canManageTeam) setDialog({ kind: 'add' });
+    const wanted = params.get('new');
+    if (wanted === '1' || wanted === 'collector') {
+      if (canManageTeam) setDialog({ kind: 'add', role: wanted === 'collector' ? 'COLLECTOR' : undefined });
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, [params, canManageTeam]);
@@ -198,7 +200,7 @@ export function TeamView() {
         )}
       </section>
 
-      {dialog?.kind === 'add' && <AddMember onClose={() => setDialog(null)} onDone={() => Promise.all([team.reload(), refresh()]).then(() => undefined)} />}
+      {dialog?.kind === 'add' && <AddMember initialRole={dialog.role} onClose={() => setDialog(null)} onDone={() => Promise.all([team.reload(), refresh()]).then(() => undefined)} />}
       {dialog?.kind === 'edit' && (
         <EditMember
           member={dialog.member}
@@ -214,13 +216,13 @@ export function TeamView() {
   );
 }
 
-function AddMember({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
+function AddMember({ initialRole, onClose, onDone }: { initialRole?: TeamRole; onClose: () => void; onDone: () => Promise<void> }) {
   const { busy, fieldErrors, formError, run } = useSubmit();
   const { overview } = useCoop();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<TeamRole>('COLLECTOR');
+  const [role, setRole] = useState<TeamRole>(initialRole ?? 'COLLECTOR');
   const [step, setStep] = useState<'form' | 'review' | 'done'>('form');
   const [created, setCreated] = useState<TeamMember | null>(null);
 

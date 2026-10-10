@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { coopNav, type NavInput } from '@/app/cooperatives/_components/nav';
+import { QUICK_ACTIONS, QuickActions, quickActionsFor } from '@/app/cooperatives/_components/quick-actions';
 import { CoolerSwitcher, TenantSwitcher, coolerStatus, tenantStatus } from '@/components/shell/context-switchers';
 import { can, canAny } from '@/lib/permissions';
 
@@ -50,6 +51,42 @@ describe('navigation groups (spec §6)', () => {
     expect(item('Corrections & reversals')?.count).toBe(5);
     expect(item('Settings')).toBeTruthy();
     expect(coopNav({ ...base, role: 'MANAGER' }).flatMap((g) => g.items).map((x) => x.label)).toContain('My settings');
+  });
+});
+
+describe('manager quick actions (spec §17)', () => {
+  const names = (role: string) => quickActionsFor(role).map((a) => a.label);
+
+  it('offers the five spec actions to a cooperative administrator', () => {
+    expect(names('COOP_ADMIN')).toEqual(['New farmer', 'Add collector', 'Add cooler', 'Set monthly price', 'Buy SMS credits']);
+  });
+
+  it('offers a manager only what a manager may do (the server enforces it too)', () => {
+    expect(names('MANAGER')).toEqual(['New farmer']);
+  });
+
+  it('offers nothing to collectors, farmers or unknown roles, and renders nothing for them', () => {
+    for (const role of ['COLLECTOR', 'FARMER', 'NOBODY']) {
+      expect(names(role)).toEqual([]);
+      expect(html(createElement(QuickActions, { role }))).toBe('');
+    }
+  });
+
+  it('links each action to the screen that owns its form, opened with ?new=', () => {
+    expect(QUICK_ACTIONS.map((a) => a.href)).toEqual([
+      '/cooperatives/farmers?new=1', '/cooperatives/team?new=collector', '/cooperatives/operations?new=1',
+      '/cooperatives/pricing?new=1', '/cooperatives/sms-credits?new=1',
+    ]);
+    const out = html(createElement(QuickActions, { role: 'COOP_ADMIN' }));
+    expect(out).toContain('aria-label="Quick actions"');
+    expect(out).toContain('href="/cooperatives/pricing?new=1"');
+  });
+
+  it('only shows actions whose permission the role really holds', () => {
+    for (const a of QUICK_ACTIONS) {
+      expect(can('COOP_ADMIN', a.permission)).toBe(true);
+      expect(quickActionsFor('MANAGER').includes(a)).toBe(can('MANAGER', a.permission));
+    }
   });
 });
 
