@@ -40,6 +40,7 @@ export interface FarmerDashboard {
   farmer: { name: string; farmer_number: string; cooperative_name: string | null };
   period: { range: Range; from: string; to: string };
   today: { kg: number; deliveries: number };
+  this_month: { kg: number; deliveries: number; month: string };
   totals: { kg: number; litres: number; deliveries: number; rejected: number; earnings: number; earnings_is_estimate: boolean; unpriced_deliveries: number };
   daily: { date: string; kg: number }[];
   recent: FarmerCollection[];

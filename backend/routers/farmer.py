@@ -144,6 +144,8 @@ def dashboard(
     ) if accepted else Decimal(0)
     unpriced = sum(1 for l in accepted if not prices.get(l.id) or prices[l.id][0] is None)
     today_lines = [l for l in in_range if l.collection_date == today]
+    # "This Month" is the calendar month to date whatever period the screen is showing (spec §15).
+    month_lines = base.filter(MilkCollection.collection_date >= today.replace(day=1), MilkCollection.collection_date <= today).all()
     recent = base.order_by(MilkCollection.collection_date.desc(), MilkCollection.collection_time.desc()).limit(5).all()
     daily: dict[str, float] = {}
     for l in accepted:
@@ -161,6 +163,11 @@ def dashboard(
         "today": {
             "kg": round(sum(float(l.quantity_kg) for l in today_lines if l.quality_status == QualityStatus.ACCEPTED), 2),
             "deliveries": len(today_lines),
+        },
+        "this_month": {
+            "kg": round(sum(float(l.quantity_kg) for l in month_lines if l.quality_status == QualityStatus.ACCEPTED), 2),
+            "deliveries": len(month_lines),
+            "month": today.strftime("%Y-%m"),
         },
         "totals": {
             "kg": round(sum(float(l.quantity_kg) for l in accepted), 2),

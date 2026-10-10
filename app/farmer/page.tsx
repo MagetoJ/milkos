@@ -35,11 +35,18 @@ export default function FarmerHome() {
       </div>
       {error && <Notice tone="danger">{error}</Notice>}
 
-      <section aria-label="Today" className="rounded-2xl border border-mo-line bg-white p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-mo-muted">Today</p>
-        <p className="mt-1 text-3xl font-bold tabular-nums">{data ? kg(data.today.kg) : '–'}</p>
-        <p className="text-sm text-mo-muted">{data ? `${data.today.deliveries} deliver${data.today.deliveries === 1 ? 'y' : 'ies'}` : ''}</p>
-      </section>
+      <div className="grid grid-cols-2 gap-2">
+        <section aria-label="Today's milk" className="rounded-2xl border border-mo-line bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-mo-muted">Today&apos;s milk</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums">{data ? kg(data.today.kg) : '–'}</p>
+          <p className="text-sm text-mo-muted">{data ? `${data.today.deliveries} deliver${data.today.deliveries === 1 ? 'y' : 'ies'}` : ''}</p>
+        </section>
+        <section aria-label="This month" className="rounded-2xl border border-mo-line bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-mo-muted">This month</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums">{data ? kg(data.this_month.kg) : '–'}</p>
+          <p className="text-sm text-mo-muted">{data ? `${data.this_month.deliveries} deliver${data.this_month.deliveries === 1 ? 'y' : 'ies'}` : ''}</p>
+        </section>
+      </div>
 
       <div role="group" aria-label="Period" className="flex gap-2 overflow-x-auto">
         {RANGES.map((r) => (
@@ -98,7 +105,7 @@ export default function FarmerHome() {
 
           <section aria-labelledby="recent-heading">
             <div className="mb-2 flex items-center justify-between">
-              <h2 id="recent-heading" className="text-base font-semibold">Recent deliveries</h2>
+              <h2 id="recent-heading" className="text-base font-semibold">Recent collections</h2>
               <Link href="/farmer/collections" className="text-sm font-medium text-mo-brand">See all</Link>
             </div>
             {data.recent.length ? (

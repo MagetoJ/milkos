@@ -111,3 +111,15 @@ def test_farmer_records_are_never_visible_in_another_farmers_dashboard_totals(cl
     assert jane["farmer"]["name"].startswith("Jane") and jane["totals"]["deliveries"] == 1
     assert sum(d["kg"] for d in jane["daily"]) == 10
     assert datetime.date.fromisoformat(jane["period"]["to"]) == TODAY
+
+
+def test_this_month_is_calendar_month_to_date_whatever_the_range(client, session, world):  # noqa: F811
+    _link(session, world["a"], world["jane"], "jane@farm.ke", "+254712345601")
+    jane = headers_for(client, "jane@farm.ke")
+    confirm(client, world["col_a"], batch_body(world, [(world["jane"], 8), (world["peter"], 3)], captured=11, collection_date=TODAY.isoformat()))
+    # 45 days back is always in an earlier month, so it must never count towards "this month".
+    confirm(client, world["col_a"], batch_body(world, [(world["jane"], 20)], captured=20, collection_date=(TODAY - 45 * DAY).isoformat()))
+    for rng in ("today", "7d", "30d", "3m"):
+        dash = client.get(f"{FARMER}/dashboard?range={rng}", headers=jane).json()
+        assert dash["this_month"] == {"kg": 8, "deliveries": 1, "month": TODAY.strftime("%Y-%m")}, rng
+    assert client.get(f"{FARMER}/dashboard?range=3m", headers=jane).json()["totals"]["kg"] == 28
