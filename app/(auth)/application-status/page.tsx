@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PublicShell } from '@/components/public/public-shell';
 import { Labeled, Notice, field, primary } from '@/components/settings/settings-ui';
 import { formatDateTime } from '@/lib/format';
@@ -15,8 +16,8 @@ interface Status {
 }
 
 /** An applicant checks their cooperative application with its reference AND the email they applied with. */
-export default function ApplicationStatusPage() {
-  const [reference, setReference] = useState('');
+function StatusForm() {
+  const [reference, setReference] = useState(useSearchParams().get('reference') ?? '');
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<Status | null>(null);
   const [error, setError] = useState('');
@@ -70,4 +71,9 @@ export default function ApplicationStatusPage() {
       )}
     </PublicShell>
   );
+}
+
+export default function ApplicationStatusPage() {
+  // useSearchParams needs a Suspense boundary so the page can still be prerendered.
+  return <Suspense fallback={null}><StatusForm /></Suspense>;
 }

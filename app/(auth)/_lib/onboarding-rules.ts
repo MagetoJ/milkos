@@ -74,6 +74,7 @@ export function validateField(name: keyof OnboardingForm, form: OnboardingForm):
       if (!/[A-Z]/.test(v)) return 'Include at least one capital letter.';
       return undefined;
     case 'confirm_password':
+      if (!v) return 'Type the password again to confirm it.';
       return v !== form.password ? 'Passwords don’t match.' : undefined;
     default:
       return undefined;
