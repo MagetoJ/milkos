@@ -36,3 +36,22 @@ Noted, not yet fixed
 - The login page is branded "Milkflow Portal" and some copy says "Milkflow"; the product is MilkOS (Phase 5 clean-up).
 - The login page says approval is by "Superadmin"; applicants are told the MilkOS team.
 - Applicant notifications (received/approved/rejected) are logged only; no email/SMS is sent.
+
+## Phase 2: shell, context and navigation
+
+| Spec | Item | Status | Evidence |
+|---|---|---|---|
+| §6, §35 | Cooperative desktop menu grouped Overview / Operations / Finance / Reporting / Management / Governance, filtered by permission | **Done** | `app/cooperatives/_components/nav.ts` (`coopNav`), `lib/permissions.json` mirrors `core/permissions.py`; `backend/tests/test_permissions_mirror.py`, `tests/frontend/shell.test.ts` |
+| §6 | Platform-admin (superadmin) menu | **Not changed** | Already grouped (`admin-shell.tsx`) but not to the §6 names; the §6 Management items "Roles & Permissions" and "Applications" are platform concepts with no coop screen. Revisit with the Security Events screen in Phase 4. |
+| §6 | Spec items with no screen yet: Collectors (own page), Exports, Scale Devices, Reversals (own page), Audit Logs / Security Events (cooperative side) | **Not done** | Collectors live inside Team / "Coolers & collectors"; reversals inside "Corrections & reversals"; Exports/Scale Devices are Phase 4 |
+| §7 | Cooperative context (name / logo, code, place, status) and cooler context (name, place, status), top bar on desktop, header on mobile, cooler switching | **Done for cooler; cooperative is display-only** | `components/shell/context-switchers.tsx`, `lib/hooks/use-working-cooler.ts` |
+| §7 | Switching between cooperatives | **Not done (needs a decision)** | A user belongs to exactly one cooperative (`users.cooperative_id`); there is no multi-membership model. Cooperatives have no logo column, so initials are shown. |
+| §16, §34 | Collector tabs Home / Collections / Farmers / Sync / **More**; "+ New Collection" one tap from every screen | **Done** | `collector-shell.tsx`, `app/collector/more/page.tsx`; Home keeps its dominant button, the wizard is the flow itself |
+| §17 | Quick actions New Farmer, Add Collector, Add Cooler, Set Monthly Price, Buy SMS Credits | **Done** | `quick-actions.tsx`, `use-open-from-link.ts` (`?new=`); admin sees all five, a manager only "New farmer" per the permission table |
+
+Behaviour notes
+- The working cooler only decides what the header shows and which cooler is pre-selected for a new collection. The collection wizard still starts at the cooler step on every collection and the server validates the cooler against the cooperative.
+- Navigation filtering hides links only; every action is still authorised by the backend.
+
+Not verified
+- The signed-in shells were not looked at in a browser (no seeded session available); verified by typecheck, 92 frontend tests, a production build, and the routes returning 200. A visual/responsive pass is part of Phase 5.
