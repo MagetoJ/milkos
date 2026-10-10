@@ -8,6 +8,8 @@ export interface CollectorContextValue {
   role: string;
   /** This phone holds an offline session (data and queue in IndexedDB). */
   offlineCapable: boolean;
+  /** Signs out (asks first when changes are still waiting to sync). */
+  signOut?: () => void;
 }
 
 const Ctx = createContext<CollectorContextValue>({ userId: null, name: null, role: 'COLLECTOR', offlineCapable: false });

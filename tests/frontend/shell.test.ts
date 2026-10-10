@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { coopNav, type NavInput } from '@/app/cooperatives/_components/nav';
 import { QUICK_ACTIONS, QuickActions, quickActionsFor } from '@/app/cooperatives/_components/quick-actions';
+import { NAV, hasOwnNewCollection } from '@/app/collector/_components/collector-shell';
 import { CoolerSwitcher, TenantSwitcher, coolerStatus, tenantStatus } from '@/components/shell/context-switchers';
 import { can, canAny } from '@/lib/permissions';
 
@@ -87,6 +88,27 @@ describe('manager quick actions (spec §17)', () => {
       expect(can('COOP_ADMIN', a.permission)).toBe(true);
       expect(quickActionsFor('MANAGER').includes(a)).toBe(can('MANAGER', a.permission));
     }
+  });
+});
+
+describe('collector navigation (spec §16, §34)', () => {
+  it('has Home, Collections, Farmers, Sync and More, in that order', () => {
+    expect(NAV.map((n) => n.label)).toEqual(['Home', 'Collections', 'Farmers', 'Sync', 'More']);
+    expect(NAV.at(-1)?.href).toBe('/collector/more');
+    expect(new Set(NAV.map((n) => n.href)).size).toBe(NAV.length);
+  });
+
+  it('shows the + New Collection button everywhere except where it is already the main action or the flow itself', () => {
+    for (const path of ['/collector/collections', '/collector/farmers', '/collector/sync', '/collector/more', '/collector/settings', '/collector/notifications']) {
+      expect(hasOwnNewCollection(path), path).toBe(false);
+    }
+    expect(hasOwnNewCollection('/collector')).toBe(true); // Home has the dominant button
+    expect(hasOwnNewCollection('/collector/new')).toBe(true); // the wizard
+  });
+
+  it('reaches every collector tab from the bar and New Collection in one tap from each', () => {
+    // Every tab screen is outside the "has its own" set, so each shows the button (Home shows the dominant one).
+    for (const n of NAV.filter((x) => x.href !== '/collector')) expect(hasOwnNewCollection(n.href)).toBe(false);
   });
 });
 

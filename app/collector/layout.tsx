@@ -82,8 +82,8 @@ export default function CollectorLayout({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
       <OfflineProvider userId={state.userId}>
-        <CollectorProvider value={{ userId: state.userId, name: state.name, role: state.role, offlineCapable: !!state.userId }}>
-          <CollectorShell cooperativeName={state.cooperativeName} userName={state.name} onSignOut={() => void signOut()}>
+        <CollectorProvider value={{ userId: state.userId, name: state.name, role: state.role, offlineCapable: !!state.userId, signOut: () => void signOut() }}>
+          <CollectorShell cooperativeName={state.cooperativeName} userName={state.name} userId={state.userId}>
             {children}
           </CollectorShell>
         </CollectorProvider>

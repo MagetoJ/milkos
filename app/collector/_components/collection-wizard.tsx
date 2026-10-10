@@ -16,6 +16,7 @@ import { getRawRow } from '@/lib/offline/repositories';
 import type { RecordSyncStatus } from '@/lib/offline/types';
 import { useScale } from '@/lib/scale/use-scale';
 import { useIsOnline, useLocalQuery, useSyncState } from '@/lib/sync/hooks';
+import { useWorkingCooler } from '@/lib/hooks/use-working-cooler';
 import { useCollector } from './collector-context';
 import { Button } from './ui';
 import { AllocateStep, ConfirmBar, CoolerStep, ReviewStep, ScaleStep, SuccessStep, WeightStep } from './wizard-steps';
@@ -37,7 +38,9 @@ export function CollectionWizard() {
   const scale = useScale();
   const [draft, dispatch] = useReducer(reducer, null);
   const [coolers, setCoolers] = useState<CoolerOption[]>([]);
-  const [defaultCoolerId, setDefaultCoolerId] = useState<string | null>(null);
+  const [assignedCoolerId, setDefaultCoolerId] = useState<string | null>(null);
+  // The cooler chosen in the header is pre-selected; it is still shown as a choice, never skipped.
+  const [defaultCoolerId] = useWorkingCooler(`collector.${collector.userId ?? ''}`, coolers.map((c) => c.id), assignedCoolerId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
