@@ -6,6 +6,7 @@
 //   offline  the batch is saved on this device as "pending sync" and pushed when the connection returns;
 //   resend   the same id is never confirmed twice (the server answers "duplicate").
 // Corrections and reversals need a connection: they are reviewed by another person on the server.
+import { maskPhone } from '@/lib/format';
 import { ApiError, createApi, NEEDS_CONNECTION, send, toQuery } from '@/lib/api-client';
 import { getMeta, hasUserDb, setMeta, userDb } from '@/lib/offline/db';
 import { nowIso } from '@/lib/offline/ids';
@@ -135,9 +136,13 @@ export interface FarmerOption {
   id: string;
   full_name: string;
   farmer_number: string;
+  /** Always masked (0712••••78): the collection screens never need a farmer's full number. */
   phone: string | null;
   centre_id: string | null;
 }
+
+const masked = (row: { phone?: unknown; phone_masked?: unknown }): string | null =>
+  (row.phone_masked as string | undefined) ?? (row.phone ? maskPhone(String(row.phone)) : null);
 
 export async function coolerOptions(): Promise<{ coolers: CoolerOption[]; defaultCoolerId: string | null }> {
   if (await localReady()) {
@@ -170,12 +175,12 @@ export async function searchFarmers(search: string, limit = 20): Promise<FarmerO
       .sort((a, b) => String(a.last_name).localeCompare(String(b.last_name)) || String(a.first_name).localeCompare(String(b.first_name)))
       .slice(0, limit);
     return rows.map((f) => ({
-      id: f.id, full_name: String(f.full_name), farmer_number: String(f.farmer_number), phone: (f.phone as string) ?? null,
+      id: f.id, full_name: String(f.full_name), farmer_number: String(f.farmer_number), phone: masked(f),
       centre_id: (f.centre_id as string) ?? null,
     }));
   }
-  const data = await collectionsApi<{ farmers: FarmerOption[] }>(`/options${toQuery({ search })}`);
-  return data.farmers.slice(0, limit);
+  const data = await collectionsApi<{ farmers: (FarmerOption & { phone_masked?: string })[] }>(`/options${toQuery({ search })}`);
+  return data.farmers.slice(0, limit).map((f) => ({ ...f, phone: masked(f) }));
 }
 
 // ---------------- confirming ----------------

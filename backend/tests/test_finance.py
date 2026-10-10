@@ -181,7 +181,7 @@ def test_correcting_paid_milk_creates_an_adjustment_for_the_next_payment(client,
     assert first["net_amount"] == 500
 
     # The collection is corrected to 8 KG after it was paid.
-    request = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 8)], 10), headers=world["col_a"]).json()
+    request = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 8)], 8), headers=world["col_a"]).json()
     client.post(f"{REQUESTS}/{request['id']}/approve", json={}, headers=world["admin_a"])
     adjustments = client.get(f"{COOP}/farmer-payments/adjustments", headers=world["admin_a"]).json()["items"]
     assert [a["amount"] for a in adjustments] == [-500] and adjustments[0]["status"] == "PENDING"

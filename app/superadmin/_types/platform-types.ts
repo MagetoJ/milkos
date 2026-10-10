@@ -12,7 +12,7 @@ export interface Page<T> {
 export type ActiveStatus = 'ACTIVE' | 'INACTIVE';
 export type CooperativeStatus = 'ACTIVE' | 'SUSPENDED';
 export type QualityStatus = 'ACCEPTED' | 'REJECTED' | 'PENDING';
-export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type PaymentStatus = 'PENDING' | 'AWAITING_INFORMATION' | 'VERIFIED' | 'REJECTED' | 'CANCELLED';
 
 export interface AuditEntry {
   id: string;
@@ -102,16 +102,28 @@ export interface CooperativeInput {
   contact_email?: string | null;
   contact_phone?: string | null;
   estimated_daily_liters?: number | null;
-  admin?: { full_name: string; email: string; phone: string; password: string } | null;
+  admin?: { full_name: string; email: string; phone: string } | null;
 }
 
 export interface PlatformUser {
   id: string;
   full_name: string;
-  email: string;
+  email: string | null;
   phone_number: string;
+  phone_masked?: string;
+  phone_verified?: boolean;
   role: UserRole;
   is_active: boolean;
+  account_status?: 'PENDING_APPROVAL' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+  status_reason?: string | null;
+  mfa_enabled?: boolean;
+  invited_at?: string | null;
+  activated_at?: string | null;
+  activation?: {
+    invited_at: string | null; link_sent_at: string | null; link_expires_at: string | null; link_state: string;
+    sms_status: string | null; sms_error: string | null; last_sms_attempt_at: string | null; phone_verified: boolean;
+  } | null;
+  activation_sms?: { sms_status: string; sms_sent: boolean; sms_error: string | null };
   cooperative_id: string | null;
   cooperative_name: string | null;
   cooperative_code: string | null;
@@ -127,10 +139,9 @@ export interface PlatformUserDetail extends PlatformUser {
 
 export interface UserInput {
   full_name?: string;
-  email?: string;
+  email?: string | null;
   phone?: string;
   role?: UserRole;
-  password?: string;
   cooperative_id?: string | null;
   farmer_id?: string | null;
 }
@@ -204,6 +215,9 @@ export interface Collector {
   cooler_name: string | null;
   status: ActiveStatus;
   account_active: boolean;
+  account_status?: 'PENDING_APPROVAL' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+  phone_verified?: boolean;
+  activation_sms?: { sms_status: string; sms_sent: boolean; sms_error: string | null };
   created_at: string | null;
   updated_at: string | null;
   stats: Stats;
@@ -212,9 +226,8 @@ export interface Collector {
 export interface CollectorInput {
   cooperative_id?: string;
   full_name?: string;
-  email?: string;
+  email?: string | null;
   phone?: string;
-  password?: string;
   collector_number?: string;
   assigned_area?: string | null;
   cooler_id?: string | null;
@@ -443,6 +456,10 @@ export interface Payment {
   rejection_reason: string | null;
   submitted_at: string | null;
   verified_at: string | null;
+  info_request?: string | null;
+  info_requested_at?: string | null;
+  info_response?: string | null;
+  info_responded_at?: string | null;
 }
 
 export interface PaymentDetail extends Payment {
@@ -451,6 +468,7 @@ export interface PaymentDetail extends Payment {
 
 export interface PaymentSummary {
   pending: { count: number; amount_kes: number };
+  awaiting_information?: { count: number; amount_kes: number };
   verified: { count: number; amount_kes: number };
   rejected: { count: number; amount_kes: number };
   cancelled?: { count: number; amount_kes: number };

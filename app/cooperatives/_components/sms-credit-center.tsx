@@ -13,7 +13,7 @@ import { formatDateTime, formatKes, formatNumber, humanize } from '@/lib/format'
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
 import {
-  buyCredits, cancelCreditPayment, getCreditCenter, listSmsMessages, retrySms, updateSmsSettings,
+  answerPaymentQuestion, buyCredits, cancelCreditPayment, getCreditCenter, listSmsMessages, retrySms, updateSmsSettings,
   type CreditTransaction, type SmsMessage, type SmsPayment,
 } from '../_api/finance-client';
 import { MobileCards } from './mobile-cards';
@@ -21,8 +21,11 @@ import { MobileCards } from './mobile-cards';
 const TXN_TONE: Record<string, 'green' | 'amber' | 'grey' | 'blue' | 'red'> = {
   PURCHASE: 'green', ADJUSTMENT: 'blue', RESERVED: 'amber', CONSUMED: 'grey', REFUNDED: 'green', EXPIRY: 'red',
 };
+// One-time links and codes can't be resent (the server never keeps them); a new one is issued instead.
+const SECRET_SMS = ['ACCOUNT_ACTIVATION', 'PHONE_OTP', 'PASSWORD_RESET'];
+
 const SMS_TONE: Record<string, 'green' | 'amber' | 'grey' | 'blue' | 'red'> = {
-  SENT: 'green', PENDING: 'amber', PENDING_PROVIDER: 'amber', RESERVED: 'blue', SENDING: 'blue', FAILED: 'red', REFUNDED: 'red', SKIPPED: 'grey',
+  DELIVERED: 'green', SENT: 'green', PENDING: 'amber', PENDING_PROVIDER: 'amber', RESERVED: 'blue', SENDING: 'blue', FAILED: 'red', REFUNDED: 'red', SKIPPED: 'grey',
 };
 
 export function SmsCreditCenter() {
@@ -33,6 +36,7 @@ export function SmsCreditCenter() {
   const messages = useResource(() => listSmsMessages({ page: msgPage, page_size: 10 }), [msgPage]);
   const [buying, setBuying] = useState(false);
   const [cancelling, setCancelling] = useState<SmsPayment | null>(null);
+  const [answering, setAnswering] = useState<SmsPayment | null>(null);
   const c = center.data;
 
   if (center.error && !c) return <ErrorState message={center.error} onRetry={center.reload} />;
@@ -51,7 +55,7 @@ export function SmsCreditCenter() {
     { key: 'status', header: 'Status', cell: (m) => <span title={m.error ?? undefined}><StatusBadge status={m.status} tone={SMS_TONE[m.status]} label={m.status === 'SENT' ? 'Sent (provider accepted)' : humanize(m.status)} /></span> },
     {
       key: 'act', header: '', align: 'right',
-      cell: (m) => ['FAILED', 'REFUNDED', 'PENDING_PROVIDER'].includes(m.status) ? (
+      cell: (m) => ['FAILED', 'REFUNDED', 'PENDING_PROVIDER'].includes(m.status) && !SECRET_SMS.includes(m.type) ? (
         <button
           className={secondaryButton}
           onClick={async () => {
@@ -143,10 +147,21 @@ export function SmsCreditCenter() {
             { key: 'credits', header: 'Credits', align: 'right', cell: (p) => formatNumber(p.credits_requested) },
             { key: 'amount', header: 'Amount', align: 'right', cell: (p) => formatKes(p.amount_kes) },
             { key: 'ref', header: 'M-Pesa', cell: (p) => <span className="font-mono text-xs">{p.masked_mpesa_ref}</span> },
-            { key: 'status', header: 'Status', cell: (p) => <span title={p.rejection_reason ?? undefined}><StatusBadge status={p.status} /></span> },
+            {
+              key: 'status', header: 'Status',
+              cell: (p) => (
+                <span title={p.rejection_reason ?? undefined}>
+                  <StatusBadge status={p.status} tone={p.status === 'AWAITING_INFORMATION' ? 'amber' : undefined} label={p.status === 'AWAITING_INFORMATION' ? 'Information requested' : undefined} />
+                  {p.status === 'AWAITING_INFORMATION' && p.info_request && <span className="mt-1 block max-w-xs text-xs text-mo-warn">Asked: {p.info_request}</span>}
+                  {p.status === 'PENDING' && p.info_response && <span className="mt-1 block max-w-xs text-xs text-mo-muted">You answered: {p.info_response}</span>}
+                </span>
+              ),
+            },
             {
               key: 'act', header: '', align: 'right',
-              cell: (p) => p.status === 'PENDING' && c?.can_purchase ? <button className={secondaryButton} onClick={() => setCancelling(p)}>Cancel</button> : null,
+              cell: (p) => !c?.can_purchase ? null
+                : p.status === 'AWAITING_INFORMATION' ? <button className={primaryButton} onClick={() => setAnswering(p)}>Respond</button>
+                : p.status === 'PENDING' ? <button className={secondaryButton} onClick={() => setCancelling(p)}>Cancel</button> : null,
             },
           ]}
         />
@@ -184,6 +199,21 @@ export function SmsCreditCenter() {
           onDone={() => {
             setBuying(false);
             toast('Payment submitted. Credits are added once the platform team verifies it.');
+            void center.reload();
+          }}
+        />
+      )}
+      {answering && (
+        <ConfirmationDialog
+          title="Answer the platform team"
+          body={`They asked: ${answering.info_request ?? ''}`}
+          confirmLabel="Send answer"
+          reason={{ label: 'Your answer', required: true, minLength: 3 }}
+          onClose={() => setAnswering(null)}
+          onConfirm={async (response) => {
+            await answerPaymentQuestion(answering.id, response);
+            setAnswering(null);
+            toast('Answer sent. The payment is back in the verification queue.');
             void center.reload();
           }}
         />

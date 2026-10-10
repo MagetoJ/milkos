@@ -7,7 +7,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.access import Principal
-from core.security import hash_password
 from core.utils import changed, conflict, field_error, iso, next_sequence, num, reject_nulls, snapshot
 from models.admin import Cooler
 from models.cooperative import Cooperative
@@ -75,6 +74,8 @@ def collector_json(
         "cooler_name": cooler_name,
         "status": collector.status,
         "account_active": bool(user.is_active),
+        "account_status": user.status_value,
+        "phone_verified": user.phone_verified_at is not None,
         "created_at": iso(collector.created_at),
         "updated_at": iso(collector.updated_at),
         "stats": stats or {"total_litres": 0.0, "collections": 0, "last_collection": None},
@@ -110,7 +111,9 @@ def _number_taken(db: Session, cooperative_id: UUID, number: str, exclude_id: Op
     return query.first() is not None
 
 
-def create(db: Session, principal: Principal, payload: CollectorCreate) -> Collector:
+def create(db: Session, principal: Principal, payload: CollectorCreate):
+    """A PENDING_ACTIVATION collector account + profile. Returns (profile, activation SMS to dispatch after commit)."""
+    from services import accounts
     from services.users import account_conflict  # local: users imports this module
 
     cooperative = target_cooperative(db, principal, payload.cooperative_id)
@@ -122,9 +125,9 @@ def create(db: Session, principal: Principal, payload: CollectorCreate) -> Colle
     if payload.collector_number and _number_taken(db, cooperative.id, payload.collector_number):
         raise conflict("collector_number", "This collector number is already used in this cooperative.")
 
-    user = User(
-        email=payload.email, password_hash=hash_password(payload.password), full_name=payload.full_name,
-        phone_number=payload.phone, role=UserRole.COLLECTOR, cooperative_id=cooperative.id, is_active=True,
+    user = accounts.new_pending_user(
+        full_name=payload.full_name, phone=payload.phone, role=UserRole.COLLECTOR, email=payload.email,
+        cooperative_id=cooperative.id, invited_by=principal.user.id,
     )
     db.add(user)
     try:
@@ -143,16 +146,19 @@ def create(db: Session, principal: Principal, payload: CollectorCreate) -> Colle
             entity_type="collector", entity_id=profile.id, cooperative_id=cooperative.id,
             new_values={**snapshot(profile, AUDITED), "email": user.email, "phone": user.phone_number},
         )
+        pending = accounts.invite(db, principal, user)
         db.commit()
     except IntegrityError:
         db.rollback()
         found = account_conflict(db, email=payload.email, phone=payload.phone)
         raise conflict(*(found or ("collector_number", "This collector number is already used in this cooperative.")))
     db.refresh(profile)
-    return profile
+    return profile, pending
 
 
 def update(db: Session, principal: Principal, profile: Collector, payload: CollectorUpdate) -> Collector:
+    from models.user import AccountStatus
+    from services import accounts
     from services.users import account_conflict
 
     data = payload.model_dump(exclude_unset=True)
@@ -169,6 +175,7 @@ def update(db: Session, principal: Principal, profile: Collector, payload: Colle
         raise conflict(*found)
 
     before = {**snapshot(profile, AUDITED), "full_name": user.full_name, "phone": user.phone_number}
+    old_phone = user.phone_number
     for name in ("collector_number", "assigned_area", "centre_id", "cooler_id", "status"):
         if name in data:
             setattr(profile, name, data[name])
@@ -177,8 +184,14 @@ def update(db: Session, principal: Principal, profile: Collector, payload: Colle
     if "phone" in data:
         user.phone_number = data["phone"]
     if "status" in data:
-        # The profile and the login go together: an inactive collector can't sign in.
-        user.is_active = data["status"] == "ACTIVE"
+        # The profile and the login go together: an inactive collector can't sign in. A collector who never
+        # activated stays waiting for activation when switched back on.
+        if data["status"] != "ACTIVE":
+            if user.status_value != AccountStatus.DISABLED:
+                user.set_status(AccountStatus.DISABLED, "Collector deactivated")
+        elif user.status_value in (AccountStatus.DISABLED, AccountStatus.SUSPENDED):
+            user.set_status(AccountStatus.ACTIVE if user.password_hash else AccountStatus.PENDING_ACTIVATION)
+    pending = accounts.phone_changed_by_admin(db, principal, user, old_phone)
 
     old, new = changed(before, {**snapshot(profile, AUDITED), "full_name": user.full_name, "phone": user.phone_number})
     if new:
@@ -196,5 +209,6 @@ def update(db: Session, principal: Principal, profile: Collector, payload: Colle
     except IntegrityError:
         db.rollback()
         raise conflict(None, "These details clash with another collector or account. Refresh and try again.")
+    accounts.dispatch(db, pending)
     db.refresh(profile)
     return profile

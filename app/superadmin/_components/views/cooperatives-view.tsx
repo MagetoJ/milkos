@@ -118,7 +118,7 @@ export function CooperativeForm({
     estimated_daily_liters: cooperative?.estimated_daily_liters?.toString() ?? '',
   });
   const [withAdmin, setWithAdmin] = useState(!cooperative);
-  const [admin, setAdmin] = useState({ full_name: '', email: '', phone: '', password: '' });
+  const [admin, setAdmin] = useState({ full_name: '', email: '', phone: '' });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const setA = (k: keyof typeof admin) => (e: React.ChangeEvent<HTMLInputElement>) => setAdmin({ ...admin, [k]: e.target.value });
 
@@ -198,9 +198,7 @@ export function CooperativeForm({
               <Field label="Phone" required error={fieldErrors['admin.phone']}>
                 {(p) => <input {...p} type="tel" className={inputClass} value={admin.phone} onChange={setA('phone')} />}
               </Field>
-              <Field label="Temporary password" required error={fieldErrors['admin.password']} hint="8+ characters with a digit and a capital. Share it securely.">
-                {(p) => <input {...p} type="password" autoComplete="new-password" className={inputClass} value={admin.password} onChange={setA('password')} />}
-              </Field>
+              <p className="self-end text-sm text-mo-muted">The administrator gets an SMS activation link and sets their own password. The SMS is billed to the platform.</p>
             </div>
           )}
         </fieldset>

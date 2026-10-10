@@ -46,12 +46,11 @@ class CooperativeAdminAccount(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
     email: EmailStr
     phone: str
-    password: str = Field(..., min_length=8, max_length=64)
+    # No password: the person sets their own from the SMS activation link (services/accounts).
 
     _name = field_validator("full_name")(clean_text)
     _email = field_validator("email")(normalize_email)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
-    _password = field_validator("password")(strong_password)
 
 
 class CooperativeCreate(_Body):
@@ -120,17 +119,16 @@ class SmsCreditAdjustment(_Body):
 
 class UserCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: EmailStr
+    email: Optional[EmailStr] = None        # required for SUPER_ADMIN, COOP_ADMIN and MANAGER
     phone: str
     role: UserRole
-    password: str = Field(..., min_length=8, max_length=64)
     cooperative_id: Optional[UUID] = None   # required for every role except SUPER_ADMIN
     farmer_id: Optional[UUID] = None        # FARMER accounts are linked to an existing farmer record
+    # No password: the person sets their own from the SMS activation link (services/accounts).
 
     _name = field_validator("full_name")(clean_text)
-    _email = field_validator("email")(normalize_email)
+    _email = field_validator("email", mode="before")(lambda v: normalize_email(v) or None if isinstance(v, str) else v)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
-    _password = field_validator("password")(strong_password)
 
 
 class UserUpdate(_Body):
@@ -150,18 +148,18 @@ class UserStatusChange(_Body):
     reason: Optional[str] = Field(None, max_length=500)
 
 
-class PasswordReset(_Body):
-    password: str = Field(..., min_length=8, max_length=64)
-    _password = field_validator("password")(strong_password)
+class AccountStatusChange(_Body):
+    status: Literal["ACTIVE", "SUSPENDED", "DISABLED"]
+    reason: Optional[str] = Field(None, max_length=500)
 
 
 # ---------------- collectors ----------------
 
 class CollectorCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: EmailStr
+    email: Optional[EmailStr] = None  # collectors may sign in with their phone number alone
     phone: str
-    password: str = Field(..., min_length=8, max_length=64)
+    # No password: the person sets their own from the SMS activation link (services/accounts).
     cooperative_id: Optional[UUID] = None
     collector_number: Optional[str] = None  # generated (COL-001, ...) when left out
     assigned_area: Optional[str] = Field(None, max_length=255)
@@ -169,9 +167,8 @@ class CollectorCreate(_Body):
     cooler_id: Optional[UUID] = None
 
     _name = field_validator("full_name")(clean_text)
-    _email = field_validator("email")(normalize_email)
+    _email = field_validator("email", mode="before")(lambda v: normalize_email(v) or None if isinstance(v, str) else v)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
-    _password = field_validator("password")(strong_password)
     _number = field_validator("collector_number")(_optional(normalize_code, "collector_number"))
     _area = field_validator("assigned_area")(_blank_to_none)
 

@@ -37,7 +37,7 @@ export function EmptyState({
         {icon ?? <Inbox className="size-8" />}
       </span>
       <p className="mt-3 font-medium">{title}</p>
-      {body && <p className="mx-auto mt-1 max-w-sm text-sm text-[#5E6B64]">{body}</p>}
+      {body && <p className="mx-auto mt-1 max-w-sm text-sm text-mo-muted">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

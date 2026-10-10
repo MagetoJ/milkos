@@ -4,7 +4,6 @@
 import { useState } from 'react';
 import { Phone, Search } from 'lucide-react';
 import { searchFarmers } from '@/lib/collections/batch-client';
-import { formatPhone } from '@/lib/format';
 import { useDebounced } from '@/lib/hooks/use-debounced';
 import { useLocalQuery } from '@/lib/sync/hooks';
 import { bigInput, Notice } from '../_components/ui';
@@ -31,7 +30,7 @@ export default function CollectorFarmersPage() {
             </span>
             {f.phone && (
               <span className="inline-flex shrink-0 items-center gap-1 text-sm text-[#3C4A43]">
-                <Phone aria-hidden className="size-4" /> {formatPhone(f.phone)}
+                <Phone aria-hidden className="size-4" /> <span className="font-mono">{f.phone}</span>
               </span>
             )}
           </li>

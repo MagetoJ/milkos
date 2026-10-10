@@ -5,7 +5,7 @@
 //   server unreachable + valid      -> offline mode, as that user, until the session expires
 //   offline session
 //   server unreachable + none       -> "can't reach the server" (nobody gets in without having signed in online)
-import { clearSession, getSession, saveToken, TOKEN_KEY, type UserRole } from '@/lib/auth';
+import { CHANGE_PASSWORD_PATH, clearSession, getSession, saveToken, TOKEN_KEY, type UserRole } from '@/lib/auth';
 import { reportRequest, probe, startConnectivity } from './connectivity';
 import { closeUserDb, deleteUserDb, openUserDb } from './db';
 import { devicePlatform, getDeviceId, APP_VERSION } from './device';
@@ -27,6 +27,10 @@ export interface MeResponse {
   role: UserRole;
   cooperative_id: string | null;
   permissions: string[];
+  account_status?: string;
+  must_change_password?: boolean;
+  phone_verified?: boolean;
+  mfa_enabled?: boolean;
 }
 
 export type Boot =
@@ -143,6 +147,11 @@ export async function bootSession(allowed: UserRole[]): Promise<Boot> {
       if (result.status === 403) return { mode: 'blocked', message: result.detail ?? 'Access denied.' };
       if (!result.me) return offlineOrUnreachable(offline, allowed);
       const me = result.me;
+      if (me.must_change_password) {
+        // The server refuses everything else until the password is replaced (core/access.py).
+        if (typeof window !== 'undefined') window.location.replace(CHANGE_PASSWORD_PATH);
+        return { mode: 'blocked', message: 'Choose a new password to continue.' };
+      }
       if (!allowed.includes(me.role)) return { mode: 'wrong-role', role: me.role };
 
       let session = offline && offline.userId === me.user_id ? offline : null;

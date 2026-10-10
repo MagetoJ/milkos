@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from core.access import Principal
 from core.utils import iso, num
+from core.validation import mask_phone_local
 from models.admin import Cooler
 from models.centre import CollectionCentre
 from models.cooperative import Cooperative
@@ -105,11 +106,13 @@ def farmer(db: Session, principal: Principal, ids: list[str]) -> dict:
             continue
         data = farmers.farmer_json(f, centre_name)
         if principal.role not in STAFF:
-            # Collectors only need to pick a farmer: no ID numbers or payout details on their devices.
+            # Collectors only need to pick a farmer: no ID numbers, payout details or full phone numbers on their
+            # devices. The masked number (0712••••78) is enough to tell two Janes apart.
             data = {k: data[k] for k in (
-                "id", "cooperative_id", "farmer_number", "first_name", "last_name", "full_name", "phone",
+                "id", "cooperative_id", "farmer_number", "first_name", "last_name", "full_name",
                 "village", "status", "centre_id", "centre_name", "sync_version", "updated_at",
             )}
+            data["phone_masked"] = mask_phone_local(f.phone)
         found[str(f.id)] = data
     return _result(ids, found)
 

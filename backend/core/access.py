@@ -34,6 +34,8 @@ from routers.auth import get_current_user
 from schemas.auth import UserRole
 
 FORBIDDEN = "Insufficient permissions for this action"
+# The only protected endpoints an account flagged must_change_password may call.
+PASSWORD_CHANGE_ALLOWED = frozenset({"/api/v1/account/password", "/api/v1/account/me"})
 NOT_LINKED = "Your account is not linked to a cooperative."
 SUSPENDED = "This cooperative is suspended. Contact the platform administrator."
 
@@ -113,6 +115,16 @@ def load_principal(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token subject")
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Account not found or inactive")
+    # Tokens issued before the last password change / session revocation / suspension are dead.
+    if int(payload.get("sv", 0)) != int(user.session_epoch or 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Sign in again.")
+    # An account that must replace its password may do nothing else until it has (enforced here, for every
+    # protected endpoint, not by a frontend redirect).
+    if user.must_change_password and request.url.path not in PASSWORD_CHANGE_ALLOWED:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Change your password before continuing.",
+            headers={"X-Error-Code": "password_change_required"},
+        )
 
     principal = Principal(
         user=user, cooperative=None, db=db,

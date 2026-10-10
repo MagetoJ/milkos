@@ -54,7 +54,13 @@ def platform(db: Session, **kwargs) -> Optional[InboxNotification]:
 
 
 def visible(db: Session, principal: Principal):
+    from services import preferences
+
     query = db.query(InboxNotification)
+    # Categories this person switched off in their notification preferences (security notices can't be).
+    muted = preferences.muted_categories(db, principal.user)
+    if muted:
+        query = query.filter(InboxNotification.category.notin_(sorted(muted)))
     me = principal.user.id
     if principal.is_superadmin:
         return query.filter(or_(InboxNotification.cooperative_id.is_(None), InboxNotification.recipient_user_id == me))

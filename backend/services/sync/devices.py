@@ -152,6 +152,10 @@ def register(db: Session, principal: Principal, payload: DeviceRegister) -> tupl
             entity_type="device", entity_id=device.id, cooperative_id=device.cooperative_id,
             new_values={"device_identifier": device.device_identifier, "platform": device.platform},
         )
+    if session.id is None or created:
+        from services import security_events
+
+        security_events.from_principal(db, principal, "DEVICE_REGISTERED", details={"device": device.label or device.device_identifier[:8]})
     db.commit()
     db.refresh(device)
     db.refresh(session)

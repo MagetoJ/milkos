@@ -184,7 +184,6 @@ function CollectorForm({
     full_name: collector?.full_name ?? '',
     email: collector?.email ?? '',
     phone: collector ? formatPhone(collector.phone) : '',
-    password: '',
     collector_number: collector?.collector_number ?? '',
     assigned_area: collector?.assigned_area ?? '',
     cooler_id: collector?.cooler_id ?? '',
@@ -210,9 +209,8 @@ function CollectorForm({
         saved = await createCollector({
           cooperative_id: f.cooperative_id,
           full_name: f.full_name,
-          email: f.email,
+          email: f.email.trim() || null,
           phone: f.phone,
-          password: f.password,
           assigned_area: f.assigned_area || null,
           cooler_id: f.cooler_id || null,
           ...(f.collector_number.trim() ? { collector_number: f.collector_number } : {}),
@@ -243,12 +241,10 @@ function CollectorForm({
         </Field>
         {!collector && (
           <>
-            <Field label="Email (for signing in)" required error={fieldErrors.email}>
+            <Field label="Email (optional)" error={fieldErrors.email} hint="Collectors can sign in with their phone number.">
               {(p) => <input {...p} type="email" className={inputClass} value={f.email} onChange={set('email')} />}
             </Field>
-            <Field label="Temporary password" required error={fieldErrors.password} hint="8+ characters with a digit and a capital.">
-              {(p) => <input {...p} type="password" autoComplete="new-password" className={inputClass} value={f.password} onChange={set('password')} />}
-            </Field>
+            <p className="self-end text-sm text-mo-muted">An SMS activation link is sent to the phone above; the collector chooses their own password.</p>
           </>
         )}
         <Field label="Assigned area / route" error={fieldErrors.assigned_area}>

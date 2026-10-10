@@ -13,8 +13,8 @@ from models.admin import AuditLog
 from models.cooperative import Cooperative
 from models.user import User
 from schemas.auth import UserRole
-from schemas.platform import PasswordReset, UserCreate, UserStatusChange, UserUpdate
-from services import audit, users
+from schemas.platform import AccountStatusChange, UserCreate, UserStatusChange, UserUpdate
+from services import accounts, audit, users
 
 router = APIRouter(prefix="/users")
 
@@ -31,9 +31,13 @@ def _get(db: Session, user_id: str) -> User:
     return user
 
 
-def _json(db: Session, user: User) -> dict:
+def _json(db: Session, user: User, sms=None) -> dict:
     coop = db.get(Cooperative, user.cooperative_id) if user.cooperative_id else None
-    return users.user_json(user, coop)
+    data = users.user_json(user, coop, db)
+    if sms is not None:
+        # Whether the provider accepted the activation SMS. Never "delivered" unless a delivery report said so.
+        data["activation_sms"] = accounts.sms_outcome(sms)
+    return data
 
 
 @router.get("")
@@ -42,6 +46,7 @@ def list_users(
     role: Optional[UserRole] = None,
     cooperative_id: Optional[str] = Query(None, description="A cooperative id, or 'none' for platform accounts"),
     is_active: Optional[bool] = None,
+    account_status: Optional[str] = Query(None, max_length=30),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
@@ -55,6 +60,8 @@ def list_users(
         query = query.filter(User.cooperative_id == parse_uuid(cooperative_id, "Cooperative"))
     if is_active is not None:
         query = query.filter(User.is_active.is_(is_active))
+    if account_status:
+        query = query.filter(User.account_status == account_status)
     for term in (search or "").split():
         clauses = [User.full_name.ilike(like(term), escape="\\"), User.email.ilike(like(term), escape="\\")]
         digits = phone_digits(term)
@@ -62,12 +69,16 @@ def list_users(
             clauses.append(User.phone_number.like(f"%{digits}%"))
         query = query.filter(or_(*clauses))
     query = apply_sort(query, params.sort, SORTS, [User.full_name, User.id])
-    return paginate(query, params, lambda row: users.user_json(row[0], row[1]))
+    return paginate(query, params, lambda row: users.user_json(row[0], row[1], db))
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)):
-    return _json(db, users.create(db, admin, payload))
+    """Create an account in PENDING_ACTIVATION and text it a one-time activation link. No password is set here."""
+    user, pending = users.create(db, admin, payload)
+    sms = accounts.dispatch(db, pending, ip=admin.ip_address, ua=admin.user_agent)
+    db.refresh(user)
+    return _json(db, user, sms)
 
 
 @router.get("/{user_id}")
@@ -94,18 +105,46 @@ def get_user(user_id: str, db: Session = Depends(get_db), _: Principal = Depends
 def update_user(
     user_id: str, payload: UserUpdate, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)
 ):
-    return _json(db, users.update(db, admin, _get(db, user_id), payload))
+    user, pending = users.update(db, admin, _get(db, user_id), payload)
+    sms = accounts.dispatch(db, pending, ip=admin.ip_address, ua=admin.user_agent)
+    return _json(db, user, sms)
 
 
 @router.patch("/{user_id}/status")
 def change_user_status(
     user_id: str, payload: UserStatusChange, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)
 ):
-    return _json(db, users.set_active(db, admin, _get(db, user_id), payload.is_active, payload.reason))
+    user, pending = users.set_active(db, admin, _get(db, user_id), payload.is_active, payload.reason)
+    return _json(db, user, accounts.dispatch(db, pending))
 
 
-@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(
-    user_id: str, payload: PasswordReset, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)
+@router.post("/{user_id}/account-status")
+def set_account_status(
+    user_id: str, payload: AccountStatusChange, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)
 ):
-    users.reset_password(db, admin, _get(db, user_id), payload.password)
+    """Suspend, disable or reactivate (reactivating a never-activated account sends a new activation link)."""
+    user, pending = users.change_status(db, admin, _get(db, user_id), payload.status, payload.reason)
+    return _json(db, user, accounts.dispatch(db, pending))
+
+
+@router.post("/{user_id}/resend-activation")
+def resend_activation(user_id: str, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)):
+    user = _get(db, user_id)
+    sms = accounts.dispatch(db, accounts.resend_activation(db, admin, user))
+    db.refresh(user)
+    return _json(db, user, sms)
+
+
+@router.post("/{user_id}/revoke-invitation")
+def revoke_invitation(
+    user_id: str, payload: UserStatusChange | None = None, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)
+):
+    return _json(db, accounts.revoke_invitation(db, admin, _get(db, user_id), payload.reason if payload else None))
+
+
+@router.post("/{user_id}/reset-password")
+def reset_password(user_id: str, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)):
+    """Text the person a password reset link. The administrator never sets, sees or receives the password."""
+    user = _get(db, user_id)
+    sms = accounts.dispatch(db, accounts.admin_password_reset(db, admin, user))
+    return {"sent": True, **accounts.sms_outcome(sms)}

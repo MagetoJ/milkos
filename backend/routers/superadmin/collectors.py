@@ -86,7 +86,12 @@ def list_collectors(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_collector(payload: CollectorCreate, db: Session = Depends(get_db), admin: Principal = Depends(require_superadmin)):
-    return _one(db, collectors.create(db, admin, payload))
+    from services import accounts
+
+    profile, pending = collectors.create(db, admin, payload)
+    sms = accounts.dispatch(db, pending, ip=admin.ip_address, ua=admin.user_agent)
+    db.refresh(profile)
+    return {**_one(db, profile), "activation_sms": accounts.sms_outcome(sms)}
 
 
 @router.get("/{collector_id}")

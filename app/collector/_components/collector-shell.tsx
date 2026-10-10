@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Bell, CloudOff, History, Home, LogOut, RefreshCw, Users, type LucideIcon } from 'lucide-react';
+import { Bell, CloudOff, History, Home, LogOut, RefreshCw, Settings, Users, type LucideIcon } from 'lucide-react';
 import { inboxCount } from '@/app/cooperatives/_api/finance-client';
 import { useConnectivity, useIsOnline, useSyncState } from '@/lib/sync/hooks';
 
@@ -96,6 +96,14 @@ export function CollectorShell({
           </div>
           <div className="flex items-center gap-1">
             <SyncBadge />
+            <Link
+              href="/collector/settings"
+              aria-label="Settings"
+              aria-current={pathname.startsWith('/collector/settings') ? 'page' : undefined}
+              className="inline-flex size-11 items-center justify-center rounded-full text-mo-muted hover:bg-mo-hover"
+            >
+              <Settings aria-hidden className="size-5" />
+            </Link>
             <Link
               href="/collector/notifications"
               aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}

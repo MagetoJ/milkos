@@ -19,13 +19,17 @@ router = APIRouter()
 @router.get("/activity")
 def get_activity(
     limit: int = Query(20, ge=1, le=200),
+    include_security: bool = Query(False, description="Include sign-ins and other security events"),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
 ):
-    """Latest entries, newest first (the compact feed used on the dashboard)."""
+    """Latest entries, newest first (the compact feed used on the dashboard). Security events (sign-ins...) are
+    left out unless asked for; the full audit log always has them (entity_type=security)."""
+    query = db.query(AuditLog, Cooperative.name).outerjoin(Cooperative, Cooperative.id == AuditLog.cooperative_id)
+    if not include_security:
+        query = query.filter(or_(AuditLog.entity_type.is_(None), AuditLog.entity_type != "security"))
     rows = (
-        db.query(AuditLog, Cooperative.name)
-        .outerjoin(Cooperative, Cooperative.id == AuditLog.cooperative_id)
+        query
         .order_by(AuditLog.created_at.desc())
         .limit(limit)
         .all()

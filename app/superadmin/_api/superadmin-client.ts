@@ -60,6 +60,11 @@ export function verifyPayment(id: string, action: 'VERIFY' | 'REJECT', reason?: 
   return request<{ success: boolean }>(`/payments/${id}/action`, send('POST', { action, reason }));
 }
 
+/** Pending -> Awaiting information: the cooperative is asked for more and answers from its SMS credits page. */
+export function requestPaymentInformation(id: string, message: string) {
+  return request<{ success: boolean; status: string }>(`/payments/${id}/request-information`, send('POST', { message }));
+}
+
 // ---- cooperatives ----
 export const listCooperatives = (params: Params) => request<Page<Cooperative>>(`/cooperatives${toQuery(params)}`);
 export const getCooperative = (id: string) => request<CooperativeDetail>(`/cooperatives/${id}`);
@@ -94,8 +99,14 @@ export const createUser = (data: UserInput) => request<PlatformUser>('/users', s
 export const updateUser = (id: string, data: UserInput) => request<PlatformUser>(`/users/${id}`, send('PUT', data));
 export const setUserActive = (id: string, is_active: boolean, reason?: string) =>
   request<PlatformUser>(`/users/${id}/status`, send('PATCH', { is_active, reason }));
-export const resetUserPassword = (id: string, password: string) =>
-  request<void>(`/users/${id}/reset-password`, send('POST', { password }));
+// Administrators never set passwords: these send the person a one-time link by SMS.
+export const sendUserPasswordReset = (id: string) =>
+  request<{ sent: boolean; sms_sent: boolean; sms_status: string; sms_error: string | null }>(`/users/${id}/reset-password`, send('POST'));
+export const resendUserActivation = (id: string) => request<PlatformUser>(`/users/${id}/resend-activation`, send('POST'));
+export const revokeUserInvitation = (id: string, reason?: string) =>
+  request<PlatformUser>(`/users/${id}/revoke-invitation`, send('POST', { is_active: false, reason }));
+export const setUserAccountStatus = (id: string, status: 'ACTIVE' | 'SUSPENDED' | 'DISABLED', reason?: string) =>
+  request<PlatformUser>(`/users/${id}/account-status`, send('POST', { status, reason }));
 
 // ---- farmers ----
 export const listFarmers = (params: Params) => request<Page<Farmer>>(`/farmers${toQuery(params)}`);

@@ -50,7 +50,7 @@ export function ConfirmationDialog({
           <div>
             <label htmlFor={id} className="mb-1 block text-sm font-medium">
               {reason.label}
-              {reason.required && <span className="text-[#B42318]"> *</span>}
+              {reason.required && <span className="text-mo-danger"> *</span>}
             </label>
             <textarea
               id={id}
@@ -61,7 +61,7 @@ export function ConfirmationDialog({
               className={inputClass}
               autoFocus
             />
-            <p className="mt-1 text-xs text-[#8A968F]">
+            <p className="mt-1 text-xs text-mo-subtle">
               Saved to the audit log{reason.required ? ` · at least ${min} characters` : ''}.
             </p>
           </div>

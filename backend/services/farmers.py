@@ -183,6 +183,31 @@ def update(db: Session, principal: Principal, farmer: Farmer, payload: FarmerUpd
     before = snapshot(farmer, AUDITED)
     for name, value in data.items():
         setattr(farmer, name, value)
+    pending = None
+    if farmer.user_id is not None and "phone" in data:
+        # The farmer's app account signs in with the same number: move it too, unverified until the farmer confirms.
+        from models.user import User
+        from services import accounts
+        from services.users import account_conflict
+
+        account = db.get(User, farmer.user_id)
+        if account is not None and account.phone_number != farmer.phone:
+            if account_conflict(db, email=None, phone=farmer.phone, exclude_id=account.id):
+                raise conflict("phone", "This phone number already belongs to another MilkOS account.")
+            old_phone = account.phone_number
+            account.phone_number = farmer.phone
+            pending = accounts.phone_changed_by_admin(db, principal, account, old_phone)
+    if farmer.user_id is not None and "status" in data:
+        # An inactive member can't sign in; reactivating restores the account (or its pending activation).
+        from models.user import AccountStatus, User
+
+        account = db.get(User, farmer.user_id)
+        if account is not None:
+            if farmer.status != "ACTIVE" and account.status_value in (AccountStatus.ACTIVE, AccountStatus.PENDING_ACTIVATION):
+                account.set_status(AccountStatus.DISABLED, "Farmer deactivated by the cooperative")
+            elif farmer.status == "ACTIVE" and account.status_value == AccountStatus.DISABLED \
+                    and account.status_reason == "Farmer deactivated by the cooperative":
+                account.set_status(AccountStatus.ACTIVE if account.password_hash else AccountStatus.PENDING_ACTIVATION)
     if "payment_method" in data and data["payment_method"] is None:
         farmer.payment_account = farmer.bank_name = None
     _apply_payment_rules(farmer)
@@ -207,6 +232,10 @@ def update(db: Session, principal: Principal, farmer: Farmer, payload: FarmerUpd
             national_id=data.get("national_id"), exclude_id=farmer.id,
         )
         raise conflict(*(found or (None, "These details clash with another farmer. Refresh and try again.")))
+    if pending is not None:
+        from services import accounts
+
+        accounts.dispatch(db, pending)
     db.refresh(farmer)
     return farmer
 

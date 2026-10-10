@@ -74,8 +74,10 @@ describe('confirmation screen', () => {
   });
 
   it('disables Confirm when anything blocks the batch, and while saving', () => {
-    const ok = draftWith(100, [['a', '60']]);
+    const ok = draftWith(100, [['a', '60'], ['b', '40']]);
     const isDisabled = (markup: string) => /<button[^>]* disabled=""[^>]*>(Saving…|Confirm Collection)</.test(markup);
+    // Weight left unallocated blocks confirmation (exact allocation).
+    expect(isDisabled(html(createElement(ConfirmBar, { draft: draftWith(100, [['a', '60']]), submitting: false, onBack: noop, onConfirm: noop })))).toBe(true);
     expect(isDisabled(html(createElement(ConfirmBar, { draft: ok, submitting: false, onBack: noop, onConfirm: noop })))).toBe(false);
     expect(isDisabled(html(createElement(ConfirmBar, { draft: ok, submitting: true, onBack: noop, onConfirm: noop })))).toBe(true);
     for (const bad of [draftWith(100, [['a', '120']]), draftWith(100, []), draftWith(100, [['a', '']]), { ...ok, cooler: null }]) {

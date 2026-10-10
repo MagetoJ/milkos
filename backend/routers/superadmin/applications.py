@@ -154,7 +154,10 @@ def process_application_action(
             )
             db.add(cooperative)
             db.flush()
-            applicant.is_active = True
+            from models.user import AccountStatus
+
+            applicant.set_status(AccountStatus.ACTIVE)
+            applicant.activated_at = datetime.utcnow()
             applicant.cooperative_id = cooperative.id
             record.admin_user_id = applicant.id
             record.cooperative_id = cooperative.id

@@ -17,6 +17,7 @@ from core.access import Principal, ensure_same_cooperative, require_permission
 from core.pagination import PageParams, apply_sort, page_params, paginate
 from core.permissions import Permission
 from core.utils import parse_uuid
+from core.validation import mask_phone_local
 from db import get_db
 from models.admin import Cooler, CoolerStatus
 from models.centre import CollectionCentre
@@ -102,6 +103,7 @@ def recording_options(
     """Active farmers (searchable), coolers, centres and collectors to choose from when recording milk."""
     _tenant(principal)
     coop_id = principal.cooperative_id
+    staff_view = principal.role in (UserRole.COOP_ADMIN.value, UserRole.MANAGER.value)
     farmer_rows = (
         farmers.search_filter(db.query(Farmer).filter(Farmer.cooperative_id == coop_id, Farmer.status == "ACTIVE"), search)
         .order_by(Farmer.last_name, Farmer.first_name)
@@ -120,7 +122,10 @@ def recording_options(
     data = {
         "farmers": [
             {"id": str(f.id), "label": f"{f.full_name} ({f.farmer_number})", "full_name": f.full_name,
-             "farmer_number": f.farmer_number, "phone": f.phone, "centre_id": str(f.centre_id) if f.centre_id else None}
+             "farmer_number": f.farmer_number,
+             # Staff see the number; collectors get only enough of it to tell farmers apart.
+             **({"phone": f.phone} if staff_view else {}), "phone_masked": mask_phone_local(f.phone),
+             "centre_id": str(f.centre_id) if f.centre_id else None}
             for f in farmer_rows
         ],
         "coolers": [

@@ -1,5 +1,6 @@
 """Cooperative dashboard figures and charts. Every number is a database aggregate over one cooperative."""
 import datetime
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import and_, case, distinct, func
@@ -85,27 +86,38 @@ def kpis(db: Session, cooperative_id: UUID) -> dict:
     }
 
 
-def charts(db: Session, cooperative_id: UUID, days: int = 14) -> dict:
+RANGES = {"today": 1, "7d": 7, "30d": 30, "3m": 90}
+
+
+def charts(db: Session, cooperative_id: UUID, days: int = 14, start: Optional[datetime.date] = None,
+           end: Optional[datetime.date] = None) -> dict:
+    """Daily trend for `days` days ending today, or for an explicit [start, end] window (both inclusive)."""
     today = datetime.datetime.utcnow().date()
-    start = today - datetime.timedelta(days=days - 1)
+    if start is not None and end is not None:
+        days = (end - start).days + 1
+    else:
+        start = today - datetime.timedelta(days=days - 1)
+    end = start + datetime.timedelta(days=days - 1)
     daily = {
         d: (num(kg) or 0.0, int(f or 0))
         for d, kg, f in db.query(
             MilkCollection.collection_date,
             func.coalesce(func.sum(case((ACCEPTED, MilkCollection.quantity_kg), else_=0)), 0),
             func.count(distinct(case((MilkCollection.record_status == LineStatus.ACTIVE, MilkCollection.farmer_id)))),
-        ).filter(MilkCollection.cooperative_id == cooperative_id, MilkCollection.collection_date >= start)
+        ).filter(MilkCollection.cooperative_id == cooperative_id, MilkCollection.collection_date >= start,
+                 MilkCollection.collection_date <= end)
         .group_by(MilkCollection.collection_date)
     }
     start_dt = datetime.datetime.combine(start, datetime.time.min)
+    end_dt = datetime.datetime.combine(end + datetime.timedelta(days=1), datetime.time.min)
     sms_rows = db.query(Notification.created_at, Notification.status).filter(
-        Notification.cooperative_id == cooperative_id, Notification.created_at >= start_dt,
+        Notification.cooperative_id == cooperative_id, Notification.created_at >= start_dt, Notification.created_at < end_dt,
     ).all()
     sms_daily: dict = {}
     for created, status in sms_rows:
         key = created.date()
         sent, failed = sms_daily.get(key, (0, 0))
-        if status == NotificationStatus.SENT:
+        if status in (NotificationStatus.SENT, NotificationStatus.DELIVERED):
             sent += 1
         elif status in (NotificationStatus.FAILED, NotificationStatus.REFUNDED):
             failed += 1

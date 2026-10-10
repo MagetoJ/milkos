@@ -40,7 +40,7 @@ function describe(item: QueueItem): string {
 function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: 'warn' }) {
   return (
     <div className="px-5 py-4">
-      <dt className="text-sm text-[#5E6B64]">{label}</dt>
+      <dt className="text-sm text-mo-muted">{label}</dt>
       <dd className={`mt-1 text-xl font-semibold tabular-nums ${tone === 'warn' ? 'text-[#9A5B00]' : ''}`}>{value}</dd>
     </div>
   );
@@ -102,12 +102,12 @@ export function SyncCenter() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-[#DDE3DE] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF1EC] px-5 py-4">
+      <section className="rounded-xl border border-mo-line bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-mo-hover px-5 py-4">
           <div>
             <h2 className="text-base font-semibold">Sync status</h2>
-            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-[#5E6B64]">
-              <span aria-hidden className={`inline-block size-2 rounded-full ${online ? 'bg-[#3BA272]' : 'border border-[#5E6B64]'}`} />
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-mo-muted">
+              <span aria-hidden className={`inline-block size-2 rounded-full ${online ? 'bg-[#3BA272]' : 'border border-mo-muted'}`} />
               {online ? 'Online' : 'Offline'}
               {sync.phase === 'syncing' && ' · synchronizing…'}
               {sync.phase === 'auth-required' && ' · sign in again to sync'}
@@ -130,39 +130,39 @@ export function SyncCenter() {
           <Stat label="Failed" value={sync.counts.failed} tone={sync.counts.failed ? 'warn' : undefined} />
           <Stat label="Conflicts" value={sync.counts.conflict} tone={sync.counts.conflict ? 'warn' : undefined} />
         </dl>
-        <dl className="grid gap-x-6 gap-y-2 border-t border-[#EEF1EC] px-5 py-4 text-sm sm:grid-cols-2">
-          <div className="flex justify-between gap-2"><dt className="text-[#5E6B64]">Last server sync (sent)</dt><dd>{lastPush}</dd></div>
-          <div className="flex justify-between gap-2"><dt className="text-[#5E6B64]">Last server sync (received)</dt><dd>{lastPull}</dd></div>
-          <div className="flex justify-between gap-2"><dt className="text-[#5E6B64]">Last sensor reading synced</dt><dd>{lastSensor}</dd></div>
+        <dl className="grid gap-x-6 gap-y-2 border-t border-mo-hover px-5 py-4 text-sm sm:grid-cols-2">
+          <div className="flex justify-between gap-2"><dt className="text-mo-muted">Last server sync (sent)</dt><dd>{lastPush}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-mo-muted">Last server sync (received)</dt><dd>{lastPull}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-mo-muted">Last sensor reading synced</dt><dd>{lastSensor}</dd></div>
           <div className="flex justify-between gap-2">
-            <dt className="text-[#5E6B64]">Offline access remaining</dt>
+            <dt className="text-mo-muted">Offline access remaining</dt>
             <dd>{session.data ? sessionExpiryLabel(session.data) : '–'}</dd>
           </div>
           {syncWindow.data && (
             <div className="flex justify-between gap-2 sm:col-span-2">
-              <dt className="text-[#5E6B64]">History kept on this device</dt>
+              <dt className="text-mo-muted">History kept on this device</dt>
               <dd>collections {syncWindow.data.collection_days} days · cooler readings {syncWindow.data.reading_days} days</dd>
             </div>
           )}
         </dl>
       </section>
 
-      <section className="rounded-xl border border-[#DDE3DE] bg-white">
+      <section className="rounded-xl border border-mo-line bg-white">
         <h2 className="px-5 pb-2 pt-5 text-base font-semibold">Needs review</h2>
         {attention.length === 0 ? (
           <EmptyState title="Nothing to review" body="Records that the server refuses or that changed on the server meanwhile appear here." />
         ) : (
-          <ul className="divide-y divide-[#EEF1EC]">
+          <ul className="divide-y divide-mo-hover">
             {attention.map((item) => (
               <li key={item.mutation_id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium">{describe(item)}</p>
-                  <p className="mt-0.5 text-[#5E6B64]">
+                  <p className="mt-0.5 text-mo-muted">
                     <StatusBadge status={item.status} label={item.status === 'conflict' ? 'Needs review' : 'Sync failed'} tone="red" />{' '}
                     {item.last_error?.message}
                   </p>
                   {item.last_error && Object.keys(item.last_error.fields).length > 0 && (
-                    <ul className="mt-1 list-disc pl-5 text-xs text-[#5E6B64]">
+                    <ul className="mt-1 list-disc pl-5 text-xs text-mo-muted">
                       {Object.entries(item.last_error.fields).map(([field, msg]) => (
                         <li key={field}>{field.replace(/_/g, ' ')}: {msg}</li>
                       ))}
@@ -170,8 +170,8 @@ export function SyncCenter() {
                   )}
                 </div>
                 <div className="flex shrink-0 gap-3 font-medium">
-                  <button className="text-[#176044] hover:underline" onClick={() => void retry(item)}>Retry</button>
-                  <button className="text-[#B42318] hover:underline" onClick={() => void discard(item)}>Discard my change</button>
+                  <button className="text-mo-brand hover:underline" onClick={() => void retry(item)}>Retry</button>
+                  <button className="text-mo-danger hover:underline" onClick={() => void discard(item)}>Discard my change</button>
                 </div>
               </li>
             ))}
@@ -179,10 +179,10 @@ export function SyncCenter() {
         )}
       </section>
 
-      <section className="rounded-xl border border-[#DDE3DE] bg-white px-5 py-4">
+      <section className="rounded-xl border border-mo-line bg-white px-5 py-4">
         <h2 className="text-base font-semibold">Waiting to sync</h2>
         {items.filter((i) => i.status === 'pending' || i.status === 'syncing').length === 0 ? (
-          <p className="mt-1 text-sm text-[#5E6B64]">Nothing is waiting. Every change on this device has reached the server.</p>
+          <p className="mt-1 text-sm text-mo-muted">Nothing is waiting. Every change on this device has reached the server.</p>
         ) : (
           <ul className="mt-2 space-y-1 text-sm">
             {items
@@ -191,12 +191,12 @@ export function SyncCenter() {
               .map((i) => (
                 <li key={i.mutation_id} className="flex justify-between gap-3">
                   <span className="truncate">{describe(i)}</span>
-                  <span className="shrink-0 text-xs text-[#8A968F]">{i.attempts ? `${i.attempts} attempt${i.attempts === 1 ? '' : 's'}` : 'queued'}</span>
+                  <span className="shrink-0 text-xs text-mo-subtle">{i.attempts ? `${i.attempts} attempt${i.attempts === 1 ? '' : 's'}` : 'queued'}</span>
                 </li>
               ))}
           </ul>
         )}
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-[#EEF1EC] pt-4">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-mo-hover pt-4">
           <button className={secondaryButton} onClick={exportUnsynced} disabled={items.length === 0}>
             <Download className="size-4" /> Export unsynced records
           </button>

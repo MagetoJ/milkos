@@ -28,9 +28,12 @@ export function SettingsView() {
   const [section, setSection] = useState<Section>('settings');
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-[#5E6B64]">Platform configuration, SMS credit packages and what each role may do.</p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Platform settings</h1>
+          <p className="mt-1 text-mo-muted">Platform configuration, SMS credit packages and what each role may do. Changes apply to every cooperative.</p>
+        </div>
+        <a href="/superadmin/settings/account" className="text-sm font-medium text-mo-brand underline-offset-2 hover:underline">My account &amp; security →</a>
       </div>
       <Tabs
         active={section}

@@ -45,10 +45,15 @@ export interface SmsPayment {
   amount_kes: number;
   credits_requested: number;
   masked_mpesa_ref: string;
-  status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'CANCELLED';
+  status: 'PENDING' | 'AWAITING_INFORMATION' | 'VERIFIED' | 'REJECTED' | 'CANCELLED';
   rejection_reason: string | null;
   submitted_at: string | null;
   verified_at: string | null;
+  /** What platform staff asked for (AWAITING_INFORMATION), and the cooperative's answer. */
+  info_request?: string | null;
+  info_requested_at?: string | null;
+  info_response?: string | null;
+  info_responded_at?: string | null;
 }
 
 export interface CreditCenter {
@@ -66,6 +71,8 @@ export const getCreditCenter = (params: Record<string, string | number> = {}) =>
 export const buyCredits = (body: { package_id?: string; credits?: number; amount_kes?: number; mpesa_reference: string }) =>
   coop<SmsPayment>('/sms-credits/payments', send('POST', body));
 export const cancelCreditPayment = (id: string, reason: string) => coop<SmsPayment>(`/sms-credits/payments/${id}/cancel`, send('POST', { reason }));
+export const answerPaymentQuestion = (id: string, response: string) =>
+  coop<SmsPayment>(`/sms-credits/payments/${id}/respond`, send('POST', { response }));
 export const updateSmsSettings = (body: { receipt_sms_enabled?: boolean; alert_sms_enabled?: boolean }) =>
   coop<{ receipt_sms_enabled: boolean; alert_sms_enabled: boolean }>('/sms-settings', send('PATCH', body));
 
@@ -205,6 +212,20 @@ export const reportDownloadUrl = (kind: string, params: Record<string, string | 
   `/api/v1/reports/${kind}${toQuery({ ...params, format })}`;
 
 // ---------------- search ----------------
+
+// ---------------- dashboard trends ----------------
+
+export type TrendRange = 'today' | '7d' | '30d' | '3m' | 'custom';
+export interface TrendDay { date: string; kg: number; farmers: number; sms_sent: number; sms_failed: number }
+export interface Trends {
+  range: TrendRange;
+  from: string | null;
+  to: string | null;
+  trend: TrendDay[];
+  totals: { kg: number; sms_sent: number; sms_failed: number; peak_farmers: number };
+}
+export const getTrends = (range: TrendRange, date_from?: string, date_to?: string) =>
+  coop<Trends>(`/trends${toQuery({ range, date_from, date_to })}`);
 
 export interface SearchResult {
   type: string;

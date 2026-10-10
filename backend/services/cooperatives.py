@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from core.access import Principal
 from core.onboarding import generate_cooperative_code
-from core.security import hash_password
 from core.utils import changed, conflict, iso, num, reject_nulls, snapshot
 from models.admin import Cooler, CoolerStatus
 from models.cooperative import Cooperative, CooperativeStatus
@@ -73,7 +72,9 @@ def counts_for(db: Session, coop_ids: list[UUID]) -> dict[UUID, dict]:
         out[cid]["collectors"] = n
     for cid, role, n in (
         db.query(User.cooperative_id, User.role, func.count(User.id))
-        .filter(User.cooperative_id.in_(coop_ids), User.is_active.is_(True),
+        # Accounts waiting for activation count too: the person exists, they just haven't set a password yet.
+        .filter(User.cooperative_id.in_(coop_ids),
+                or_(User.is_active.is_(True), User.account_status == "PENDING_ACTIVATION"),
                 User.role.in_([UserRole.MANAGER, UserRole.COOP_ADMIN]))
         .group_by(User.cooperative_id, User.role)
     ):
@@ -156,24 +157,32 @@ def create(db: Session, principal: Principal, payload: CooperativeCreate) -> Coo
             entity_type="cooperative", entity_id=coop.id, cooperative_id=coop.id,
             new_values=snapshot(coop, AUDITED),
         )
+        pending = None
         if payload.admin:
-            admin = User(
-                email=payload.admin.email, password_hash=hash_password(payload.admin.password),
-                full_name=payload.admin.full_name, phone_number=payload.admin.phone,
-                role=UserRole.COOP_ADMIN, cooperative_id=coop.id, is_active=True,
+            from services import accounts
+
+            # The cooperative's first admin activates from an SMS link and sets their own password.
+            admin = accounts.new_pending_user(
+                full_name=payload.admin.full_name, phone=payload.admin.phone, role=UserRole.COOP_ADMIN,
+                email=payload.admin.email, cooperative_id=coop.id, invited_by=principal.user.id,
             )
             db.add(admin)
             db.flush()
             audit.record(
                 db, principal, "USER_CREATED", target=f"{admin.full_name} <{admin.email}> as COOP_ADMIN in {coop.name}",
                 entity_type="user", entity_id=admin.id, cooperative_id=coop.id,
-                new_values={"email": admin.email, "role": "COOP_ADMIN"},
+                new_values={"email": admin.email, "role": "COOP_ADMIN", "account_status": admin.status_value},
             )
+            pending = accounts.invite(db, principal, admin)
         db.commit()
     except IntegrityError:
         db.rollback()
         found = _identity_conflict(db, registration_number=payload.registration_number, kra_pin=payload.kra_pin)
         raise conflict(*(found or (None, "A cooperative or account with these details already exists.")))
+    if pending is not None:
+        from services import accounts
+
+        accounts.dispatch(db, pending, ip=principal.ip_address, ua=principal.user_agent)
     db.refresh(coop)
     return coop
 

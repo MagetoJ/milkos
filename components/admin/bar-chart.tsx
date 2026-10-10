@@ -45,7 +45,7 @@ export function BarChart({
             >
               <span
                 className={`mx-auto block w-full max-w-[28px] rounded-t-[4px] transition-colors ${
-                  hover === i ? 'bg-[#124D37]' : 'bg-[#2E8B62]'
+                  hover === i ? 'bg-mo-brand-strong' : 'bg-[#2E8B62]'
                 } group-focus-visible:ring-2 group-focus-visible:ring-[#E8B04B]`}
                 style={{ height: d.value > 0 ? `max(${pct}%, 2px)` : '0px' }}
               />
@@ -53,8 +53,8 @@ export function BarChart({
           );
         })}
       </div>
-      <div className="mt-1 border-t border-[#DDE3DE]" />
-      <div className="mt-1 flex gap-[2px] text-[11px] text-[#8A968F]">
+      <div className="mt-1 border-t border-mo-line" />
+      <div className="mt-1 flex gap-[2px] text-[11px] text-mo-subtle">
         {data.map((d, i) => (
           <span key={`${d.label}-axis-${i}`} className="flex-1 text-center tabular-nums">
             {i % everyNth === 0 || i === data.length - 1 ? d.label : ''}
@@ -64,15 +64,15 @@ export function BarChart({
       {hover !== null && data[hover] && (
         <div
           role="status"
-          className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-[#DDE3DE] bg-white px-2.5 py-1.5 text-xs shadow-md"
+          className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-mo-line bg-white px-2.5 py-1.5 text-xs shadow-md"
           style={{ left: `${((hover + 0.5) / data.length) * 100}%` }}
         >
-          <span className="block text-[#5E6B64]">{data[hover].title}</span>
-          <span className="font-semibold tabular-nums text-[#17221D]">{format(data[hover].value)}</span>
+          <span className="block text-mo-muted">{data[hover].title}</span>
+          <span className="font-semibold tabular-nums text-mo-ink">{format(data[hover].value)}</span>
         </div>
       )}
       {max === 0 && (
-        <p className="absolute inset-x-0 top-1/3 text-center text-sm text-[#8A968F]">No accepted milk recorded in this period.</p>
+        <p className="absolute inset-x-0 top-1/3 text-center text-sm text-mo-subtle">No accepted milk recorded in this period.</p>
       )}
     </figure>
   );

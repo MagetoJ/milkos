@@ -80,10 +80,10 @@ def confirm(client, headers, body, expect=201):
 # ---------------- creation & allocation ----------------
 
 def test_multi_farmer_batch_is_one_transaction_with_lines(client, session, world):
-    body = batch_body(world, [(world["jane"], 80), (world["peter"], 65), (world["mary"], 50)])
+    body = batch_body(world, [(world["jane"], 80), (world["peter"], 65), (world["mary"], 50)], captured=195)
     batch = confirm(client, world["col_a"], body)
     assert batch["status"] == "CONFIRMED" and batch["reference"].startswith("CB-")
-    assert batch["captured_weight_kg"] == 248.5 and batch["allocated_weight_kg"] == 195 and batch["remaining_weight_kg"] == 53.5
+    assert batch["captured_weight_kg"] == 195 and batch["allocated_weight_kg"] == 195 and batch["remaining_weight_kg"] == 0
     assert batch["collector_id"] == str(world["collector"].id)  # always the caller's own profile
     assert batch["weight_source"] == "SCALE" and batch["scale_name"] == "Test scale"
     assert [(l["farmer_name"], l["quantity_kg"]) for l in batch["lines"]] != []
@@ -103,6 +103,8 @@ def test_multi_farmer_batch_is_one_transaction_with_lines(client, session, world
 
 @pytest.mark.parametrize("allocations,captured,field", [
     ([("jane", 200), ("peter", 60)], 248.5, "allocations"),          # over-allocated
+    ([("jane", 200), ("peter", 48)], 248.5, "not allocated"),        # under-allocated (0.50 KG left)
+    ([("jane", 248.49)], 248.5, "not allocated"),                     # one hundredth short
     ([("jane", 0)], 100, "quantity_kg"),                             # zero
     ([("jane", -5)], 100, "quantity_kg"),                            # negative
     ([("jane", 10), ("jane", 10)], 100, "allocations"),              # same farmer twice
@@ -186,7 +188,7 @@ def test_resending_the_same_batch_never_duplicates(client, session, world):
 def test_offline_batch_push_is_idempotent_and_reuses_device_ids(client, session, world):
     device, _ = register(client, world["col_a"])
     batch_id, line_id = uuid.uuid4(), uuid.uuid4()
-    payload = batch_body(world, [(world["jane"], 40)], captured=41.5)
+    payload = batch_body(world, [(world["jane"], 41.5)], captured=41.5)
     payload["allocations"][0]["id"] = str(line_id)
     m = mutation("collection_batch", payload, local_id=batch_id)
     [first] = push(client, world["col_a"], device, m)
@@ -250,7 +252,7 @@ def test_receipts_sent_only_when_the_provider_accepts(client, session, world):
     fake = FakeSms()
     sms.set_provider(fake)
     grant_credits(session, world["a"], 5)
-    batch = confirm(client, world["col_a"], batch_body(world, [(world["jane"], 25.5), (world["peter"], 10)], captured=40))
+    batch = confirm(client, world["col_a"], batch_body(world, [(world["jane"], 25.5), (world["peter"], 10)], captured=35.5))
     receipts = session.query(Notification).filter_by(type="COLLECTION_RECEIPT").all()
     assert len(receipts) == 2 and all(n.status == "SENT" for n in receipts)
     assert {to for to, _ in fake.sent} == {"+254712345601", "+254712345602"}
@@ -301,8 +303,8 @@ def correction_body(w, allocations, captured, reason="Scale misread by the colle
 
 
 def test_correction_supersedes_without_overwriting(client, session, world):
-    batch = confirm(client, world["col_a"], batch_body(world, [(world["jane"], 80), (world["peter"], 65)], captured=150))
-    req = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 70), (world["peter"], 75)], 150),
+    batch = confirm(client, world["col_a"], batch_body(world, [(world["jane"], 80), (world["peter"], 65)], captured=145))
+    req = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 70), (world["peter"], 75)], 145),
                       headers=world["col_a"])
     assert req.status_code == 201, req.text
     request = req.json()
@@ -334,7 +336,7 @@ def test_correction_supersedes_without_overwriting(client, session, world):
 
 def test_maker_checker_requester_cannot_review_own_request(client, world):
     batch = confirm(client, world["admin_a"], batch_body(world, [(world["jane"], 50)], captured=50))
-    request = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 40)], 50),
+    request = client.post(f"{BATCHES}/{batch['id']}/corrections", json=correction_body(world, [(world["jane"], 40)], 40),
                           headers=world["admin_a"]).json()
     res = client.post(f"{REQUESTS}/{request['id']}/approve", json={}, headers=world["admin_a"])
     assert res.status_code == 403 and "own request" in res.json()["detail"]

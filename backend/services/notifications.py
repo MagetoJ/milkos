@@ -29,6 +29,11 @@ logger = logging.getLogger("milkflow.notifications")
 
 MAX_ATTEMPTS = 5
 NOT_CONFIGURED = "SMS provider not configured"
+# Messages carrying a one-time secret (activation link, code, reset link). Their stored `message` is redacted, so
+# they can only be sent with the real text in hand (deliver(text=...)) and are never retried automatically:
+# a failed one is replaced by issuing a NEW link or code (services/accounts).
+SECRET_TYPES = ("ACCOUNT_ACTIVATION", "PHONE_OTP", "PASSWORD_RESET")
+SECRET_NOT_RESENDABLE = "This message contained a one-time link or code and can't be resent. Send a new one instead."
 STUCK_AFTER = datetime.timedelta(minutes=10)
 
 
@@ -41,7 +46,8 @@ def mask_phone(phone: Optional[str]) -> str:
 def notification_json(n: Notification) -> dict:
     return {
         "id": str(n.id),
-        "cooperative_id": str(n.cooperative_id),
+        "cooperative_id": str(n.cooperative_id) if n.cooperative_id else None,
+        "billed_to": n.billed_to,
         "cooler_id": str(n.cooler_id) if n.cooler_id else None,
         "reading_id": str(n.reading_id) if n.reading_id else None,
         "collection_id": str(n.collection_id) if n.collection_id else None,
@@ -61,6 +67,7 @@ def notification_json(n: Notification) -> dict:
         "error": n.error,
         "created_at": iso(n.created_at),
         "sent_at": iso(n.sent_at),
+        "delivered_at": iso(n.delivered_at),
         "failed_at": iso(n.failed_at),
     }
 
@@ -70,19 +77,32 @@ def _backoff(attempts: int) -> datetime.timedelta:
 
 
 def _fail(n: Notification, error: str, retryable: bool, now: datetime.datetime) -> None:
+    retryable = retryable and n.type not in SECRET_TYPES
     n.status = NotificationStatus.FAILED
     n.error = error[:1000]
     n.failed_at = now
     n.next_attempt_at = now + _backoff(n.attempts) if retryable and n.attempts < MAX_ATTEMPTS else None
 
 
-def deliver(db: Session, notification: Notification, actor=None) -> Notification:
-    """Try to send one notification now. Commits; never raises for delivery problems."""
+def _platform_billed(n: Notification) -> bool:
+    return n.billed_to == "PLATFORM" or n.cooperative_id is None
+
+
+def deliver(db: Session, notification: Notification, actor=None, text: Optional[str] = None) -> Notification:
+    """Try to send one notification now. Commits; never raises for delivery problems.
+
+    `text` is the real message for SECRET_TYPES (whose stored message is redacted); it is never stored or logged.
+    """
     n = notification
-    if n.status in (NotificationStatus.SENT, NotificationStatus.SKIPPED, NotificationStatus.REFUNDED):
+    if n.status in (NotificationStatus.SENT, NotificationStatus.DELIVERED, NotificationStatus.SKIPPED, NotificationStatus.REFUNDED):
         return n
     now = datetime.datetime.utcnow()
     n.attempts = (n.attempts or 0) + 1
+    secret = n.type in SECRET_TYPES
+    if secret and text is None:
+        _fail(n, SECRET_NOT_RESENDABLE, retryable=False, now=now)
+        db.commit()
+        return n
 
     try:
         provider = sms.get_provider()
@@ -93,12 +113,13 @@ def deliver(db: Session, notification: Notification, actor=None) -> Notification
         n.status = NotificationStatus.PENDING_PROVIDER
         n.error = NOT_CONFIGURED
         n.failed_at = now
-        n.next_attempt_at = now + _backoff(n.attempts) if n.attempts < MAX_ATTEMPTS else None
+        n.next_attempt_at = now + _backoff(n.attempts) if n.attempts < MAX_ATTEMPTS and not secret else None
     elif n.channel != "SMS":
         _fail(n, f"Unsupported channel {n.channel}", retryable=False, now=now)
     else:
-        reference = sms_credits.next_reference(db, n.cooperative_id, f"sms:{n.id}:")
-        if not sms_credits.reserve(db, n.cooperative_id, reference):
+        billed = not _platform_billed(n)
+        reference = sms_credits.next_reference(db, n.cooperative_id, f"sms:{n.id}:") if billed else None
+        if billed and not sms_credits.reserve(db, n.cooperative_id, reference):
             _fail(n, "Not enough SMS credits. Top up to deliver SMS.", retryable=True, now=now)
         else:
             # The reservation and the hand-over are committed before the provider is called, so a crash
@@ -109,20 +130,22 @@ def deliver(db: Session, notification: Notification, actor=None) -> Notification
             n.status = NotificationStatus.SENDING
             db.commit()
             try:
-                result = provider.send_sms(n.recipient_phone, n.message)
+                result = provider.send_sms(n.recipient_phone, text if secret else n.message)
             except Exception as exc:  # a provider bug must not break the caller
                 logger.exception("sms_provider_crashed provider=%s", provider.name)
                 result = sms.SmsResult(False, error=f"Provider error: {type(exc).__name__}")
             now = datetime.datetime.utcnow()
             if result.accepted:
-                sms_credits.consume(db, n.cooperative_id, reference)
+                if billed:
+                    sms_credits.consume(db, n.cooperative_id, reference)
                 n.status = NotificationStatus.SENT
                 n.sent_at = now
                 n.provider_message_id = result.provider_message_id
                 n.error = None
                 n.next_attempt_at = None
             else:
-                sms_credits.refund(db, n.cooperative_id, reference, reason=f"SMS not accepted: {result.error or 'refused'}"[:200])
+                if billed:
+                    sms_credits.refund(db, n.cooperative_id, reference, reason=f"SMS not accepted: {result.error or 'refused'}"[:200])
                 _fail(n, result.error or "Provider refused the message", result.retryable, now)
                 if n.next_attempt_at is None:
                     n.status = NotificationStatus.REFUNDED  # final: given up, the credit went back
@@ -140,7 +163,8 @@ def deliver(db: Session, notification: Notification, actor=None) -> Notification
             entity_type="notification", entity_id=n.id, cooperative_id=n.cooperative_id,
             new_values={"status": n.status, "attempts": n.attempts, "provider": n.provider},
         )
-    if not sent and n.next_attempt_at is None and n.status in (NotificationStatus.FAILED, NotificationStatus.REFUNDED):
+    if not sent and n.next_attempt_at is None and n.status in (NotificationStatus.FAILED, NotificationStatus.REFUNDED) \
+            and n.cooperative_id is not None and not secret:
         _tell_staff(db, n)
     db.commit()
     return n
@@ -169,8 +193,9 @@ def recover_stuck(db: Session, cooperative_id: Optional[UUID]) -> int:
         query = query.filter(Notification.cooperative_id == cooperative_id)
     count = 0
     for n in query.limit(50).all():
-        for reference in sms_credits.open_reservations(db, n.cooperative_id, f"sms:{n.id}:"):
-            sms_credits.refund(db, n.cooperative_id, reference, reason="Send interrupted; outcome unknown")
+        if not _platform_billed(n):
+            for reference in sms_credits.open_reservations(db, n.cooperative_id, f"sms:{n.id}:"):
+                sms_credits.refund(db, n.cooperative_id, reference, reason="Send interrupted; outcome unknown")
         n.status = NotificationStatus.FAILED
         n.error = "Sending was interrupted and its outcome is unknown. Retry if the recipient did not receive it."
         n.failed_at = datetime.datetime.utcnow()
@@ -202,7 +227,7 @@ def dispatch_due(db: Session, cooperative_id: Optional[UUID], actor=None, limit:
         (Notification.status.in_((NotificationStatus.FAILED, NotificationStatus.PENDING_PROVIDER))
          & (Notification.next_attempt_at <= now))
         | ((Notification.status == NotificationStatus.PENDING) & (Notification.created_at <= now - datetime.timedelta(minutes=1)))
-    )
+    ).filter(Notification.type.notin_(SECRET_TYPES))
     if cooperative_id is not None:
         query = query.filter(Notification.cooperative_id == cooperative_id)
     out = []
@@ -217,8 +242,29 @@ def dispatch_due(db: Session, cooperative_id: Optional[UUID], actor=None, limit:
 
 def retry(db: Session, actor, notification: Notification) -> Notification:
     """Manual retry by staff (FAILED, REFUNDED or PENDING_PROVIDER), resetting the attempt budget."""
+    if notification.type in SECRET_TYPES:
+        from fastapi import HTTPException
+
+        raise HTTPException(409, SECRET_NOT_RESENDABLE)
     if notification.status not in (NotificationStatus.FAILED, NotificationStatus.REFUNDED, NotificationStatus.PENDING_PROVIDER):
         return notification
     notification.status = NotificationStatus.FAILED
     notification.attempts = 0
     return deliver(db, notification, actor)
+
+
+def record_delivery_report(db: Session, provider_message_id: str, delivered: bool, detail: Optional[str]) -> bool:
+    """Apply a provider delivery report. Only a report moves SENT to DELIVERED; nothing else claims delivery."""
+    n = db.query(Notification).filter(Notification.provider_message_id == provider_message_id).first()
+    if n is None:
+        return False
+    now = datetime.datetime.utcnow()
+    if delivered and n.status == NotificationStatus.SENT:
+        n.status = NotificationStatus.DELIVERED
+        n.delivered_at = now
+    elif not delivered and n.status == NotificationStatus.SENT:
+        # Accepted by the provider (its credit is spent) but the handset never got it.
+        n.error = f"Not delivered: {detail or 'reported failed by the provider'}"[:1000]
+        n.failed_at = now
+    db.commit()
+    return True

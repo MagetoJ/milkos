@@ -22,12 +22,13 @@ import {
   Tabs,
   dangerButton,
   primaryButton,
+  secondaryButton,
   type Column,
 } from '@/components/admin';
 import { formatDateTime, formatKes, formatNumber, waitingFor } from '@/lib/format';
 import { useListState } from '@/lib/hooks/use-list-state';
 import { useResource } from '@/lib/hooks/use-resource';
-import { getPayment, listPayments, verifyPayment } from '../../_api/superadmin-client';
+import { getPayment, listPayments, requestPaymentInformation, verifyPayment } from '../../_api/superadmin-client';
 import type { Payment, PaymentStatus } from '../../_types/platform-types';
 import { useSuperadminData } from '../superadmin-data';
 import { useToast } from '../toast';
@@ -65,6 +66,7 @@ export function PaymentsView({ cooperativeId, embedded }: { cooperativeId?: stri
         onChange={(v) => list.setFilter('status', v === 'ALL' ? '' : v)}
         tabs={[
           { value: 'PENDING', label: 'Pending', count: s?.pending.count },
+          { value: 'AWAITING_INFORMATION', label: 'Awaiting information', count: s?.awaiting_information?.count },
           { value: 'VERIFIED', label: 'Verified', count: s?.verified.count },
           { value: 'REJECTED', label: 'Rejected', count: s?.rejected.count },
           { value: 'CANCELLED', label: 'Cancelled', count: s?.cancelled?.count },
@@ -100,7 +102,7 @@ function PaymentPanel({ id, onClose, onDecided }: { id: string; onClose: () => v
   const toast = useToast();
   const { refresh } = useSuperadminData();
   const payment = useResource(() => getPayment(id), [id]);
-  const [deciding, setDeciding] = useState<'VERIFY' | 'REJECT' | null>(null);
+  const [deciding, setDeciding] = useState<'VERIFY' | 'REJECT' | 'ASK' | null>(null);
   const [matched, setMatched] = useState(false);
   const p = payment.data;
 
@@ -111,8 +113,9 @@ function PaymentPanel({ id, onClose, onDecided }: { id: string; onClose: () => v
       badge={p && <StatusBadge status={p.status} />}
       onClose={onClose}
       actions={
-        p?.status === 'PENDING' && (
+        (p?.status === 'PENDING' || p?.status === 'AWAITING_INFORMATION') && (
           <>
+            {p.status === 'PENDING' && <button onClick={() => setDeciding('ASK')} className={secondaryButton}>Request information…</button>}
             <button onClick={() => setDeciding('REJECT')} className={dangerButton}>Reject…</button>
             <button onClick={() => setDeciding('VERIFY')} disabled={!matched} className={primaryButton}>Verify and issue credits</button>
           </>
@@ -133,9 +136,12 @@ function PaymentPanel({ id, onClose, onDecided }: { id: string; onClose: () => v
               <DetailRow label="Submitted" value={formatDateTime(p.submitted_at)} />
               {p.verified_at && <DetailRow label="Decided" value={formatDateTime(p.verified_at)} />}
               {p.rejection_reason && <DetailRow label="Rejected because" value={p.rejection_reason} />}
+              {p.info_request && <DetailRow label="Information requested" value={<>{p.info_request}<span className="block text-xs text-mo-muted">{formatDateTime(p.info_requested_at ?? null)}</span></>} />}
+              {p.info_response && <DetailRow label="Cooperative's answer" value={<>{p.info_response}<span className="block text-xs text-mo-muted">{formatDateTime(p.info_responded_at ?? null)}</span></>} />}
+              {p.status === 'AWAITING_INFORMATION' && <DetailRow label="Waiting for" value="The cooperative to answer" />}
             </DetailList>
           </DetailSection>
-          {p.status === 'PENDING' && (
+          {(p.status === 'PENDING' || p.status === 'AWAITING_INFORMATION') && (
             <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#DDE3DE] p-3 text-sm">
               <input type="checkbox" checked={matched} onChange={(e) => setMatched(e.target.checked)} className="mt-0.5 size-4 accent-[#176044]" />
               <span>
@@ -149,7 +155,24 @@ function PaymentPanel({ id, onClose, onDecided }: { id: string; onClose: () => v
           </DetailSection>
         </>
       )}
-      {p && deciding && (
+      {p && deciding === 'ASK' && (
+        <ConfirmationDialog
+          title="Ask the cooperative for information"
+          body="The payment moves to “Awaiting information”. The cooperative is notified and answers from its SMS credits page; nothing is credited or rejected."
+          confirmLabel="Send request"
+          reason={{ label: 'What do you need?', required: true, minLength: 5, placeholder: 'e.g. The phone number the payment was made from' }}
+          onClose={() => setDeciding(null)}
+          onConfirm={async (message) => {
+            await requestPaymentInformation(p.id, message);
+            toast('Request sent to the cooperative.');
+            setDeciding(null);
+            await payment.reload();
+            onDecided();
+            void refresh();
+          }}
+        />
+      )}
+      {p && (deciding === 'VERIFY' || deciding === 'REJECT') && (
         <ConfirmationDialog
           title={deciding === 'VERIFY' ? 'Issue the credits?' : 'Reject this payment?'}
           body={

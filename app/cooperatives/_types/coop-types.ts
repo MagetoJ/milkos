@@ -17,6 +17,12 @@ export interface Overview {
     county: string;
     location: string | null;
     status: string;
+    registration_number?: string | null;
+    kra_pin?: string | null;
+    contact_email?: string | null;
+    contact_phone?: string | null;
+    receipt_sms_enabled?: boolean;
+    alert_sms_enabled?: boolean;
     sms_credit_balance: number;
     estimated_daily_liters: number | null;
     created_at: string | null;
@@ -102,6 +108,8 @@ export interface Farmer extends SyncFields {
   centre_id: string | null;
   centre_name: string | null;
   created_at: string | null;
+  /** The farmer has a MilkOS app account (pending or active). */
+  has_account?: boolean;
 }
 
 export interface FarmerInput {
@@ -132,23 +140,49 @@ export interface FarmerQuery {
 
 export type TeamRole = 'MANAGER' | 'COLLECTOR';
 
+export type AccountState = 'PENDING_APPROVAL' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+
+export interface ActivationSummary {
+  invited_at: string | null;
+  link_sent_at: string | null;
+  link_expires_at: string | null;
+  link_state: 'NONE' | 'SENT' | 'OPENED' | 'EXPIRED' | 'USED' | 'REVOKED';
+  /** Provider status of the last activation SMS. Never DELIVERED unless the provider confirmed delivery. */
+  sms_status: string | null;
+  sms_error: string | null;
+  last_sms_attempt_at: string | null;
+  phone_verified: boolean;
+}
+
+export interface SmsOutcome {
+  sms_status: string;
+  sms_sent: boolean;
+  sms_error: string | null;
+}
+
 export interface TeamMember {
   id: string;
   full_name: string;
-  email: string;
+  email: string | null;
   phone_number: string;
-  role: 'COOP_ADMIN' | TeamRole;
+  phone_masked?: string;
+  phone_verified?: boolean;
+  role: 'COOP_ADMIN' | TeamRole | 'FARMER';
   is_active: boolean;
+  account_status?: AccountState;
+  status_reason?: string | null;
   is_you: boolean;
+  last_login_at?: string | null;
   created_at: string | null;
+  activation?: ActivationSummary | null;
+  activation_sms?: SmsOutcome;
 }
 
 export interface TeamCreateInput {
   full_name: string;
-  email: string;
+  email: string | null;
   phone: string;
   role: TeamRole;
-  password: string;
 }
 
 export interface TeamUpdateInput {
@@ -156,5 +190,4 @@ export interface TeamUpdateInput {
   phone?: string;
   role?: TeamRole;
   is_active?: boolean;
-  password?: string;
 }

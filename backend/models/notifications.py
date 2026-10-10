@@ -17,8 +17,9 @@ class NotificationStatus:
     FAILED = "FAILED"                      # the last attempt failed (its credit was refunded); retried while attempts remain
     REFUNDED = "REFUNDED"                  # gave up for good after its reserved credit was refunded
     SKIPPED = "SKIPPED"                    # deliberately not sent (simulated reading, receipts switched off)
+    DELIVERED = "DELIVERED"                # the provider's delivery report confirmed the handset received it
 
-    ALL = (PENDING, PENDING_PROVIDER, RESERVED, SENDING, SENT, FAILED, REFUNDED, SKIPPED)
+    ALL = (PENDING, PENDING_PROVIDER, RESERVED, SENDING, SENT, FAILED, REFUNDED, SKIPPED, DELIVERED)
     RETRYABLE = (PENDING, PENDING_PROVIDER, FAILED)
 
 
@@ -28,10 +29,14 @@ class Notification(Base):
         Index("ix_notifications_coop_created", "cooperative_id", "created_at"),
         Index("ix_notifications_cooler_type", "cooler_id", "type", "created_at"),
         Index("ix_notifications_status_next", "status", "next_attempt_at"),
+        Index("ix_notifications_provider_message_id", "provider_message_id"),
     )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="CASCADE"), nullable=False)
+    # NULL for messages to platform accounts (no cooperative); those are billed to the platform.
+    cooperative_id = Column(Uuid, ForeignKey("cooperatives.id", ondelete="CASCADE"), nullable=True)
+    # Who pays the credit: COOPERATIVE (its SMS credit ledger) or PLATFORM (not drawn from any ledger).
+    billed_to = Column(String(20), nullable=False, default="COOPERATIVE", server_default="COOPERATIVE")
     cooler_id = Column(Uuid, ForeignKey("coolers.id", ondelete="SET NULL"), nullable=True)
     reading_id = Column(Uuid, ForeignKey("cooler_readings.id", ondelete="SET NULL"), nullable=True)
     # Collection receipts: the allocation line (and its farmer) this SMS confirms.
@@ -54,5 +59,6 @@ class Notification(Base):
     error = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     sent_at = Column(DateTime)
+    delivered_at = Column(DateTime)
     failed_at = Column(DateTime)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

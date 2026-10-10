@@ -3,8 +3,8 @@
 Rules (all enforced here, on the server, whatever the client sent):
   - the batch, its centre, cooler, collector and every farmer belong to the caller's cooperative;
   - a collector always records as themselves; staff may name an active collector of their cooperative;
-  - every allocation is > 0 KG, one line per farmer, and the lines add up to no more than the captured weight
-    (the remainder is reported as remaining_weight_kg);
+  - every allocation is > 0 KG, one line per farmer, and the lines add up to EXACTLY the captured weight
+    (remaining_weight_kg is therefore 0 for every batch confirmed under this rule; older batches may show a remainder);
   - a confirmed batch is never edited: corrections and reversals go through services/corrections.py.
 Each allocation line is a MilkCollection, so existing reports, farmer statements and payments see it.
 """
@@ -133,7 +133,9 @@ def resolve_farmers(db: Session, cooperative_id: UUID, farmer_ids: list[UUID], *
 
 
 def check_allocation(captured, allocations: list[tuple[UUID, Decimal]]) -> Decimal:
-    """Total allocated KG; refuses negative/zero lines, duplicates and over-allocation."""
+    """Total allocated KG. The allocation must account for EXACTLY the captured weight: no line at or below zero,
+    no farmer twice, nothing left over (under-allocation) and nothing extra (over-allocation). Decimal arithmetic at
+    the stored precision (0.01 KG), so float rounding can neither block a valid batch nor let a wrong one through."""
     seen: set[UUID] = set()
     total = Decimal("0")
     for index, (farmer_id, amount) in enumerate(allocations):
@@ -145,8 +147,14 @@ def check_allocation(captured, allocations: list[tuple[UUID, Decimal]]) -> Decim
         total += amount
     if not allocations:
         raise field_error("allocations", "Allocate the milk to at least one farmer.")
-    if total > kg(captured):
-        raise field_error("allocations", f"The allocated weight ({total} KG) is more than the captured weight ({kg(captured)} KG).")
+    captured_kg = kg(captured)
+    if total > captured_kg:
+        raise field_error("allocations", f"The allocated weight ({total} KG) is more than the captured weight ({captured_kg} KG).")
+    if total < captured_kg:
+        raise field_error(
+            "allocations",
+            f"{captured_kg - total} KG of the captured {captured_kg} KG is not allocated. Allocate all of it before confirming.",
+        )
     return total
 
 

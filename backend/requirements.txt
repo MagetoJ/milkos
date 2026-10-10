@@ -16,3 +16,4 @@ bcrypt==4.0.1
 httpx==0.28.1
 # tests
 pytest==9.1.1
+cryptography==50.0.2

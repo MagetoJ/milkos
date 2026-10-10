@@ -16,10 +16,10 @@ export function ConnectionStatus({ dark = false }: { dark?: boolean }) {
   const lastSynced = useRelativeTime(sync.lastSyncAt);
   const online = c.network && c.server === 'reachable';
   const checking = c.network && c.server === 'unknown';
-  const muted = dark ? 'text-[#9DB8A8]' : 'text-[#8A968F]';
+  const muted = dark ? 'text-[#9DB8A8]' : 'text-mo-subtle';
   return (
     <div className="text-xs" role="status" aria-live="polite">
-      <p className={`flex items-center gap-1.5 font-medium ${dark ? 'text-white/90' : 'text-[#17221D]'}`}>
+      <p className={`flex items-center gap-1.5 font-medium ${dark ? 'text-white/90' : 'text-mo-ink'}`}>
         <span
           aria-hidden
           className={`inline-block size-2 rounded-full ${online ? 'bg-[#3BA272]' : checking ? 'bg-[#C9D2CC]' : 'border border-current bg-transparent'}`}
@@ -36,8 +36,8 @@ export function SyncStatus({ dark = false, compact = false }: { dark?: boolean; 
   const sync = useSyncState();
   const { pending, syncing, failed, conflict } = sync.counts;
   const waiting = pending + syncing;
-  const text = dark ? 'text-[#DCE8E0]' : 'text-[#5E6B64]';
-  const link = dark ? 'text-white underline-offset-2 hover:underline' : 'font-medium text-[#176044] hover:underline';
+  const text = dark ? 'text-[#DCE8E0]' : 'text-mo-muted';
+  const link = dark ? 'text-white underline-offset-2 hover:underline' : 'font-medium text-mo-brand hover:underline';
 
   let line: React.ReactNode;
   if (sync.phase === 'syncing') {
@@ -102,7 +102,7 @@ export function OfflineBanner() {
   if (!offline && sync.phase !== 'auth-required') return null;
   if (sync.phase === 'auth-required') {
     return (
-      <div className="mb-4 flex items-start gap-3 rounded-lg border border-[#F1D9A6] bg-[#FBF1DC] px-4 py-3 text-sm text-[#5C3D06]">
+      <div className="mb-4 flex items-start gap-3 rounded-lg border border-[#F1D9A6] bg-mo-warn-soft px-4 py-3 text-sm text-[#5C3D06]">
         <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
         <p>
           <span className="font-medium">Your session has ended.</span> Your changes are saved on this device.{' '}
@@ -112,12 +112,12 @@ export function OfflineBanner() {
     );
   }
   return (
-    <div className="mb-4 flex items-start gap-3 rounded-lg border border-[#DDE3DE] bg-white px-4 py-3 text-sm text-[#3C4A43]">
-      <CloudOff aria-hidden className="mt-0.5 size-4 shrink-0 text-[#5E6B64]" />
+    <div className="mb-4 flex items-start gap-3 rounded-lg border border-mo-line bg-white px-4 py-3 text-sm text-[#3C4A43]">
+      <CloudOff aria-hidden className="mt-0.5 size-4 shrink-0 text-mo-muted" />
       <p>
         <span className="font-medium">You&apos;re offline.</span> MilkOS is using the data on this device. Changes will sync
         automatically when the connection returns.
-        {sync.counts.pending > 0 && <span className="text-[#5E6B64]"> {sync.counts.pending} waiting.</span>}
+        {sync.counts.pending > 0 && <span className="text-mo-muted"> {sync.counts.pending} waiting.</span>}
       </p>
     </div>
   );
@@ -145,7 +145,7 @@ export function SyncPill({ status, error }: { status?: RecordSync | null; error?
 export function LocalDataNote({ show }: { show?: boolean }) {
   if (!show) return null;
   return (
-    <p className="flex items-center gap-1.5 text-xs text-[#8A968F]">
+    <p className="flex items-center gap-1.5 text-xs text-mo-subtle">
       <CircleDot aria-hidden className="size-3" /> Offline values from this device’s last sync
     </p>
   );

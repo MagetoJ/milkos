@@ -45,6 +45,21 @@ REGISTRY: dict[str, dict[str, Any]] = {
         "label": "Low SMS balance warning at",
         "help": "Cooperatives at or below this many credits are flagged on the dashboard.",
     },
+    "security.activation_link_minutes": {
+        "type": "integer", "default": 30, "min": 10, "max": 10080, "group": "Account security",
+        "label": "Activation links expire after (minutes)",
+        "help": "How long the SMS activation link sent to a new account stays valid. A new link can always be sent.",
+    },
+    "security.activation_requires_otp": {
+        "type": "boolean", "default": True, "group": "Account security",
+        "label": "Confirm the phone with a code during activation",
+        "help": "When on, people activating an account also enter a 6-digit code sent to their phone.",
+    },
+    "security.password_reset_minutes": {
+        "type": "integer", "default": 30, "min": 10, "max": 1440, "group": "Account security",
+        "label": "Password reset links expire after (minutes)",
+        "help": "How long a password reset link stays valid.",
+    },
     "platform.support_email": {
         "type": "email", "default": None, "group": "Support",
         "label": "Support email", "help": "Shown to cooperatives that need help.",

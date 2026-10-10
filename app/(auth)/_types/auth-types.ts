@@ -1,5 +1,6 @@
 export interface LoginPayload {
-  email: string
+  /** An email address or a phone number. */
+  identifier: string
   password: string
 }
 
@@ -18,4 +19,9 @@ export interface AuthResponse {
   token?: string
   role?: UserRole
   message?: string
+  /** Machine-readable reason a sign-in was refused (activation_required, suspended, locked...). */
+  code?: string
+  mfaRequired?: boolean
+  mfaToken?: string
+  mustChangePassword?: boolean
 }

@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Banknote, Bell, ClipboardCheck, FileBarChart, Gauge, LayoutDashboard, LogOut, MapPin, Menu, MessageSquareText, Milk, RefreshCw,
+  Banknote, Bell, ChevronsLeft, ChevronsRight, ClipboardCheck, Settings, FileBarChart, Gauge, LayoutDashboard, LogOut, MapPin, Menu, MessageSquareText, Milk, RefreshCw,
   Search, Smartphone, Snowflake, Tags, UserCog, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { ConnectionStatus, OfflineBanner, SyncStatus } from '@/components/offline/status';
+import { useSidebarCollapsed } from '@/lib/hooks/use-sidebar';
 import { signOutEverywhere } from '@/lib/offline/auth';
 import { syncEngine } from '@/lib/sync/engine';
 import { inboxCount } from '../_api/finance-client';
@@ -69,6 +70,7 @@ export function CoopShell({ children }: { children: ReactNode }) {
   const open = menuFor === pathname;
   const setOpen = (value: boolean) => setMenuFor(value ? pathname : null);
   const [searching, setSearching] = useState(false);
+  const [collapsed, toggleCollapsed] = useSidebarCollapsed('cooperative');
   const unread = useUnread(isOnline);
   const openSearch = useCallback(() => setSearching(true), []);
   useCommandShortcut(openSearch);
@@ -96,31 +98,37 @@ export function CoopShell({ children }: { children: ReactNode }) {
     { href: '/cooperatives/sms-credits', label: 'SMS credits', icon: MessageSquareText },
     { href: '/cooperatives/reports', label: 'Reports', icon: FileBarChart },
     ...(offlineCapable ? [{ href: '/cooperatives/sync', label: 'Sync center', icon: RefreshCw, group: 'Device' }] : []),
+    { href: '/cooperatives/settings', label: overview.role === 'COOP_ADMIN' ? 'Settings' : 'My settings', icon: Settings, group: offlineCapable ? undefined : 'Account' },
   ];
 
   const isActive = (href: string) => (href === '/cooperatives' ? pathname === href : pathname.startsWith(href));
 
-  const sidebar = (
+  const sidebar = (narrow: boolean) => (
     <nav aria-label="Cooperative" className="flex h-full flex-col overflow-y-auto bg-[#0F3325] text-[#DCE8E0]">
-      <div className="px-5 pb-6 pt-6">
-        <p className="text-lg font-semibold tracking-tight text-white">Milkflow</p>
-        <p className="mt-1 truncate text-sm font-medium text-[#DCE8E0]" title={overview.cooperative.name}>
-          {overview.cooperative.name}
-        </p>
-        <p className="text-xs text-[#9DB8A8]">
-          {overview.cooperative.code} · {overview.role === 'COOP_ADMIN' ? 'Administrator' : 'Manager'}
-        </p>
+      <div className={`pb-6 pt-6 ${narrow ? 'px-2 text-center' : 'px-5'}`}>
+        <p className="text-lg font-semibold tracking-tight text-white">{narrow ? 'MO' : 'MilkOS'}</p>
+        {!narrow && (
+          <>
+            <p className="mt-1 truncate text-sm font-medium text-[#DCE8E0]" title={overview.cooperative.name}>
+              {overview.cooperative.name}
+            </p>
+            <p className="text-xs text-[#9DB8A8]">
+              {overview.cooperative.code} · {overview.role === 'COOP_ADMIN' ? 'Administrator' : 'Manager'}
+            </p>
+          </>
+        )}
       </div>
 
       <div className="px-3 pb-3">
         <button
           type="button"
           onClick={openSearch}
+          aria-label={narrow ? 'Search (Ctrl K)' : undefined}
           className="flex w-full items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-sm text-[#DCE8E0] outline-none hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-[#E8B04B]"
         >
           <Search aria-hidden className="size-4" />
-          <span className="flex-1 text-left">Search</span>
-          <kbd className="rounded border border-white/20 px-1.5 text-[10px] text-[#9DB8A8]">Ctrl K</kbd>
+          {!narrow && <span className="flex-1 text-left">Search</span>}
+          {!narrow && <kbd className="rounded border border-white/20 px-1.5 text-[10px] text-[#9DB8A8]">Ctrl K</kbd>}
         </button>
       </div>
 
@@ -129,48 +137,55 @@ export function CoopShell({ children }: { children: ReactNode }) {
           const active = isActive(href);
           return (
             <li key={href}>
-              {group && <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-[#9DB8A8]">{group}</p>}
+              {group && !narrow && <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-[#9DB8A8]">{group}</p>}
+              {group && narrow && <hr aria-hidden className="mx-2 my-2 border-white/10" />}
               <Link
                 href={href}
                 aria-current={active ? 'page' : undefined}
+                title={narrow ? label : undefined}
+                aria-label={narrow ? (count !== undefined ? `${label} (${count})` : label) : undefined}
                 className={`relative flex items-center gap-3 rounded-md px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#E8B04B] ${
                   active ? 'bg-white/10 font-medium text-white' : 'hover:bg-white/5 hover:text-white'
                 }`}
               >
                 {active && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[#E8B04B]" />}
-                <Icon className="size-4 shrink-0" />
-                <span className="flex-1">{label}</span>
-                {count !== undefined && <span className="text-xs tabular-nums text-[#9DB8A8]">{count}</span>}
+                <Icon aria-hidden className="size-4 shrink-0" />
+                {!narrow && <span className="flex-1">{label}</span>}
+                {count !== undefined && !narrow && <span className="text-xs tabular-nums text-[#9DB8A8]">{count}</span>}
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <div className="space-y-3 border-t border-white/10 px-5 py-4">
-        <ConnectionStatus dark />
-        {offlineCapable && <SyncStatus dark />}
-      </div>
+      {!narrow && (
+        <div className="space-y-3 border-t border-white/10 px-5 py-4">
+          <ConnectionStatus dark />
+          {offlineCapable && <SyncStatus dark />}
+        </div>
+      )}
 
-      <div className="border-t border-white/10 px-5 py-4">
-        {email && (
+      <div className={`border-t border-white/10 py-4 ${narrow ? 'px-3' : 'px-5'}`}>
+        {email && !narrow && (
           <p className="truncate text-xs text-[#9DB8A8]" title={email}>
             {email}
           </p>
         )}
         <button
           onClick={signOut}
+          aria-label={narrow ? 'Sign out' : undefined}
           className="mt-2 flex items-center gap-2 text-sm text-white/90 outline-none hover:text-white focus-visible:underline"
         >
-          <LogOut className="size-4" /> Sign out
+          <LogOut aria-hidden className="size-4" /> {!narrow && 'Sign out'}
         </button>
       </div>
     </nav>
   );
+  const pad = collapsed ? 'lg:pl-16' : 'lg:pl-60';
 
   return (
     <div className="min-h-screen bg-[#F6F7F4] text-[#17221D]">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 lg:block">{sidebar}</aside>
+      <aside className={`fixed inset-y-0 left-0 hidden lg:block ${collapsed ? 'w-16' : 'w-60'}`}>{sidebar(collapsed)}</aside>
 
       <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-[#DDE3DE] bg-white px-4 py-2 lg:hidden">
         <span className="truncate font-semibold">{overview.cooperative.name}</span>
@@ -198,13 +213,20 @@ export function CoopShell({ children }: { children: ReactNode }) {
             >
               <X className="size-5" />
             </button>
-            {sidebar}
+            {sidebar(false)}
           </div>
         </div>
       )}
 
-      <main className="lg:pl-60">
-        <div className="hidden items-center justify-end gap-3 border-b border-[#DDE3DE] bg-white px-8 py-2 lg:flex">
+      <main className={pad}>
+        <div className="hidden items-center justify-end gap-3 border-b border-mo-line bg-white px-8 py-2 lg:flex">
+          <button
+            onClick={toggleCollapsed} aria-label={collapsed ? 'Expand the menu' : 'Collapse the menu'} aria-pressed={collapsed}
+            className="mr-auto inline-flex size-9 items-center justify-center rounded-md text-mo-muted hover:bg-mo-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mo-brand/40"
+          >
+            {collapsed ? <ChevronsRight aria-hidden className="size-5" /> : <ChevronsLeft aria-hidden className="size-5" />}
+          </button>
+          {offlineCapable && collapsed && <SyncStatus compact />}
           <CoolerContext />
           <Link href="/cooperatives/notifications" aria-label={`Notifications${unread.count ? `, ${unread.count} unread` : ''}`} className="relative inline-flex size-9 items-center justify-center rounded-md text-[#3C4A43] hover:bg-[#EEF1EC]">
             <Bell className="size-5" />

@@ -47,8 +47,11 @@ describe('allocation arithmetic', () => {
   });
 
   it('blocks confirmation for every missing or invalid piece', () => {
-    const ok = { totalKg: 100, lines: [line('a', '60')], coolerId: 'k-1', weightSource: 'SCALE' };
+    const ok = { totalKg: 100, lines: [line('a', '60'), line('b', '40')], coolerId: 'k-1', weightSource: 'SCALE' };
     expect(confirmBlockers(ok)).toEqual([]);
+    // Exact allocation: under-allocation blocks too (the server refuses it as well).
+    expect(confirmBlockers({ ...ok, lines: [line('a', '60')] }).join(' ')).toMatch(/40\.00 KG is not allocated/);
+    expect(confirmBlockers({ ...ok, lines: [line('a', '99.99')] }).join(' ')).toMatch(/0\.01 KG is not allocated/);
     expect(confirmBlockers({ ...ok, coolerId: null })).toContain('Choose the cooler.');
     expect(confirmBlockers({ ...ok, totalKg: null })).toContain('Capture the total weight.');
     expect(confirmBlockers({ ...ok, lines: [] })).toContain('Add at least one farmer.');
@@ -161,7 +164,7 @@ async function collectorDevice() {
 function readyDraft(): CollectionDraft {
   let d = newDraft({ id: 'k-1', name: 'Kiserian Cooler', code: 'CLR-001', centre_id: null, centre_name: null });
   d = reduceDraft(d, { type: 'use_scale', scale: null });
-  d = reduceDraft(d, { type: 'capture', weight: { kg: 248.5, source: 'MANUAL', tare_kg: null, captured_at: new Date().toISOString() } });
+  d = reduceDraft(d, { type: 'capture', weight: { kg: 145, source: 'MANUAL', tare_kg: null, captured_at: new Date().toISOString() } });
   d = reduceDraft(d, { type: 'add_farmer', farmer: { id: 'f-1', full_name: 'Jane W', farmer_number: 'F-0001' }, quantity_kg: '80' });
   d = reduceDraft(d, { type: 'add_farmer', farmer: { id: 'f-2', full_name: 'Peter K', farmer_number: 'F-0002' }, quantity_kg: '65' });
   return d;
@@ -171,7 +174,7 @@ describe('offline collection', () => {
   it('builds a payload that never presents a manual weight as a scale reading', () => {
     const d = readyDraft();
     const p = batchPayload({ ...d, scale: { key: 'x', name: 'Some scale', identifier: 'abc', transport: 'BLUETOOTH_LE' } });
-    expect(p).toMatchObject({ weight_source: 'MANUAL', scale_name: null, scale_identifier: null, captured_weight_kg: 248.5 });
+    expect(p).toMatchObject({ weight_source: 'MANUAL', scale_name: null, scale_identifier: null, captured_weight_kg: 145 });
     expect(p.allocations).toEqual([
       { id: d.lines[0].line_id, farmer_id: 'f-1', quantity_kg: 80 },
       { id: d.lines[1].line_id, farmer_id: 'f-2', quantity_kg: 65 },
@@ -184,7 +187,7 @@ describe('offline collection', () => {
     const d = readyDraft();
     const first = await confirmBatch(d);
     expect(first.status).toBe('pending');
-    expect(first.batch).toMatchObject({ id: d.id, reference: 'Pending sync', allocated_weight_kg: 145, remaining_weight_kg: 103.5, farmer_count: 2 });
+    expect(first.batch).toMatchObject({ id: d.id, reference: 'Pending sync', allocated_weight_kg: 145, remaining_weight_kg: 0, farmer_count: 2 });
     // A second tap on Confirm (or a reload) never queues the same collection twice.
     const again = await confirmBatch(d);
     expect(again.batch.id).toBe(d.id);

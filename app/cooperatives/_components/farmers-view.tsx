@@ -2,9 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Pencil, Plus, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Smartphone } from 'lucide-react';
+import { maskPhone } from '@/lib/format';
 import { useToast } from '@/app/superadmin/_components/toast';
-import { createFarmer, listCentres, listFarmers, updateFarmer } from '../_api/coop-client';
+import { createFarmer, inviteFarmer, listCentres, listFarmers, updateFarmer } from '../_api/coop-client';
 import { formatNumber, formatPhone } from '../_lib/format';
 import { useResource } from '../_lib/use-resource';
 import { useSubmit } from '../_lib/use-submit';
@@ -38,8 +39,35 @@ function useDebounced<T>(value: T, delay = 300): T {
   return debounced;
 }
 
+/** Gives a farmer the MilkOS app: an account on their registered phone, activated from an SMS link. Admins only. */
+function AppAccessButton({ farmer, onDone }: { farmer: Farmer; onDone: (message: string) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  if (farmer.has_account) return <span className="inline-flex rounded-full bg-mo-brand-soft px-2 py-0.5 text-xs font-semibold text-mo-brand">App access</span>;
+  if (farmer.status !== 'ACTIVE' || (farmer.sync_status && farmer.sync_status !== 'synced')) return null;
+  async function invite() {
+    if (!window.confirm(`Send ${farmer.full_name} an activation link by SMS to ${maskPhone(farmer.phone)}? It uses one SMS credit.`)) return;
+    setBusy(true);
+    try {
+      const account = await inviteFarmer(farmer.id);
+      await onDone(account.activation_sms?.sms_sent
+        ? `Activation link sent to ${maskPhone(farmer.phone)}.`
+        : `${farmer.full_name}'s account was created, but the SMS could not be sent${account.activation_sms?.sms_error ? `: ${account.activation_sms.sms_error}` : ''}. Resend it from Team.`);
+    } catch (e) {
+      await onDone(e instanceof Error ? e.message : 'Could not give app access.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button onClick={() => void invite()} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-mo-brand hover:bg-mo-hover disabled:opacity-60"
+      aria-label={`Give ${farmer.full_name} app access`}>
+      <Smartphone aria-hidden className="size-3.5" /> {busy ? 'Sending…' : 'Give app access'}
+    </button>
+  );
+}
+
 export function FarmersView() {
-  const { refresh } = useCoop();
+  const { refresh, canManageTeam } = useCoop();
   const toast = useToast();
   const params = useSearchParams();
 
@@ -83,6 +111,11 @@ export function FarmersView() {
     setEditing(null);
     toast(message);
     await Promise.all([farmers.reload(), centres.reload(), refresh()]);
+  }
+
+  async function appAccess(message: string) {
+    toast(message);
+    await farmers.reload();
   }
 
   function changeFilter<T>(setter: (v: T) => void) {
@@ -165,9 +198,12 @@ export function FarmersView() {
                   <p className="text-xs text-[#5E6B64]">{[f.village, f.centre_name ?? 'No centre'].filter(Boolean).join(' · ')}</p>
                   <div className="mt-1"><StatusPill active={f.status === 'ACTIVE'} /></div>
                 </div>
-                <button onClick={() => setEditing(f)} className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-[#176044] hover:bg-[#EEF1EC]" aria-label={`Edit ${f.full_name}`}>
-                  <Pencil className="size-4" /> Edit
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button onClick={() => setEditing(f)} className="inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-[#176044] hover:bg-[#EEF1EC]" aria-label={`Edit ${f.full_name}`}>
+                    <Pencil className="size-4" /> Edit
+                  </button>
+                  {canManageTeam && <AppAccessButton farmer={f} onDone={appAccess} />}
+                </div>
               </li>
             ))}
           </ul>
@@ -196,7 +232,8 @@ export function FarmersView() {
                     <td className="px-3 py-3.5">{f.village ?? <span className="text-[#B7C0BA]">–</span>}</td>
                     <td className="px-3 py-3.5">{f.centre_name ?? <span className="text-[#8A968F]">Not assigned</span>}</td>
                     <td className="px-3 py-3.5"><StatusPill active={f.status === 'ACTIVE'} /></td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                      {canManageTeam && <AppAccessButton farmer={f} onDone={appAccess} />}
                       <button onClick={() => setEditing(f)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-[#176044] hover:bg-[#EEF1EC]" aria-label={`Edit ${f.full_name}`}>
                         <Pencil className="size-3.5" /> Edit
                       </button>

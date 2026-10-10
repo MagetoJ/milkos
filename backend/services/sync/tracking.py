@@ -94,7 +94,12 @@ def _registry() -> dict[type, Tracked]:
         Notification: Tracked("notification", by_coop, related=_receipt_related),
         User: Tracked(
             "team_member", by_coop,
-            ignored=frozenset({"updated_at", "last_login_at", "password_hash"}),
+            ignored=frozenset({
+                # Sign-in and security bookkeeping: not synchronised data, never sent to devices.
+                "updated_at", "last_login_at", "password_hash", "password_set_at", "session_epoch", "failed_login_count",
+                "locked_until", "mfa_secret_encrypted", "mfa_recovery_codes", "mfa_enabled", "mfa_enabled_at",
+                "must_change_password", "phone_verified_at", "status_reason",
+            }),
             include=lambda user: _role(user) in _team_roles(),
             related=_user_related,
         ),

@@ -4,6 +4,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* MilkOS design tokens. New and touched UI uses these (bg-mo-brand, text-mo-muted, border-mo-line ...) instead of
+   hard-coded hex values; older screens move over gradually. Text tokens meet WCAG 2.2 AA on mo-surface/mo-canvas. */
+@theme {
+  --color-mo-brand: #176044;
+  --color-mo-brand-strong: #124d37;
+  --color-mo-brand-soft: #e3f1e9;
+  --color-mo-ink: #17221d;
+  --color-mo-muted: #5e6b64;
+  --color-mo-subtle: #646f69;
+  --color-mo-line: #dde3de;
+  --color-mo-line-strong: #c9d2cb;
+  --color-mo-canvas: #f6f7f4;
+  --color-mo-surface: #ffffff;
+  --color-mo-hover: #eef1ec;
+  --color-mo-danger: #b42318;
+  --color-mo-danger-soft: #fdecea;
+  --color-mo-danger-line: #f4c7c3;
+  --color-mo-warn: #8a5a0b;
+  --color-mo-warn-soft: #fbf1dc;
+  --color-mo-info: #1f4e86;
+  --color-mo-info-soft: #e6eef8;
+}
+
 @theme inline {
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

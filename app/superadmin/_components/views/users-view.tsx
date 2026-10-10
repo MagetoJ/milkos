@@ -22,7 +22,6 @@ import {
   PrimaryCell,
   RoleBadge,
   SearchInput,
-  StatusBadge,
   dangerButton,
   inputClass,
   primaryButton,
@@ -31,7 +30,8 @@ import {
   type Column,
 } from '@/components/admin';
 import type { UserRole } from '@/lib/auth';
-import { formatDateTime, formatPhone } from '@/lib/format';
+import { AccountStatusBadge, ActivationLine, PhoneVerified, accountState, smsOutcomeMessage } from '@/components/accounts/account-status';
+import { formatDateTime, formatPhone, maskPhone } from '@/lib/format';
 import { useListState } from '@/lib/hooks/use-list-state';
 import { useResource } from '@/lib/hooks/use-resource';
 import { useSubmit } from '@/lib/hooks/use-submit';
@@ -40,8 +40,10 @@ import {
   getUser,
   listFarmers,
   listUsers,
-  resetUserPassword,
-  setUserActive,
+  resendUserActivation,
+  revokeUserInvitation,
+  sendUserPasswordReset,
+  setUserAccountStatus,
   updateUser,
 } from '../../_api/superadmin-client';
 import type { PlatformUser } from '../../_types/platform-types';
@@ -53,7 +55,7 @@ const ROLES: UserRole[] = ['SUPER_ADMIN', 'COOP_ADMIN', 'MANAGER', 'COLLECTOR', 
 export function UsersView({ cooperativeId, role, embedded }: { cooperativeId?: string; role?: UserRole; embedded?: boolean }) {
   const toast = useToast();
   const initialRole = role ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('role') ?? '' : '');
-  const list = useListState({ filters: { role: initialRole, cooperative_id: cooperativeId ?? '', is_active: '' } });
+  const list = useListState({ filters: { role: initialRole, cooperative_id: cooperativeId ?? '', account_status: '' } });
   const data = useResource(() => listUsers(list.params), [JSON.stringify(list.params)]);
   const coops = useCooperativeOptions(!cooperativeId);
   const [focus, setFocus] = useFocusParam();
@@ -61,11 +63,11 @@ export function UsersView({ cooperativeId, role, embedded }: { cooperativeId?: s
 
   const columns: Column<PlatformUser>[] = [
     { key: 'name', header: 'Name', sortKey: 'full_name', cell: (u) => <PrimaryCell title={u.full_name} subtitle={u.email} /> },
-    { key: 'phone', header: 'Phone', cell: (u) => <span className="whitespace-nowrap tabular-nums">{formatPhone(u.phone_number)}</span> },
+    { key: 'phone', header: 'Phone', cell: (u) => <span className="whitespace-nowrap"><span className="block tabular-nums">{formatPhone(u.phone_number)}</span><PhoneVerified verified={u.phone_verified} /></span> },
     { key: 'role', header: 'Role', sortKey: 'role', cell: (u) => <RoleBadge role={u.role} /> },
     { key: 'coop', header: 'Cooperative', hidden: !!cooperativeId, cell: (u) => u.cooperative_name ?? <Muted>Platform</Muted> },
     { key: 'login', header: 'Last sign-in', sortKey: 'last_login_at', cell: (u) => (u.last_login_at ? formatDateTime(u.last_login_at) : <Muted>Never</Muted>) },
-    { key: 'status', header: 'Status', cell: (u) => <StatusBadge status={u.is_active ? 'ACTIVE' : 'INACTIVE'} /> },
+    { key: 'status', header: 'Account', cell: (u) => <span><AccountStatusBadge state={accountState(u)} />{accountState(u) === 'PENDING_ACTIVATION' && <ActivationLine activation={u.activation} />}</span> },
   ];
 
   return (
@@ -91,7 +93,7 @@ export function UsersView({ cooperativeId, role, embedded }: { cooperativeId?: s
         sort={list.sort}
         onSort={list.setSort}
         onRowClick={(u) => setFocus(u.id)}
-        rowClassName={(u) => (u.is_active ? '' : 'text-[#8A968F]')}
+        rowClassName={(u) => (accountState(u) === 'DISABLED' ? 'text-mo-subtle' : '')}
         toolbar={
           <FilterBar onReset={list.reset} filtered={list.isFiltered}>
             <SearchInput value={list.search} onChange={list.setSearch} placeholder="Search name, email or phone" label="Search users" />
@@ -107,7 +109,8 @@ export function UsersView({ cooperativeId, role, embedded }: { cooperativeId?: s
                 options={[{ value: 'none', label: 'Platform accounts' }, ...coops]}
               />
             )}
-            <FilterSelect label="Status" value={list.filters.is_active} onChange={(v) => list.setFilter('is_active', v)} allLabel="Any status" options={[{ value: 'true', label: 'Active' }, { value: 'false', label: 'Inactive' }]} />
+            <FilterSelect label="Account status" value={list.filters.account_status} onChange={(v) => list.setFilter('account_status', v)} allLabel="Any status"
+              options={[{ value: 'PENDING_ACTIVATION', label: 'Pending activation' }, { value: 'ACTIVE', label: 'Active' }, { value: 'SUSPENDED', label: 'Suspended' }, { value: 'DISABLED', label: 'Disabled' }, { value: 'PENDING_APPROVAL', label: 'Awaiting approval' }]} />
             {embedded && (
               <button onClick={() => setEditing('new')} className={`${secondaryButton} ml-auto`}>
                 <Plus className="size-4" /> Add {role ? roleLabel(role).toLowerCase() : 'user'}
@@ -135,7 +138,8 @@ export function UsersView({ cooperativeId, role, embedded }: { cooperativeId?: s
           onClose={() => setEditing(null)}
           onSaved={(u, created) => {
             setEditing(null);
-            toast(`${u.full_name} ${created ? 'created' : 'updated'}.`);
+            const sms = smsOutcomeMessage(u.activation_sms);
+            toast(created ? `${u.full_name} created and waiting for activation. ${sms.text}` : `${u.full_name} updated.`, sms.ok ? 'success' : 'error');
             void data.reload();
             setFocus(u.id);
           }}
@@ -158,22 +162,50 @@ function UserPanel({
 }) {
   const toast = useToast();
   const user = useResource(() => getUser(id), [id]);
-  const [confirm, setConfirm] = useState<'toggle' | 'password' | null>(null);
+  const [confirm, setConfirm] = useState<'suspend' | 'disable' | 'activate' | 'revoke' | 'reset' | null>(null);
+  const [busy, setBusy] = useState(false);
   const u = user.data;
+  const state = u ? accountState(u) : null;
+
+  async function resend() {
+    if (!u) return;
+    setBusy(true);
+    try {
+      const r = await resendUserActivation(u.id);
+      const sms = smsOutcomeMessage(r.activation_sms);
+      toast(sms.ok ? `New activation link sent to ${maskPhone(u.phone_number)}.` : sms.text, sms.ok ? 'success' : 'error');
+      await user.reload();
+      onChanged();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not send the link.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <DetailPanel
       title={u?.full_name ?? 'User'}
-      subtitle={u?.email}
-      badge={u && <StatusBadge status={u.is_active ? 'ACTIVE' : 'INACTIVE'} />}
+      subtitle={u?.email ?? (u ? maskPhone(u.phone_number) : undefined)}
+      badge={u && state && <AccountStatusBadge state={state} />}
       onClose={onClose}
       actions={
         u && (
           <>
-            <button onClick={() => setConfirm('password')} className={secondaryButton}>Reset password</button>
-            <button onClick={() => setConfirm('toggle')} className={u.is_active ? dangerButton : secondaryButton}>
-              {u.is_active ? 'Deactivate' : 'Reactivate'}
-            </button>
+            {state === 'PENDING_ACTIVATION' && (
+              <>
+                <button onClick={() => void resend()} disabled={busy} className={secondaryButton}>{busy ? 'Sending…' : 'Resend activation link'}</button>
+                <button onClick={() => setConfirm('revoke')} className={dangerButton}>Revoke invitation</button>
+              </>
+            )}
+            {state === 'ACTIVE' && (
+              <>
+                <button onClick={() => setConfirm('reset')} className={secondaryButton}>Send password reset</button>
+                <button onClick={() => setConfirm('suspend')} className={dangerButton}>Suspend</button>
+              </>
+            )}
+            {(state === 'SUSPENDED' || state === 'DISABLED') && <button onClick={() => setConfirm('activate')} className={secondaryButton}>Reactivate</button>}
+            {state !== 'DISABLED' && state !== 'PENDING_ACTIVATION' && <button onClick={() => setConfirm('disable')} className={dangerButton}>Disable</button>}
             <button onClick={() => onEdit(u)} className={primaryButton}>Edit</button>
           </>
         )
@@ -190,7 +222,11 @@ function UserPanel({
                 label="Cooperative"
                 value={u.cooperative_id ? <Link className="text-[#176044] hover:underline" href={`/superadmin/cooperatives/${u.cooperative_id}`}>{u.cooperative_name}</Link> : 'Platform account'}
               />
-              <DetailRow label="Phone" value={formatPhone(u.phone_number)} />
+              <DetailRow label="Phone" value={<>{formatPhone(u.phone_number)} <PhoneVerified verified={u.phone_verified} /></>} />
+              <DetailRow label="Account status" value={<>{state && <AccountStatusBadge state={state} />}{u.status_reason ? <span className="ml-2 text-xs text-mo-muted">{u.status_reason}</span> : null}</>} />
+              {state === 'PENDING_ACTIVATION' && <DetailRow label="Activation" value={<ActivationLine activation={u.activation} />} />}
+              <DetailRow label="Two-step verification" value={u.mfa_enabled ? 'On' : 'Off'} />
+              <DetailRow label="Activated" value={u.activated_at ? formatDateTime(u.activated_at) : '–'} />
               <DetailRow label="Last sign-in" value={u.last_login_at ? formatDateTime(u.last_login_at) : 'Never'} />
               <DetailRow label="Created" value={formatDateTime(u.created_at)} />
             </DetailList>
@@ -209,51 +245,56 @@ function UserPanel({
         </>
       )}
 
-      {u && confirm === 'toggle' && (
+      {u && (confirm === 'suspend' || confirm === 'disable' || confirm === 'activate') && (
         <ConfirmationDialog
-          title={u.is_active ? `Deactivate ${u.full_name}?` : `Reactivate ${u.full_name}?`}
-          body={u.is_active ? 'They are signed out on their next request and cannot sign in until reactivated. Their records stay.' : 'They will be able to sign in again.'}
-          confirmLabel={u.is_active ? 'Deactivate' : 'Reactivate'}
-          danger={u.is_active}
-          reason={{ label: 'Reason', required: u.is_active, placeholder: 'e.g. Left the cooperative' }}
+          title={`${confirm === 'activate' ? 'Reactivate' : confirm === 'suspend' ? 'Suspend' : 'Disable'} ${u.full_name}?`}
+          body={confirm === 'activate'
+            ? 'They can sign in again. If they never activated their account, a new activation link is sent instead.'
+            : 'They are signed out everywhere immediately and cannot sign in until reactivated. Their records stay.'}
+          confirmLabel={confirm === 'activate' ? 'Reactivate' : confirm === 'suspend' ? 'Suspend' : 'Disable'}
+          danger={confirm !== 'activate'}
+          reason={{ label: 'Reason', required: confirm !== 'activate', placeholder: 'e.g. Left the cooperative' }}
           onClose={() => setConfirm(null)}
           onConfirm={async (reason) => {
-            await setUserActive(u.id, !u.is_active, reason || undefined);
+            await setUserAccountStatus(u.id, confirm === 'activate' ? 'ACTIVE' : confirm === 'suspend' ? 'SUSPENDED' : 'DISABLED', reason || undefined);
             setConfirm(null);
-            toast(`${u.full_name} ${u.is_active ? 'deactivated' : 'reactivated'}.`);
+            toast(`${u.full_name} ${confirm === 'activate' ? 'reactivated' : confirm === 'suspend' ? 'suspended' : 'disabled'}.`);
             await user.reload();
             onChanged();
           }}
         />
       )}
-      {u && confirm === 'password' && <PasswordDialog user={u} onClose={() => setConfirm(null)} />}
+      {u && confirm === 'revoke' && (
+        <ConfirmationDialog
+          title={`Revoke ${u.full_name}'s invitation?`}
+          body="Their activation link stops working and the account is disabled. Reactivate it later to send a new link."
+          confirmLabel="Revoke invitation"
+          danger
+          reason={{ label: 'Reason', required: false }}
+          onClose={() => setConfirm(null)}
+          onConfirm={async (reason) => {
+            await revokeUserInvitation(u.id, reason || undefined);
+            setConfirm(null);
+            toast('Invitation revoked.');
+            await user.reload();
+            onChanged();
+          }}
+        />
+      )}
+      {u && confirm === 'reset' && (
+        <ConfirmationDialog
+          title={`Send ${u.full_name} a password reset link?`}
+          body={`A one-time link goes by SMS to ${maskPhone(u.phone_number)}. You never see or set their password; their current one keeps working until they use the link.`}
+          confirmLabel="Send reset link"
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            const r = await sendUserPasswordReset(u.id);
+            setConfirm(null);
+            toast(r.sms_sent ? 'Reset link sent.' : `The reset link could not be sent${r.sms_error ? `: ${r.sms_error}` : ''}.`, r.sms_sent ? 'success' : 'error');
+          }}
+        />
+      )}
     </DetailPanel>
-  );
-}
-
-function PasswordDialog({ user, onClose }: { user: PlatformUser; onClose: () => void }) {
-  const toast = useToast();
-  const { busy, fieldErrors, formError, run } = useSubmit();
-  const [password, setPassword] = useState('');
-  return (
-    <FormDialog
-      title={`Reset ${user.full_name}'s password`}
-      onClose={onClose}
-      busy={busy}
-      error={formError}
-      submitLabel="Set password"
-      onSubmit={async () => {
-        if (await run(() => resetUserPassword(user.id, password))) {
-          toast('Password changed. Share it with them securely.');
-          onClose();
-        }
-      }}
-    >
-      <p className="text-sm text-[#5E6B64]">Set a temporary password and give it to them in person or by phone. The change is recorded in the audit log (the password itself is not).</p>
-      <Field label="New password" required error={fieldErrors.password} hint="8+ characters with a digit and a capital letter.">
-        {(p) => <input {...p} type="password" autoComplete="new-password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />}
-      </Field>
-    </FormDialog>
   );
 }
 
@@ -278,7 +319,6 @@ function UserForm({
     phone: user ? formatPhone(user.phone_number) : '',
     role: (user?.role ?? role ?? 'MANAGER') as UserRole,
     cooperative_id: user?.cooperative_id ?? cooperativeId ?? '',
-    password: '',
     farmer_id: '',
   });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -303,10 +343,9 @@ function UserForm({
       } else {
         saved = await createUser({
           full_name: f.full_name,
-          email: f.email,
+          email: f.email.trim() || null,
           phone: f.phone,
           role: f.role,
-          password: f.password,
           cooperative_id: platform ? null : f.cooperative_id || null,
           farmer_id: f.role === 'FARMER' ? f.farmer_id || null : null,
         });
@@ -321,10 +360,10 @@ function UserForm({
         <Field label="Full name" required error={fieldErrors.full_name}>
           {(p) => <input {...p} className={inputClass} value={f.full_name} onChange={set('full_name')} autoFocus />}
         </Field>
-        <Field label="Email" required error={fieldErrors.email}>
+        <Field label={['COLLECTOR', 'FARMER'].includes(f.role) ? 'Email (optional)' : 'Email'} required={!['COLLECTOR', 'FARMER'].includes(f.role)} error={fieldErrors.email}>
           {(p) => <input {...p} type="email" className={inputClass} value={f.email} onChange={set('email')} />}
         </Field>
-        <Field label="Phone" required error={fieldErrors.phone}>
+        <Field label="Phone" required error={fieldErrors.phone} hint={!user ? 'Activation SMS will be sent to this phone number.' : 'A changed number must be verified by its owner.'}>
           {(p) => <input {...p} type="tel" className={inputClass} value={f.phone} onChange={set('phone')} placeholder="0712 345 678" />}
         </Field>
         <Field label="Role" required error={fieldErrors.role} hint={lockedRole ? 'Superadmin and farmer roles cannot be changed.' : undefined}>
@@ -359,12 +398,13 @@ function UserForm({
             )}
           </Field>
         )}
-        {!user && (
-          <Field label="Temporary password" required error={fieldErrors.password} hint="8+ characters with a digit and a capital letter.">
-            {(p) => <input {...p} type="password" autoComplete="new-password" className={inputClass} value={f.password} onChange={set('password')} />}
-          </Field>
-        )}
       </div>
+      {!user && (
+        <p className="rounded-lg border border-mo-info/20 bg-mo-info-soft px-3 py-2 text-sm text-mo-info">
+          The account is created <strong>waiting for activation</strong> and an SMS activation link is sent to {f.phone ? maskPhone(f.phone) || 'this number' : 'the phone above'}.
+          The person chooses their own password; nobody else ever sees it.
+        </p>
+      )}
       {platform && !user && (
         <p className="rounded-lg border border-[#F4C77B] bg-[#FFF7E8] px-3 py-2 text-sm text-[#7A4B00]">
           A superadmin can see and change everything on the platform. Only create one for trusted platform staff.

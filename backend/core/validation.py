@@ -8,7 +8,7 @@ so FastAPI's 422 responses name the field and carry that message unchanged.
 import re
 import unicodedata
 from difflib import SequenceMatcher
-from typing import Callable
+from typing import Callable, Optional
 
 from pydantic_core import PydanticCustomError
 
@@ -124,3 +124,15 @@ def pydantic_field(normalizer: Callable[[str], str], error_type: str) -> Callabl
             raise PydanticCustomError(error_type, str(exc)) from None
 
     return validate
+
+
+def mask_phone_local(phone: Optional[str]) -> str:
+    """+254712345678 -> 0712••••78: enough for a person to recognise their own number, never the whole of it."""
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("254") and len(digits) == 12:
+        digits = "0" + digits[3:]
+    if len(digits) < 7:
+        return "••••"
+    return f"{digits[:4]}{'•' * (len(digits) - 6)}{digits[-2:]}"

@@ -3,11 +3,11 @@ import { humanize } from '@/lib/format';
 type Tone = 'green' | 'grey' | 'red' | 'amber' | 'blue';
 
 const TONES: Record<Tone, string> = {
-  green: 'bg-[#E3F1E9] text-[#176044]',
-  grey: 'bg-[#EEF1EC] text-[#5E6B64]',
-  red: 'bg-[#FDECEA] text-[#B42318]',
-  amber: 'bg-[#FBF1DC] text-[#8A5A0B]',
-  blue: 'bg-[#E6EEF8] text-[#1F4E86]',
+  green: 'bg-mo-brand-soft text-mo-brand',
+  grey: 'bg-mo-hover text-mo-muted',
+  red: 'bg-mo-danger-soft text-mo-danger',
+  amber: 'bg-mo-warn-soft text-mo-warn',
+  blue: 'bg-mo-info-soft text-mo-info',
 };
 
 const STATUS_TONE: Record<string, Tone> = {

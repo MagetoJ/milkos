@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from core.access import Principal, load_principal
-from core.security import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token
+from core.security import ACCESS_TOKEN_EXPIRE_MINUTES, access_token_for
+from routers.auth import COOKIE_SECURE
 from db import get_db
 from schemas.sync import DeviceRegister, DeviceSessionToken
 from services.sync import devices
@@ -29,9 +30,9 @@ def refresh_session(payload: DeviceSessionToken, response: Response, db: Session
     session secret is rotated: store the returned one."""
     user, device, session, token = devices.refresh(db, payload.device_identifier, payload.session_token)
     role = user.role_value
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": role})
+    access_token = access_token_for(user)
     response.set_cookie(
-        key="access_token", value=access_token, httponly=True, secure=False, samesite="lax",
+        key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60, path="/",
     )
     return {

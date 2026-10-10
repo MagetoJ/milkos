@@ -255,6 +255,26 @@ export const createMember = (data: TeamCreateInput) => onlineOnly('team_member',
 export const updateMember = (id: string, data: TeamUpdateInput) =>
   onlineOnly('team_member', () => request<TeamMember>(`/team/${id}`, send('PATCH', data)));
 
+// Account activation and status (online only: these act on people's sign-in, never queued offline).
+export const listAccounts = (params: { role?: string; account_status?: string; search?: string } = {}) => {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
+  return request<TeamMember[]>(`/accounts${q ? `?${q}` : ''}`);
+};
+export const resendActivation = (id: string) => onlineOnly(null, () => request<TeamMember>(`/accounts/${id}/resend-activation`, send('POST')));
+export const revokeInvitation = (id: string, reason?: string) =>
+  onlineOnly(null, () => request<TeamMember>(`/accounts/${id}/revoke-invitation`, send('POST', { reason })));
+export const setAccountStatus = (id: string, status: 'ACTIVE' | 'SUSPENDED' | 'DISABLED', reason?: string) =>
+  onlineOnly(null, () => request<TeamMember>(`/accounts/${id}/status`, send('POST', { status, reason })));
+export const sendPasswordReset = async (id: string) => {
+  try {
+    return await request<{ sent: boolean; sms_sent: boolean; sms_status: string; sms_error: string | null }>(`/accounts/${id}/send-password-reset`, send('POST'));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 0) throw new ApiError(0, NEEDS_CONNECTION);
+    throw e;
+  }
+};
+export const inviteFarmer = (farmerId: string) => onlineOnly(null, () => request<TeamMember>(`/farmers/${farmerId}/account`, send('POST')));
+
 // ---------------- field operations: coolers and collector assignments ----------------
 
 export const listCoolers = () =>

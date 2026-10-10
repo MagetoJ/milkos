@@ -14,7 +14,7 @@ from models.farmer import Farmer
 from models.operations import Collector
 from models.user import User
 from schemas.auth import UserRole
-from tests.conftest import SUPERADMIN_EMAIL
+from tests.conftest import SUPERADMIN_EMAIL, activate, fund
 from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
 
 SA = "/api/v1/superadmin"
@@ -96,14 +96,17 @@ COOP_BODY = {
 }
 
 
-def test_create_update_and_list_cooperatives(client, session, platform):
+def test_create_update_and_list_cooperatives(client, session, platform, sms_outbox):
     res = client.post(f"{SA}/cooperatives", headers=platform["sa"], json=COOP_BODY)
     assert res.status_code == 201, res.text
     coop = res.json()
     assert coop["registration_number"] == "CS/9999" and coop["kra_pin"] == "P051234567Z" and coop["county"] == "Kiambu"
     assert coop["code"].startswith("LIMURU-") and coop["counts"]["admins"] == 1
 
-    # The admin account works straight away and lands in the new cooperative.
+    # The admin account is texted an activation link (platform-billed: the new cooperative has no credits yet),
+    # sets their own password, and lands in the new cooperative.
+    assert client.post("/api/v1/auth/login", json={"email": "grace@limuru.coop", "password": PASSWORD}).status_code == 403
+    activate(client, sms_outbox, "+254711000001", PASSWORD)
     admin = headers_for(client, "grace@limuru.coop")
     assert client.get(f"{COOP}/overview", headers=admin).json()["cooperative"]["code"] == coop["code"]
 
@@ -188,7 +191,7 @@ def test_payment_verification_credits_the_balance_once(client, session, platform
 
 # ---------------- users ----------------
 
-def test_user_management_rules(client, session, platform):
+def test_user_management_rules(client, session, platform, sms_outbox):
     sa = platform["sa"]
     me = session.query(User).filter_by(email=SUPERADMIN_EMAIL).one()
     assert client.patch(f"{SA}/users/{me.id}/status", headers=sa, json={"is_active": False}).status_code == 403
@@ -202,7 +205,9 @@ def test_user_management_rules(client, session, platform):
     res = client.post(f"{SA}/users", headers=sa, json={**body, "role": "COLLECTOR", "cooperative_id": str(platform["a"].id)})
     assert res.status_code == 201, res.text
     user_id = res.json()["id"]
+    assert res.json()["account_status"] == "PENDING_ACTIVATION" and res.json()["activation_sms"]["sms_sent"] is True
     assert session.query(Collector).filter_by(user_id=UUID(user_id)).one().collector_number == "COL-001"
+    activate(client, sms_outbox, "+254733000001", PASSWORD)
 
     # Roles can't be silently escalated to (or from) superadmin.
     res = client.put(f"{SA}/users/{user_id}", headers=sa, json={"role": "SUPER_ADMIN"})
@@ -273,12 +278,15 @@ def test_manager_permissions(client, session, platform):
     assert client.get(f"{COOP}/activity", headers=platform["admin_a"]).status_code == 200
 
 
-def test_collectors_and_farmers_only_see_their_own_records(client, session, platform):
+def test_collectors_and_farmers_only_see_their_own_records(client, session, platform, sms_outbox):
     admin = platform["admin_a"]
     jane = new_farmer(client, admin, phone="0712000001")
     john = new_farmer(client, admin, phone="0712000002", first_name="John")
+    fund(session, platform["a"].id)
     new_collector(client, admin, email="c1@a.coop", phone="0722000001")
     new_collector(client, admin, email="c2@a.coop", phone="0722000002")
+    activate(client, sms_outbox, "+254722000001", PASSWORD)
+    activate(client, sms_outbox, "+254722000002", PASSWORD)
     c1, c2 = headers_for(client, "c1@a.coop"), headers_for(client, "c2@a.coop")
 
     assert client.post(COLL, headers=c1, json={"farmer_id": jane["id"], "quantity_litres": 10}).status_code == 201
@@ -299,6 +307,7 @@ def test_collectors_and_farmers_only_see_their_own_records(client, session, plat
         "role": "FARMER", "cooperative_id": str(platform["a"].id), "farmer_id": jane["id"],
     })
     assert res.status_code == 201, res.text
+    activate(client, sms_outbox, "+254712999000", PASSWORD)
     jane_headers = headers_for(client, "jane@farm.ke")
     seen = client.get(COLL, headers=jane_headers).json()
     assert seen["total"] == 1 and seen["items"][0]["quantity_litres"] == 10 and seen["can_record"] is False
@@ -347,8 +356,9 @@ def test_me_reports_permissions(client, platform):
 
 # ---------------- the whole flow, both directions ----------------
 
-def test_cooperative_operations_are_visible_to_the_superadmin(client, session, platform):
+def test_cooperative_operations_are_visible_to_the_superadmin(client, session, platform, sms_outbox):
     admin, sa = platform["admin_a"], platform["sa"]
+    fund(session, platform["a"].id)
 
     farmer = new_farmer(client, admin, number_of_cows=4, payment_method="MPESA")
     assert farmer["payment_account"] == "+254712345678"  # defaults to the farmer's phone
@@ -357,6 +367,7 @@ def test_cooperative_operations_are_visible_to_the_superadmin(client, session, p
     collector = new_collector(client, admin, assigned_area="Tigoni ridge", cooler_id=cooler["id"])
     assert collector["collector_number"] == "COL-001" and collector["cooler_name"] == "Limuru Tank"
 
+    activate(client, sms_outbox, "+254722000001", PASSWORD)
     col_headers = headers_for(client, "col@a.coop")
     options = client.get(f"{COLL}/options", headers=col_headers).json()
     assert options["default_cooler_id"] == cooler["id"] and options["farmers"][0]["id"] == farmer["id"]

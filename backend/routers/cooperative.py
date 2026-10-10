@@ -9,12 +9,14 @@ cannot read or change another's data. Access is checked by core.access against t
   MANAGER     read everything; create and edit centres, farmers, collector assignments and coolers;
               cannot change the team or decommission equipment
 """
+import datetime
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,7 +24,7 @@ from sqlalchemy.orm import Session
 from core.access import Principal, ensure_same_cooperative, load_principal, require_permission
 from core.pagination import PageParams, page_params, paginate
 from core.permissions import Permission
-from core.security import hash_password
+from core.validation import mask_phone_local
 from core.utils import iso, num, parse_uuid, reject_nulls
 from db import get_db
 from models.admin import AuditLog, Cooler, CoolerStatus, SMSCreditPackage, SMSCreditPayment
@@ -47,7 +49,7 @@ from schemas.cooperative_module import (
 from schemas.platform import CollectorCreate, CollectorUpdate, CoolerCreate, CoolerUpdate, SmsTopUpCreate
 from schemas.sync import DeviceUpdate, SensorCreate, SensorUpdate
 from services import (
-    audit, centres, collectors, coop_dashboard, cooler_alerts, cooler_readings, coolers, cooperatives, farmers,
+    accounts, audit, centres, collectors, coop_dashboard, cooler_alerts, cooler_readings, coolers, cooperatives, farmers,
     notifications, payments, sensors,
 )
 from services.sync import devices
@@ -141,6 +143,13 @@ def overview(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
             "county": coop.county,
             "location": coop.location,
             "status": coop.status,
+            # Registration details are platform-controlled (read-only in the cooperative workspace).
+            "registration_number": coop.registration_number,
+            "kra_pin": coop.kra_pin,
+            "contact_email": coop.contact_email,
+            "contact_phone": coop.contact_phone,
+            "receipt_sms_enabled": bool(coop.receipt_sms_enabled),
+            "alert_sms_enabled": bool(coop.alert_sms_enabled),
             "sms_credit_balance": coop.sms_credit_balance or 0,
             "estimated_daily_liters": num(coop.estimated_daily_liters),
             "created_at": iso(coop.created_at),
@@ -258,18 +267,28 @@ def update_farmer(farmer_id: str, payload: FarmerUpdate, ctx: Ctx = Depends(staf
     return farmers.farmer_json(farmer, centre.name if centre else None)
 
 
-# ---------------- team ----------------
+# ---------------- team & accounts ----------------
+#
+# Accounts are created PENDING_ACTIVATION and texted a one-time activation link; the person sets their own
+# password. A cooperative admin manages its managers', collectors' and farmers' accounts (never another admin's,
+# never anyone outside the cooperative) and helps people back in with a reset link, never by setting a password.
 
-def _member_json(user: User, current: User) -> dict:
+def _member_json(db: Session, user: User, current: User) -> dict:
     return {
         "id": str(user.id),
         "full_name": user.full_name,
         "email": user.email,
         "phone_number": user.phone_number,
+        "phone_masked": mask_phone_local(user.phone_number),
+        "phone_verified": user.phone_verified_at is not None,
         "role": user.role_value,
         "is_active": bool(user.is_active),
+        "account_status": user.status_value,
+        "status_reason": user.status_reason,
         "is_you": user.id == current.id,
+        "last_login_at": iso(user.last_login_at),
         "created_at": iso(user.created_at),
+        "activation": accounts.activation_summary(db, user),
     }
 
 
@@ -283,23 +302,45 @@ def list_team(ctx: Ctx = Depends(staff), db: Session = Depends(get_db)):
     )
     order = {UserRole.COOP_ADMIN.value: 0, UserRole.MANAGER.value: 1, UserRole.COLLECTOR.value: 2}
     members.sort(key=lambda u: (order.get(u.role_value, 9), u.full_name.lower()))
-    return [_member_json(u, ctx.user) for u in members]
+    return [_member_json(db, u, ctx.user) for u in members]
+
+
+@router.get("/accounts")
+def list_accounts(
+    role: Optional[UserRole] = None, account_status: Optional[str] = Query(None, max_length=30),
+    search: Optional[str] = Query(None, max_length=100),
+    ctx: Ctx = Depends(_staff_with(Permission.USER_READ)), db: Session = Depends(get_db),
+):
+    """Every sign-in account of this cooperative (staff and farmers) with its activation state."""
+    from core.utils import like, phone_digits
+    from sqlalchemy import or_
+
+    query = db.query(User).filter(User.cooperative_id == ctx.cooperative.id)
+    if role:
+        query = query.filter(User.role == role)
+    if account_status:
+        query = query.filter(User.account_status == account_status)
+    for term in (search or "").split():
+        clauses = [User.full_name.ilike(like(term), escape="\\"), User.email.ilike(like(term), escape="\\")]
+        digits = phone_digits(term)
+        if digits:
+            clauses.append(User.phone_number.like(f"%{digits}%"))
+        query = query.filter(or_(*clauses))
+    return [_member_json(db, u, ctx.user) for u in query.order_by(User.full_name).limit(500).all()]
 
 
 @router.post("/team", status_code=status.HTTP_201_CREATED)
 def create_team_member(payload: TeamCreate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    from services.users import require_email
+
+    require_email(payload.role, payload.email)
     conflict = account_conflict(db, email=payload.email, phone=payload.phone)
     if conflict:
         raise conflict_error(*conflict)
 
-    member = User(
-        email=payload.email,
-        password_hash=hash_password(payload.password),
-        full_name=payload.full_name,
-        phone_number=payload.phone,
-        role=UserRole(payload.role),
-        cooperative_id=ctx.cooperative.id,
-        is_active=True,
+    member = accounts.new_pending_user(
+        full_name=payload.full_name, phone=payload.phone, role=UserRole(payload.role), email=payload.email,
+        cooperative_id=ctx.cooperative.id, invited_by=ctx.user.id,
     )
     db.add(member)
     try:
@@ -307,60 +348,73 @@ def create_team_member(payload: TeamCreate, ctx: Ctx = Depends(admin_only), db: 
         if payload.role == UserRole.COLLECTOR.value:
             collectors.ensure_profile(db, member)
         audit.record(
-            db, ctx.principal, "USER_CREATED", target=f"{member.full_name} <{member.email}> as {payload.role}",
+            db, ctx.principal, "USER_CREATED", target=f"{member.label} as {payload.role}",
             entity_type="user", entity_id=member.id, cooperative_id=ctx.cooperative.id,
-            new_values={"email": member.email, "role": payload.role},
+            new_values={"email": member.email, "role": payload.role, "account_status": member.status_value},
         )
+        pending = accounts.invite(db, ctx.principal, member)
         db.commit()
     except IntegrityError:
         db.rollback()
         conflict = account_conflict(db, email=payload.email, phone=payload.phone)
         raise conflict_error(*(conflict or (None, "An account with these details already exists.")))
+    sms = accounts.dispatch(db, pending, ip=ctx.principal.ip_address, ua=ctx.principal.user_agent)
     db.refresh(member)
-    return _member_json(member, ctx.user)
+    return {**_member_json(db, member, ctx.user), "activation_sms": accounts.sms_outcome(sms)}
 
 
 @router.patch("/team/{member_id}")
 def update_team_member(member_id: str, payload: TeamUpdate, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    from models.user import AccountStatus
+    from services import security_events
+
     member = _own_member(db, member_id, ctx)
     data = payload.model_dump(exclude_unset=True)
-    reject_nulls(data, "full_name", "phone", "role", "is_active", "password")
+    reject_nulls(data, "full_name", "phone", "role", "is_active")
 
     conflict = account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
     if conflict:
         raise conflict_error(*conflict)
 
     old_role = member.role_value
+    old_phone = member.phone_number
     if "full_name" in data:
         member.full_name = data["full_name"]
     if "phone" in data:
         member.phone_number = data["phone"]
-    if "role" in data:
+    if "role" in data and data["role"] != old_role:
+        if data["role"] == UserRole.MANAGER.value and not member.email:
+            raise conflict_error("role", "Add an email address before making this person a manager.")
         member.role = UserRole(data["role"])
-    if "is_active" in data:
-        member.is_active = data["is_active"]
-    if "password" in data:
-        member.password_hash = hash_password(data["password"])
+        member.session_epoch = (member.session_epoch or 0) + 1  # the new role applies from the next request
+        security_events.from_principal(db, ctx.principal, "ROLE_CHANGED", user=member, details={"from": old_role, "to": data["role"]})
+    if "is_active" in data and data["is_active"] != bool(member.is_active):
+        if data["is_active"]:
+            member.set_status(AccountStatus.ACTIVE if member.password_hash else AccountStatus.PENDING_ACTIVATION)
+        else:
+            member.set_status(AccountStatus.DISABLED, "Deactivated by the cooperative admin")
+        security_events.from_principal(
+            db, ctx.principal, "ACCOUNT_REACTIVATED" if data["is_active"] else "ACCOUNT_DISABLED", user=member,
+        )
+    pending = accounts.phone_changed_by_admin(db, ctx.principal, member, old_phone)
 
     # Keep the collector profile in step with the account.
     profile = db.query(Collector).filter(Collector.user_id == member.id).first()
     if member.role_value == UserRole.COLLECTOR.value:
         profile = collectors.ensure_profile(db, member)
-        profile.status = "ACTIVE" if member.is_active else "INACTIVE"
+        profile.status = "ACTIVE" if member.status_value in (AccountStatus.ACTIVE, AccountStatus.PENDING_ACTIVATION) else "INACTIVE"
     elif profile is not None:
         profile.status = "INACTIVE"
 
-    changes = {k: v for k, v in data.items() if k != "password"}
     action = (
         "USER_ROLE_CHANGED" if member.role_value != old_role
-        else ("USER_ACTIVATED" if member.is_active else "USER_DISABLED") if set(changes) == {"is_active"}
-        else "USER_PASSWORD_RESET" if set(data) == {"password"}
+        else ("USER_ACTIVATED" if member.is_active else "USER_DISABLED") if set(data) == {"is_active"}
         else "USER_UPDATED"
     )
     audit.record(
-        db, ctx.principal, action, target=f"{member.full_name} <{member.email}>",
+        db, ctx.principal, action, target=member.label,
         entity_type="user", entity_id=member.id, cooperative_id=ctx.cooperative.id,
-        old_values={"role": old_role} if member.role_value != old_role else None, new_values=changes or None,
+        old_values={"role": old_role} if member.role_value != old_role else None, new_values=data or None,
     )
 
     try:
@@ -369,8 +423,12 @@ def update_team_member(member_id: str, payload: TeamUpdate, ctx: Ctx = Depends(a
         db.rollback()
         conflict = account_conflict(db, email=None, phone=data.get("phone"), exclude_id=member.id)
         raise conflict_error(*(conflict or (None, "These details clash with another account.")))
+    sms = accounts.dispatch(db, pending)
     db.refresh(member)
-    return _member_json(member, ctx.user)
+    out = _member_json(db, member, ctx.user)
+    if sms is not None:
+        out["activation_sms"] = accounts.sms_outcome(sms)
+    return out
 
 
 def _own_member(db: Session, member_id: str, ctx: Ctx) -> User:
@@ -382,6 +440,97 @@ def _own_member(db: Session, member_id: str, ctx: Ctx) -> User:
     if member.role_value not in {UserRole.MANAGER.value, UserRole.COLLECTOR.value}:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Team member not found")
     return member
+
+
+def _own_account(db: Session, account_id: str, ctx: Ctx) -> User:
+    """Any manager, collector or farmer account of this cooperative (404 for anyone else's)."""
+    user = db.get(User, parse_uuid(account_id, "Account"))
+    if user is None or user.cooperative_id != ctx.cooperative.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+    return user
+
+
+class _StatusBody(BaseModel):
+    status: Literal["ACTIVE", "SUSPENDED", "DISABLED"]
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class _ReasonBody(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+@router.post("/accounts/{account_id}/resend-activation")
+def resend_account_activation(account_id: str, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    user = _own_account(db, account_id, ctx)
+    sms = accounts.dispatch(db, accounts.resend_activation(db, ctx.principal, user))
+    db.refresh(user)
+    return {**_member_json(db, user, ctx.user), "activation_sms": accounts.sms_outcome(sms)}
+
+
+@router.post("/accounts/{account_id}/revoke-invitation")
+def revoke_account_invitation(account_id: str, body: Optional[_ReasonBody] = None, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    user = accounts.revoke_invitation(db, ctx.principal, _own_account(db, account_id, ctx), body.reason if body else None)
+    return _member_json(db, user, ctx.user)
+
+
+@router.post("/accounts/{account_id}/status")
+def set_account_status(account_id: str, body: _StatusBody, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    from models.user import AccountStatus
+
+    user = _own_account(db, account_id, ctx)
+    user, pending = accounts.change_status(db, ctx.principal, user, body.status, body.reason)
+    if user.role_value == UserRole.COLLECTOR.value:
+        profile = db.query(Collector).filter(Collector.user_id == user.id).first()
+        if profile is not None:
+            profile.status = "ACTIVE" if user.status_value in (AccountStatus.ACTIVE, AccountStatus.PENDING_ACTIVATION) else "INACTIVE"
+            db.commit()
+    sms = accounts.dispatch(db, pending)
+    db.refresh(user)
+    out = _member_json(db, user, ctx.user)
+    if sms is not None:
+        out["activation_sms"] = accounts.sms_outcome(sms)
+    return out
+
+
+@router.post("/accounts/{account_id}/send-password-reset")
+def send_account_password_reset(account_id: str, ctx: Ctx = Depends(admin_only), db: Session = Depends(get_db)):
+    """Text the person a password reset link. The admin never sets, sees or receives the password."""
+    sms = accounts.dispatch(db, accounts.admin_password_reset(db, ctx.principal, _own_account(db, account_id, ctx)))
+    return {"sent": True, **accounts.sms_outcome(sms)}
+
+
+@router.post("/farmers/{farmer_id}/account", status_code=status.HTTP_201_CREATED)
+def invite_farmer(farmer_id: str, ctx: Ctx = Depends(_staff_with(Permission.USER_CREATE)), db: Session = Depends(get_db)):
+    """Give a farmer the MilkOS app: a FARMER account on the farmer's registered phone, activated by SMS link."""
+    farmer = _own(db, Farmer, farmer_id, ctx, "Farmer")
+    if farmer.user_id is not None:
+        raise conflict_error(None, "This farmer already has an account.")
+    if farmer.status != "ACTIVE":
+        raise conflict_error(None, "Reactivate this farmer before giving them an account.")
+    conflict = account_conflict(db, email=None, phone=farmer.phone)
+    if conflict:
+        raise conflict_error("phone", "This farmer's phone number already belongs to another MilkOS account.")
+    user = accounts.new_pending_user(
+        full_name=farmer.full_name, phone=farmer.phone, role=UserRole.FARMER,
+        cooperative_id=ctx.cooperative.id, invited_by=ctx.user.id,
+    )
+    db.add(user)
+    try:
+        db.flush()
+        farmer.user_id = user.id
+        audit.record(
+            db, ctx.principal, "USER_CREATED", target=f"{user.label} for farmer {farmer.farmer_number}",
+            entity_type="user", entity_id=user.id, cooperative_id=ctx.cooperative.id,
+            new_values={"role": "FARMER", "farmer_number": farmer.farmer_number, "account_status": user.status_value},
+        )
+        pending = accounts.invite(db, ctx.principal, user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise conflict_error("phone", "This farmer's phone number already belongs to another MilkOS account.")
+    sms = accounts.dispatch(db, pending, ip=ctx.principal.ip_address, ua=ctx.principal.user_agent)
+    db.refresh(user)
+    return {**_member_json(db, user, ctx.user), "activation_sms": accounts.sms_outcome(sms)}
 
 
 # ---------------- collectors ----------------
@@ -413,8 +562,9 @@ def list_collectors(ctx: Ctx = Depends(_staff_with(Permission.COLLECTOR_READ)), 
 def create_collector(
     payload: CollectorCreate, ctx: Ctx = Depends(_staff_with(Permission.COLLECTOR_CREATE)), db: Session = Depends(get_db)
 ):
-    profile = collectors.create(db, ctx.principal, payload)
-    return _collector_rows(db, ctx.cooperative.id, profile.id)[0]
+    profile, pending = collectors.create(db, ctx.principal, payload)
+    sms = accounts.dispatch(db, pending, ip=ctx.principal.ip_address, ua=ctx.principal.user_agent)
+    return {**_collector_rows(db, ctx.cooperative.id, profile.id)[0], "activation_sms": accounts.sms_outcome(sms)}
 
 
 @router.patch("/collectors/{collector_id}")
@@ -482,19 +632,52 @@ def update_cooler(
     return _cooler_rows(db, ctx.cooperative.id, cooler.id)[0]
 
 
+# ---------------- dashboard trends ----------------
+
+@router.get("/trends")
+def trends(
+    range: str = Query("30d", pattern="^(today|7d|30d|3m|custom)$"),
+    date_from: Optional[datetime.date] = None, date_to: Optional[datetime.date] = None,
+    ctx: Ctx = Depends(staff), db: Session = Depends(get_db),
+):
+    """Collection, farmer and SMS trend per day for the dashboard: today, 7 days, 30 days, 3 months or a custom
+    window of at most one year (always this cooperative's data)."""
+    if range == "custom":
+        if not date_from or not date_to or date_to < date_from or (date_to - date_from).days > 366:
+            raise HTTPException(422, "Choose a custom period of at most one year (from must be before to).")
+        data = coop_dashboard.charts(db, ctx.cooperative.id, start=date_from, end=date_to)
+    else:
+        data = coop_dashboard.charts(db, ctx.cooperative.id, days=coop_dashboard.RANGES[range])
+    trend = data["trend"]
+    return {
+        "range": range,
+        "from": trend[0]["date"] if trend else None,
+        "to": trend[-1]["date"] if trend else None,
+        "trend": trend,
+        "totals": {
+            "kg": round(sum(d["kg"] for d in trend), 2),
+            "sms_sent": sum(d["sms_sent"] for d in trend),
+            "sms_failed": sum(d["sms_failed"] for d in trend),
+            "peak_farmers": max((d["farmers"] for d in trend), default=0),
+        },
+    }
+
+
 # ---------------- activity ----------------
 
 @router.get("/activity")
 def list_activity(
     params: PageParams = Depends(page_params),
+    include_security: bool = Query(False, description="Include sign-ins and other security events"),
     ctx: Ctx = Depends(_staff_with(Permission.AUDIT_READ)),
     db: Session = Depends(get_db),
 ):
-    query = (
-        db.query(AuditLog)
-        .filter(AuditLog.cooperative_id == ctx.cooperative.id)
-        .order_by(AuditLog.created_at.desc(), AuditLog.id)
-    )
+    from sqlalchemy import or_
+
+    query = db.query(AuditLog).filter(AuditLog.cooperative_id == ctx.cooperative.id)
+    if not include_security:
+        query = query.filter(or_(AuditLog.entity_type.is_(None), AuditLog.entity_type != "security"))
+    query = query.order_by(AuditLog.created_at.desc(), AuditLog.id)
     return paginate(query, params, audit.entry_json)
 
 
@@ -521,6 +704,21 @@ def sms_credits(ctx: Ctx = Depends(_staff_with(Permission.PAYMENT_READ)), db: Se
         ],
         "payments": [payments.payment_json(p, ctx.cooperative, pkg) for p, pkg in history],
     }
+
+
+class _InfoResponse(BaseModel):
+    response: str = Field(..., min_length=3, max_length=1000)
+
+
+@router.post("/sms-credits/payments/{payment_id}/respond")
+def respond_to_payment_question(
+    payment_id: str, body: _InfoResponse, ctx: Ctx = Depends(_staff_with(Permission.SMS_CREDIT_PURCHASE)), db: Session = Depends(get_db),
+):
+    """Answer platform staff's request for information; the payment returns to the verification queue."""
+    payment = _own(db, SMSCreditPayment, payment_id, ctx, "Payment")
+    payment = payments.respond_information(db, ctx.principal, payment, body.response.strip())
+    package = db.get(SMSCreditPackage, payment.package_id) if payment.package_id else None
+    return payments.payment_json(payment, ctx.cooperative, package)
 
 
 @router.post("/sms-credits/payments", status_code=status.HTTP_201_CREATED)

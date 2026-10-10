@@ -12,7 +12,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   COOP_ADMIN: '/cooperatives',
   MANAGER: '/cooperatives',
   COLLECTOR: '/collector',
-  FARMER: '/collections',
+  FARMER: '/farmer',
 };
 
 /** Which roles may open each protected section. Edit this table to change access. */
@@ -23,7 +23,15 @@ export const ROUTE_ACCESS: Record<string, UserRole[]> = {
   '/collections': ['COOP_ADMIN', 'MANAGER', 'COLLECTOR', 'FARMER'],
   // The collector's mobile app (cooperative staff may use it too, e.g. at a centre without a collector).
   '/collector': ['COLLECTOR', 'COOP_ADMIN', 'MANAGER'],
+  // The farmer's own app: their deliveries, payments and settings.
+  '/farmer': ['FARMER'],
 };
+
+/** Pages anyone may open without signing in (they never show cooperative data). */
+export const PUBLIC_PATHS = ['/', '/login', '/register', '/activate-account', '/forgot-password', '/reset-password', '/application-status'];
+
+/** Where an account that must replace its password is sent (the server refuses everything else until it does). */
+export const CHANGE_PASSWORD_PATH = '/change-password';
 
 const ROLES = Object.keys(ROLE_HOME) as UserRole[];
 

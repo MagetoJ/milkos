@@ -4,7 +4,7 @@ from core.security import hash_password
 from models.cooperative import Cooperative
 from models.user import User
 from schemas.auth import UserRole
-from tests.conftest import login
+from tests.conftest import activate, fund, login
 
 PASSWORD = "Dairy#2026x"
 BASE = "/api/v1/cooperative"
@@ -295,31 +295,41 @@ def test_farmer_search_filter_and_paging(client, world):
 # ---------------- team ----------------
 
 def team_member(**overrides):
-    data = {"full_name": "Paul Collector", "email": "Paul@A.coop", "phone": "0711 222 333", "role": "COLLECTOR", "password": PASSWORD}
+    data = {"full_name": "Paul Collector", "email": "Paul@A.coop", "phone": "0711 222 333", "role": "COLLECTOR"}
     data.update(overrides)
     return data
 
 
-def test_admin_creates_a_team_member_who_can_log_in(client, world):
-    res = client.post(f"{BASE}/team", json=team_member(), headers=world["admin_a"])
+def test_admin_creates_a_team_member_who_activates_by_sms(client, world, session, sms_outbox):
+    fund(session, world["a"].id)
+    res = client.post(f"{BASE}/team", json={**team_member(), "password": "Admin#Chosen1"}, headers=world["admin_a"])
     assert res.status_code == 201
     body = res.json()
     assert body["email"] == "paul@a.coop" and body["phone_number"] == "+254711222333"
-    assert body["role"] == "COLLECTOR" and body["is_active"] is True
+    # Created waiting for activation: no password exists, the admin never chose or saw one.
+    assert body["role"] == "COLLECTOR" and body["is_active"] is False and body["account_status"] == "PENDING_ACTIVATION"
+    assert body["activation_sms"]["sms_sent"] is True and body["activation"]["link_state"] == "SENT"
     assert "password" not in str(body).lower()
+    # The password the admin tried to send was ignored.
+    assert login(client, "paul@a.coop", "Admin#Chosen1").status_code == 403
 
-    logged_in = login(client, "paul@a.coop", PASSWORD)
+    activate(client, sms_outbox, "+254711222333", "Paul#Own2026")
+    logged_in = login(client, "paul@a.coop", "Paul#Own2026")
     assert logged_in.status_code == 200 and logged_in.json()["role"] == "COLLECTOR"
+    # Collectors may also sign in with their phone number, in any common format.
+    assert client.post("/api/v1/auth/login", json={"identifier": "0711 222 333", "password": "Paul#Own2026"}).status_code == 200
+    client.cookies.clear()
 
     roster = client.get(f"{BASE}/team", headers=world["admin_a"]).json()
     assert [m["role"] for m in roster] == ["COOP_ADMIN", "MANAGER", "COLLECTOR"]
     assert [m["is_you"] for m in roster] == [True, False, False]
+    assert roster[2]["account_status"] == "ACTIVE" and roster[2]["phone_verified"] is True
     assert [m["email"] for m in client.get(f"{BASE}/team", headers=world["admin_b"]).json()] == ["admin@b.coop"]
 
 
 def test_team_validation_and_conflicts(client, world):
     h = world["admin_a"]
-    for overrides in ({"role": "COOP_ADMIN"}, {"role": "FARMER"}, {"password": "weakpass"}, {"password": "Sh0rt"}, {"phone": "0812"}, {"email": "nope"}):
+    for overrides in ({"role": "COOP_ADMIN"}, {"role": "FARMER"}, {"phone": "0812"}, {"email": "nope"}, {"role": "MANAGER", "email": None}):
         assert client.post(f"{BASE}/team", json=team_member(**overrides), headers=h).status_code == 422, overrides
 
     assert client.post(f"{BASE}/team", json=team_member(), headers=h).status_code == 201
@@ -336,13 +346,22 @@ def test_manager_can_read_but_not_change_the_team(client, world):
     assert client.patch(f"{BASE}/team/{member['id']}", json={"is_active": False}, headers=world["manager_a"]).status_code == 403
 
 
-def test_deactivate_change_role_and_reset_password(client, world):
+def test_deactivate_change_role_and_reset_password(client, world, session, sms_outbox):
+    fund(session, world["a"].id)
     h = world["admin_a"]
     member = client.post(f"{BASE}/team", json=team_member(), headers=h).json()
     url = f"{BASE}/team/{member['id']}"
+    activate(client, sms_outbox, "+254711222333", PASSWORD)
 
     assert client.patch(url, json={"role": "MANAGER", "full_name": "Paul Senior"}, headers=h).json()["role"] == "MANAGER"
-    assert client.patch(url, json={"password": "Fresh#Pass9"}, headers=h).status_code == 200
+    # An admin can't set someone's password; the field is not accepted any more...
+    client.patch(url, json={"password": "Fresh#Pass9"}, headers=h)
+    assert login(client, "paul@a.coop", "Fresh#Pass9").status_code == 401
+    # ...instead the person gets a reset link on their own phone.
+    sent = client.post(f"{BASE}/accounts/{member['id']}/send-password-reset", headers=h)
+    assert sent.status_code == 200 and sent.json()["sms_sent"] is True
+    token = sms_outbox.token_for("+254711222333")
+    assert client.post("/api/v1/auth/password-reset/complete", json={"token": token, "password": "Fresh#Pass9"}).status_code == 200
     assert login(client, "paul@a.coop", PASSWORD).status_code == 401
     assert login(client, "paul@a.coop", "Fresh#Pass9").status_code == 200
 
@@ -352,7 +371,6 @@ def test_deactivate_change_role_and_reset_password(client, world):
     assert client.patch(url, json={"is_active": True}, headers=h).json()["is_active"] is True
     assert client.patch(url, json={"role": "COOP_ADMIN"}, headers=h).status_code == 422
     assert client.patch(url, json={"phone": "0700000011"}, headers=h).status_code == 409   # the admin's own number
-    assert client.patch(url, json={"password": "weak"}, headers=h).status_code == 422
 
 
 def test_team_changes_are_limited_to_own_cooperative_and_non_admins(client, world):

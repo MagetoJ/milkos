@@ -1,6 +1,7 @@
 """SMS credit payments (M-Pesa top-ups) awaiting or past verification."""
 from typing import Optional
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -43,7 +44,7 @@ def get_pending_payments(db: Session = Depends(get_db), _: Principal = Depends(r
 
 @router.get("")
 def list_payments(
-    payment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|VERIFIED|REJECTED|CANCELLED)$"),
+    payment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|AWAITING_INFORMATION|VERIFIED|REJECTED|CANCELLED)$"),
     cooperative_id: Optional[str] = None,
     search: Optional[str] = Query(None, max_length=100),
     params: PageParams = Depends(page_params),
@@ -75,7 +76,7 @@ def list_payments(
     )
     result["summary"] = {
         key.lower(): {"count": totals.get(key, (0, 0.0))[0], "amount_kes": totals.get(key, (0, 0.0))[1]}
-        for key in ("PENDING", "VERIFIED", "REJECTED", "CANCELLED")
+        for key in ("PENDING", "AWAITING_INFORMATION", "VERIFIED", "REJECTED", "CANCELLED")
     }
     return result
 
@@ -105,4 +106,19 @@ def decide_payment(
     if payload.action == "REJECT" and (reason is None or len(reason) < 5):
         raise HTTPException(422, "Give a reason (at least 5 characters) when rejecting.")
     payment = payments.decide(db, admin, parse_uuid(payment_id, "Payment"), payload.action, reason)
+    return {"success": True, "payment_id": payment_id, "status": payment.status}
+
+
+class InformationRequest(BaseModel):
+    message: str = Field(..., min_length=5, max_length=1000)
+
+
+@router.post("/{payment_id}/request-information")
+def request_payment_information(
+    payment_id: str, payload: InformationRequest, db: Session = Depends(get_db),
+    admin: Principal = Depends(require_superadmin),
+):
+    """Pending -> Awaiting information. The cooperative is notified and answers from its SMS credits page."""
+    admin.require(Permission.PAYMENT_VERIFY)
+    payment = payments.request_information(db, admin, parse_uuid(payment_id, "Payment"), payload.message.strip())
     return {"success": True, "payment_id": payment_id, "status": payment.status}

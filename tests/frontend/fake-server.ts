@@ -99,7 +99,7 @@ export function installFakeServer(): FakeServer {
     }
     if (m.entity_type === 'collection_batch') {
       // Like the server: the batch id is the device's, a resend with a new mutation id is a duplicate,
-      // allocations can't exceed the captured weight, and receipts are never "sent" by the fake.
+      // allocations must equal the captured weight, and receipts are never "sent" by the fake.
       const existing = server.entities.get(`collection_batch:${id}`);
       if (existing) {
         server.applied.set(String(m.mutation_id), { status: 'duplicate', server_id: id });
@@ -109,6 +109,9 @@ export function installFakeServer(): FakeServer {
       const allocated = allocations.reduce((s, a) => s + Math.round(a.quantity_kg * 100), 0);
       if (allocated > Math.round(Number(p.captured_weight_kg) * 100)) {
         return { ...base, status: 'rejected', entity: null, error: { code: 'validation', message: 'The allocated weight is more than the captured weight.', fields: { allocations: 'Over-allocated' } } };
+      }
+      if (allocated < Math.round(Number(p.captured_weight_kg) * 100)) {
+        return { ...base, status: 'rejected', entity: null, error: { code: 'validation', message: 'Allocate all of the captured weight.', fields: { allocations: 'Under-allocated' } } };
       }
       const missing = allocations.find((a) => !server.entities.has(`farmer:${a.farmer_id}`));
       if (missing) {

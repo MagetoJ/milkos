@@ -84,3 +84,12 @@ export function isoDay(date = new Date()): string {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 }
+
+/** +254712345656 -> 0712••••56 (the same rule as the backend's core.validation.mask_phone_local). */
+export function maskPhone(value: string | null | undefined): string {
+  if (!value) return '';
+  let digits = value.replace(/\D/g, '');
+  if (digits.startsWith('254') && digits.length === 12) digits = `0${digits.slice(3)}`;
+  if (digits.length < 7) return '••••';
+  return `${digits.slice(0, 4)}${'•'.repeat(digits.length - 6)}${digits.slice(-2)}`;
+}

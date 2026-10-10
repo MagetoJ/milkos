@@ -123,6 +123,13 @@ class SMSCreditPayment(Base):
     verified_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
     verified_at = Column(DateTime)
+    # "Request information" round trip (PENDING -> AWAITING_INFORMATION -> PENDING); audit_logs keeps every round.
+    info_request = Column(Text)
+    info_requested_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    info_requested_at = Column(DateTime)
+    info_response = Column(Text)
+    info_responded_by = Column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
+    info_responded_at = Column(DateTime)
 
     cooperative = relationship("Cooperative", viewonly=True)
     package = relationship("SMSCreditPackage", viewonly=True)

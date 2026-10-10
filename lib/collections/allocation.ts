@@ -1,4 +1,5 @@
-// Allocation arithmetic for a collection batch. All sums are done in hundredths of a KG (integers), the
+// Allocation arithmetic for a collection batch. A batch can be confirmed only when the farmers' lines add up to
+// EXACTLY the captured weight: GREEN = exact, AMBER = some still to allocate, RED = more than the total. All sums are done in hundredths of a KG (integers), the
 // precision the server stores, so 0.1 + 0.2 style float errors can never let an over-allocation through or
 // block a valid one. The server re-checks every rule (backend services/batches.check_allocation).
 
@@ -71,6 +72,8 @@ export function confirmBlockers({ totalKg, lines, coolerId, weightSource }: Conf
   if (s.invalidLines.length) out.push('Enter a KG amount above 0 (at most 2 decimals) for every farmer.');
   if (s.allocatedCents <= 0 && lines.length) out.push('Allocate some of the weight.');
   if (s.state === 'over') out.push(`Allocated weight is ${fromCents(-s.remainingCents).toFixed(2)} KG more than the total.`);
+  // The allocation must account for exactly the captured weight (the server enforces the same rule).
+  if (s.state === 'remaining') out.push(`${fromCents(s.remainingCents).toFixed(2)} KG is not allocated yet. Allocate all of the weight.`);
   return out;
 }
 

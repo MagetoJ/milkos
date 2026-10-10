@@ -78,8 +78,59 @@ class CooperativeRegisterResponse(BaseModel):
 
 # --- Login Input Validation ---
 class UserLogin(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=1)
+    """Sign in with an email address or a phone number. `email` is kept for older clients."""
+    identifier: Optional[str] = Field(None, max_length=255)
+    email: Optional[str] = Field(None, max_length=255)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @property
+    def login_identifier(self) -> str:
+        return (self.identifier or self.email or "").strip()
+
+
+def _password_rules(v: str) -> str:
+    if len(v) < 8:
+        raise PydanticCustomError("password", "Use at least 8 characters.")
+    if not any(char.isdigit() for char in v):
+        raise PydanticCustomError("password", "Password must contain at least one digit.")
+    if not any(char.isupper() for char in v):
+        raise PydanticCustomError("password", "Password must contain at least one uppercase letter.")
+    if not any(char.islower() for char in v):
+        raise PydanticCustomError("password", "Password must contain at least one lowercase letter.")
+    return v
+
+
+class TokenBody(BaseModel):
+    token: str = Field(..., min_length=10, max_length=200)
+
+
+class ActivationOtpVerify(TokenBody):
+    code: str = Field(..., min_length=4, max_length=10)
+
+
+class PasswordSet(TokenBody):
+    password: str = Field(..., max_length=128)
+    _password = field_validator("password")(_password_rules)
+
+
+class ResendActivation(BaseModel):
+    token: Optional[str] = Field(None, max_length=200)
+    identifier: Optional[str] = Field(None, max_length=255)
+
+
+class ResetRequest(BaseModel):
+    identifier: str = Field(..., min_length=3, max_length=255)
+
+
+class MfaLogin(BaseModel):
+    mfa_token: str = Field(..., min_length=10, max_length=2000)
+    code: str = Field(..., min_length=6, max_length=20)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., max_length=128)
+    _password = field_validator("new_password")(_password_rules)
 
 # --- Response Schemas ---
 class TokenResponse(BaseModel):

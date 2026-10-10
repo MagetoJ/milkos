@@ -2,6 +2,8 @@
 
     PENDING --verified by platform staff--> VERIFIED   (a PURCHASE entry in the SMS credit ledger)
        |-----rejected by platform staff---> REJECTED
+       |-----information requested-------> AWAITING_INFORMATION --cooperative answers--> PENDING (again)
+       |                                          '--verified / rejected directly------> VERIFIED / REJECTED
        '-----withdrawn by the cooperative--> CANCELLED
 
 Nothing here talks to M-Pesa: the cooperative reports a confirmation code and platform staff check it
@@ -23,6 +25,8 @@ from schemas.platform import SmsTopUpCreate
 from services import audit, inbox, sms_credits
 
 PENDING, VERIFIED, REJECTED, CANCELLED = "PENDING", "VERIFIED", "REJECTED", "CANCELLED"
+AWAITING_INFORMATION = "AWAITING_INFORMATION"
+DECIDABLE = (PENDING, AWAITING_INFORMATION)
 
 
 def mask_reference(reference: str) -> str:
@@ -46,6 +50,10 @@ def payment_json(payment: SMSCreditPayment, coop: Optional[Cooperative], package
         "rejection_reason": payment.rejection_reason,
         "submitted_at": iso(payment.submitted_at),
         "verified_at": iso(payment.verified_at),
+        "info_request": payment.info_request,
+        "info_requested_at": iso(payment.info_requested_at),
+        "info_response": payment.info_response,
+        "info_responded_at": iso(payment.info_responded_at),
     }
 
 
@@ -53,8 +61,9 @@ def decide(db: Session, principal: Principal, payment_id: UUID, action: str, rea
     payment = db.get(SMSCreditPayment, payment_id, with_for_update=True)
     if not payment:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment not found")
-    if payment.status != PENDING:
+    if payment.status not in DECIDABLE:
         raise HTTPException(status.HTTP_409_CONFLICT, f"This payment was already {payment.status.lower()}.")
+    previous_status = payment.status
 
     verified = action == "VERIFY"
     coop = db.get(Cooperative, payment.cooperative_id, with_for_update=True) if payment.cooperative_id else None
@@ -65,7 +74,7 @@ def decide(db: Session, principal: Principal, payment_id: UUID, action: str, rea
         f"{int(payment.credits_requested):,} credits, KES {float(payment.amount_kes):,.0f}, "
         f"ref {payment.masked_mpesa_ref}" + (f" for {coop.name}" if coop else "")
     )
-    old_values = {"status": PENDING}
+    old_values = {"status": previous_status}
     new_values: dict = {}
     payment.verified_by = principal.user.id
     payment.verified_at = datetime.datetime.utcnow()
@@ -158,6 +167,59 @@ def cancel(db: Session, principal: Principal, payment: SMSCreditPayment, reason:
         target=f"{int(payment.credits_requested):,} credits, ref {payment.masked_mpesa_ref}",
         entity_type="payment", entity_id=payment.id, cooperative_id=payment.cooperative_id,
         old_values={"status": PENDING}, new_values={"status": CANCELLED}, reason=reason,
+    )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def request_information(db: Session, principal: Principal, payment_id: UUID, message: str) -> SMSCreditPayment:
+    """Platform staff ask the cooperative for more (e.g. the till statement line). Nothing is credited or refused."""
+    payment = db.get(SMSCreditPayment, payment_id, with_for_update=True)
+    if not payment:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment not found")
+    if payment.status != PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Information can be requested only for a payment waiting for verification.")
+    payment.status = AWAITING_INFORMATION
+    payment.info_request = message
+    payment.info_requested_by = principal.user.id
+    payment.info_requested_at = datetime.datetime.utcnow()
+    payment.info_response = None
+    payment.info_responded_by = None
+    payment.info_responded_at = None
+    audit.record(
+        db, principal, "PAYMENT_INFO_REQUESTED", target=f"Payment {payment.masked_mpesa_ref}",
+        entity_type="payment", entity_id=payment.id, cooperative_id=payment.cooperative_id,
+        old_values={"status": PENDING}, new_values={"status": AWAITING_INFORMATION, "requested_information": message},
+    )
+    if payment.cooperative_id:
+        inbox.notify(
+            db, cooperative_id=payment.cooperative_id, roles=("COOP_ADMIN",), category="PAYMENT",
+            type="SMS_PAYMENT_INFO_REQUESTED", severity="WARNING",
+            title=f"More information needed for SMS credit payment {payment.masked_mpesa_ref}",
+            body=message, entity_type="payment", entity_id=payment.id, link="/cooperatives/sms-credits",
+        )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def respond_information(db: Session, principal: Principal, payment: SMSCreditPayment, response: str) -> SMSCreditPayment:
+    """The cooperative answers; the payment goes back to the verification queue."""
+    if payment.status != AWAITING_INFORMATION:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No information was requested for this payment.")
+    payment.status = PENDING
+    payment.info_response = response
+    payment.info_responded_by = principal.user.id
+    payment.info_responded_at = datetime.datetime.utcnow()
+    audit.record(
+        db, principal, "PAYMENT_INFO_PROVIDED", target=f"Payment {payment.masked_mpesa_ref}",
+        entity_type="payment", entity_id=payment.id, cooperative_id=payment.cooperative_id,
+        old_values={"status": AWAITING_INFORMATION}, new_values={"status": PENDING, "response": response},
+    )
+    inbox.platform(
+        db, category="PAYMENT", type="SMS_PAYMENT_INFO_PROVIDED", title=f"Information provided for payment {payment.masked_mpesa_ref}",
+        body=response[:300], entity_type="payment", entity_id=payment.id, link="/superadmin/payments",
     )
     db.commit()
     db.refresh(payment)

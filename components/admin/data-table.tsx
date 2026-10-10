@@ -86,7 +86,7 @@ export function DataTable<T>({
     body = (
       <>
       {mobileCards && (
-        <ul className={`divide-y divide-[#EEF1EC] md:hidden ${loading ? 'opacity-60' : ''}`} aria-label={caption}>
+        <ul className={`divide-y divide-mo-hover md:hidden ${loading ? 'opacity-60' : ''}`} aria-label={caption}>
           {rows.map((row) => (
             <li key={rowKey(row)}>
               {typeof mobileCards === 'function' ? (
@@ -101,7 +101,7 @@ export function DataTable<T>({
       <div className={`overflow-x-auto ${mobileCards ? 'hidden md:block' : ''} ${loading ? 'opacity-60 transition-opacity' : ''}`}>
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           {caption && <caption className="sr-only">{caption}</caption>}
-          <thead className="border-b border-[#EEF1EC] text-xs uppercase tracking-wide text-[#8A968F]">
+          <thead className="border-b border-mo-hover text-xs uppercase tracking-wide text-mo-subtle">
             <tr>
               {visible.map((col, i) => {
                 const active = col.sortKey && sortField === col.sortKey;
@@ -117,7 +117,7 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => toggleSort(col.sortKey!)}
-                        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-[#17221D] ${active ? 'text-[#17221D]' : ''}`}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-mo-ink ${active ? 'text-mo-ink' : ''}`}
                       >
                         {col.header}
                         {active ? (
@@ -134,14 +134,14 @@ export function DataTable<T>({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#EEF1EC]">
+          <tbody className="divide-y divide-mo-hover">
             {rows.map((row) => (
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 onKeyDown={onRowClick ? (e) => onKey(e, row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
-                className={`${onRowClick ? 'cursor-pointer outline-none hover:bg-[#F6F7F4] focus-visible:bg-[#F6F7F4] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#176044]' : ''} ${rowClassName?.(row) ?? ''}`}
+                className={`${onRowClick ? 'cursor-pointer outline-none hover:bg-mo-canvas focus-visible:bg-mo-canvas focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-mo-brand' : ''} ${rowClassName?.(row) ?? ''}`}
               >
                 {visible.map((col, i) => {
                   const pad = i === 0 ? 'pl-5 pr-3' : i === visible.length - 1 ? 'pl-3 pr-5' : 'px-3';
@@ -160,10 +160,10 @@ export function DataTable<T>({
     );
 
   return (
-    <section className="rounded-xl border border-[#DDE3DE] bg-white">
-      {toolbar && <div className="border-b border-[#EEF1EC] px-4 py-3">{toolbar}</div>}
+    <section className="rounded-xl border border-mo-line bg-white">
+      {toolbar && <div className="border-b border-mo-hover px-4 py-3">{toolbar}</div>}
       {error && rows && (
-        <div className="border-b border-[#EEF1EC] px-4 py-3">
+        <div className="border-b border-mo-hover px-4 py-3">
           <ErrorState message={error} onRetry={onRetry} compact />
         </div>
       )}
@@ -185,7 +185,7 @@ function AutoCard<T>({ row, columns, onClick }: { row: T; columns: Column<T>[]; 
           if (value === null || value === undefined || value === '') return null;
           return (
             <div key={col.key} className={col.header ? '' : 'col-span-2'}>
-              {col.header ? <dt className="text-xs text-[#8A968F]">{col.header}</dt> : null}
+              {col.header ? <dt className="text-xs text-mo-subtle">{col.header}</dt> : null}
               <dd className="min-w-0 break-words">{value}</dd>
             </div>
           );
@@ -194,7 +194,7 @@ function AutoCard<T>({ row, columns, onClick }: { row: T; columns: Column<T>[]; 
     </>
   );
   return onClick ? (
-    <button type="button" onClick={onClick} className="block w-full px-4 py-3 text-left hover:bg-[#F6F7F4]">{content}</button>
+    <button type="button" onClick={onClick} className="block w-full px-4 py-3 text-left hover:bg-mo-canvas">{content}</button>
   ) : (
     <div className="px-4 py-3">{content}</div>
   );
@@ -204,10 +204,10 @@ function AutoCard<T>({ row, columns, onClick }: { row: T; columns: Column<T>[]; 
 export function PrimaryCell({ title, subtitle }: { title: ReactNode; subtitle?: ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="truncate font-medium text-[#17221D]">{title}</p>
-      {subtitle && <p className="truncate text-xs text-[#8A968F]">{subtitle}</p>}
+      <p className="truncate font-medium text-mo-ink">{title}</p>
+      {subtitle && <p className="truncate text-xs text-mo-subtle">{subtitle}</p>}
     </div>
   );
 }
 
-export const Muted = ({ children = '–' }: { children?: ReactNode }) => <span className="text-[#8A968F]">{children}</span>;
+export const Muted = ({ children = '–' }: { children?: ReactNode }) => <span className="text-mo-subtle">{children}</span>;

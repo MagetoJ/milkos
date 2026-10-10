@@ -26,6 +26,19 @@ export function phoneDigits(term: string): string | null {
   return digits.length >= 3 ? digits : null;
 }
 
+/**
+ * Whether typed phone digits fit a masked number (0712••••78) using only the digits a collector's device holds:
+ * a short entry must match the start, a full number must match both the visible start and end. It narrows the
+ * list; an exact phone lookup happens on the server when online.
+ */
+export function maskedPhoneMatches(masked: string, digits: string): boolean {
+  const m = /^0?(\d+)•+(\d+)$/.exec(masked);
+  if (!m) return false;
+  const [, start, end] = m;
+  if (digits.length <= start.length) return start.startsWith(digits);
+  return digits.startsWith(start) && digits.endsWith(end);
+}
+
 /** Every word must match one of the farmer's fields (mirrors backend services.farmers.search_filter). */
 export function farmerMatches(row: Record<string, unknown>, search: string | undefined): boolean {
   for (const term of (search ?? '').trim().split(/\s+/).filter(Boolean)) {
@@ -33,7 +46,7 @@ export function farmerMatches(row: Record<string, unknown>, search: string | und
     const fields = [row.first_name, row.last_name, row.farmer_number, row.national_id, row.village];
     let hit = fields.some((f) => lower(f).includes(t));
     const digits = phoneDigits(term);
-    if (!hit && digits) hit = str(row.phone).includes(digits);
+    if (!hit && digits) hit = row.phone ? str(row.phone).includes(digits) : maskedPhoneMatches(str(row.phone_masked), digits);
     if (!hit) return false;
   }
   return true;

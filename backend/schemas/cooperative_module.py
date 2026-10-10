@@ -147,15 +147,14 @@ TeamRole = Literal["MANAGER", "COLLECTOR"]
 
 class TeamCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: EmailStr
+    email: Optional[EmailStr] = None  # required for managers; collectors may sign in with their phone
     phone: str
     role: TeamRole
-    password: str = Field(..., min_length=8, max_length=64)
+    # No password: the person sets their own from the SMS activation link (services/accounts).
 
     _name = field_validator("full_name")(clean_text)
-    _email = field_validator("email")(normalize_email)
+    _email = field_validator("email", mode="before")(lambda v: normalize_email(v) or None if isinstance(v, str) else v)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
-    _password = field_validator("password")(strong_password)
 
 
 class TeamUpdate(_Body):
@@ -163,8 +162,7 @@ class TeamUpdate(_Body):
     phone: Optional[str] = None
     role: Optional[TeamRole] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(None, min_length=8, max_length=64)  # admin-initiated reset
+    # Administrators never set passwords: use POST /team/{id}/send-password-reset (a link to the person's phone).
 
     _name = field_validator("full_name")(lambda v: clean_text(v) if v is not None else v)
     _phone = field_validator("phone")(_optional(normalize_phone, "phone"))
-    _password = field_validator("password")(lambda v: strong_password(v) if v is not None else v)

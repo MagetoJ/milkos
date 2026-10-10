@@ -20,7 +20,7 @@ export function SearchInput({
 }) {
   return (
     <div className={`relative min-w-[14rem] flex-1 ${className}`}>
-      <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8A968F]" />
+      <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mo-subtle" />
       <input
         type="search"
         value={value}
@@ -34,7 +34,7 @@ export function SearchInput({
           type="button"
           onClick={() => onChange('')}
           aria-label="Clear search"
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-[#8A968F] hover:text-[#17221D]"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-mo-subtle hover:text-mo-ink"
         >
           <X className="size-3.5" />
         </button>
@@ -76,7 +76,7 @@ export function FilterSelect({
 
 export function FilterDate({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-[#5E6B64]">
+    <label className="flex items-center gap-2 text-sm text-mo-muted">
       <span className="whitespace-nowrap">{label}</span>
       <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={`${inputClass} w-auto`} />
     </label>
@@ -89,7 +89,7 @@ export function FilterBar({ children, onReset, filtered }: { children: ReactNode
     <div className="flex flex-wrap items-center gap-3">
       {children}
       {onReset && filtered && (
-        <button type="button" onClick={onReset} className="text-sm font-medium text-[#176044] hover:underline">
+        <button type="button" onClick={onReset} className="text-sm font-medium text-mo-brand hover:underline">
           Clear filters
         </button>
       )}
@@ -115,7 +115,7 @@ export function Pagination({
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);
   return (
-    <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EEF1EC] px-4 py-3 text-sm text-[#5E6B64]">
+    <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-mo-hover px-4 py-3 text-sm text-mo-muted">
       <span>
         {total === 0 ? 'No results' : <>Showing {formatNumber(first)}–{formatNumber(last)} of {formatNumber(total)}</>}
         {extra && <span className="ml-3">{extra}</span>}

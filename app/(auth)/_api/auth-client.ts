@@ -5,6 +5,10 @@ interface LoginApiResponse {
   access_token?: string
   role?: UserRole
   user_id?: string
+  must_change_password?: boolean
+  mfa_required?: boolean
+  mfa_token?: string
+  message?: string
   detail?: string | { msg: string }[]
 }
 
@@ -23,7 +27,7 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
     res = await fetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ identifier: payload.identifier, password: payload.password }),
     })
   } catch {
     return { success: false, message: 'Network error. Please check your connection and try again.' }
@@ -39,13 +43,21 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
       success: false,
       message:
         res.status >= 500
-          ? `The Milkflow API is unavailable (HTTP ${res.status}). Is the FastAPI server running on port 8000?`
+          ? `The MilkOS API is unavailable (HTTP ${res.status}). Is the FastAPI server running on port 8000?`
           : `Unexpected response from the API (HTTP ${res.status}).`,
     }
   }
 
   if (!res.ok) {
-    return { success: false, message: readDetail(data.detail) || `Login failed (HTTP ${res.status}).` }
+    return {
+      success: false,
+      code: res.headers.get('x-error-code') ?? undefined,
+      message: readDetail(data.detail) || `Login failed (HTTP ${res.status}).`,
+    }
+  }
+
+  if (data.mfa_required && data.mfa_token) {
+    return { success: false, mfaRequired: true, mfaToken: data.mfa_token, message: data.message }
   }
 
   if (!data.access_token || !data.role || !VALID_ROLES.includes(data.role)) {
@@ -53,5 +65,5 @@ export async function loginUser(payload: LoginPayload): Promise<AuthResponse> {
   }
 
   saveToken(data.access_token)
-  return { success: true, token: data.access_token, role: data.role }
+  return { success: true, token: data.access_token, role: data.role, mustChangePassword: !!data.must_change_password }
 }
