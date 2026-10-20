@@ -1,0 +1,24 @@
+"""The SMS gateway contract. services/notifications.py depends only on this."""
+from dataclasses import dataclass
+from typing import Optional, Protocol, runtime_checkable
+
+
+@dataclass(frozen=True)
+class SmsResult:
+    accepted: bool                       # True only when the provider has taken responsibility for delivery
+    provider_message_id: Optional[str] = None
+    error: Optional[str] = None
+    retryable: bool = True               # False for permanent refusals (invalid number, blacklisted...)
+
+
+@runtime_checkable
+class SMSGatewayInterface(Protocol):
+    name: str
+
+    def send_sms(self, to: str, message: str) -> SmsResult:
+        """Send one SMS to an E.164 number. Must not raise for delivery problems; report them in SmsResult."""
+        ...
+
+
+class GatewayConfigurationError(RuntimeError):
+    """Misconfiguration detected while building a gateway (missing credentials, unknown name)."""
