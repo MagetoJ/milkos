@@ -5,17 +5,17 @@ import uuid
 
 import pytest
 
-from models.admin import AuditLog, Cooler
-from models.cooperative import Cooperative
-from models.farmer import Farmer
-from models.notifications import Notification
-from models.operations import MilkCollection
-from models.sensors import CoolerReading
-from models.user import User
-from schemas.auth import UserRole
-from services import sms
-from services.sms import SmsResult
-from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
+from app.infrastructure.db.models.admin import AuditLog, Cooler
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.farmer import Farmer
+from app.infrastructure.db.models.notifications import Notification
+from app.infrastructure.db.models.operations import MilkCollection
+from app.infrastructure.db.models.sensors import CoolerReading
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
+from app.infrastructure.gateways import sms
+from app.domain.interfaces import SmsResult
+from tests.test_cooperative_module import headers_for, make_coop, make_user
 
 SYNC = "/api/v1/sync"
 DEV = "/api/v1/devices"
@@ -97,7 +97,7 @@ def world(client, session):
 
 def grant_credits(session, coop, credits, reference="test-grant"):
     """SMS credits through the ledger (the balance column is only a cache of it)."""
-    from services import sms_credits
+    from app.services import sms_credits
 
     sms_credits.adjust(session, coop.id, credits, "Test credits", None, reference)
     session.commit()
@@ -276,7 +276,7 @@ def test_farmer_update_conflict_rules(client, world):
 def test_collectors_cannot_create_farmers(client, session, world):
     make_user(session, world["a"], UserRole.COLLECTOR, "col@a.coop", "+254700000014")
     client.post(f"{COOP}/team", json={}, headers=world["admin_a"])  # no-op; profile below
-    from services.collectors import ensure_profile
+    from app.services.collectors import ensure_profile
 
     ensure_profile(session, session.query(User).filter_by(email="col@a.coop").one())
     session.commit()
@@ -356,7 +356,7 @@ def test_pull_holds_cursor_behind_unsettled_changes(client, world, monkeypatch):
 
 
 def test_collector_pull_is_reduced(client, session, world):
-    from services.collectors import ensure_profile
+    from app.services.collectors import ensure_profile
 
     user = make_user(session, world["a"], UserRole.COLLECTOR, "col@a.coop", "+254700000014")
     ensure_profile(session, user)
@@ -491,7 +491,7 @@ def test_no_provider_or_no_credits_is_failed_not_sent(client, session, world):
     n = session.query(Notification).one()
     assert n.status == "PENDING_PROVIDER" and "not configured" in n.error
 
-    from services import sms_credits
+    from app.services import sms_credits
 
     sms_credits.adjust(session, world["a"].id, -10, "Drain for the test", None, "test-drain")
     session.commit()

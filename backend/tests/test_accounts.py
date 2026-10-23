@@ -5,13 +5,14 @@ import json
 
 import pytest
 
-from core.validation import mask_phone_local, normalize_phone
-from models.admin import AuditLog
-from models.finance import CreditTxn, SmsCreditTransaction
-from models.notifications import Notification
-from models.user import AccountActivation, PasswordReset, PhoneVerification, User
-from schemas.auth import UserRole
-from services import mfa, notifications, sms
+from app.core.validation import mask_phone_local, normalize_phone
+from app.infrastructure.db.models.admin import AuditLog
+from app.infrastructure.db.models.finance import CreditTxn, SmsCreditTransaction
+from app.infrastructure.db.models.notifications import Notification
+from app.infrastructure.db.models.user import AccountActivation, PasswordReset, PhoneVerification, User
+from app.domain.schemas.auth import UserRole
+from app.services import mfa, notifications
+from app.infrastructure.gateways import sms
 from tests.conftest import RecordingSms, activate, fund, login
 from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
 
@@ -49,7 +50,7 @@ def bearer(res):
 
 
 def available(session, coop_id):
-    from services import sms_credits
+    from app.services import sms_credits
 
     session.expire_all()
     return sms_credits.available(session, coop_id)
@@ -191,7 +192,7 @@ def test_pending_account_is_told_to_activate_and_can_not_reach_the_api(client, s
     res = login(client, "paul@a.coop", "anything")
     assert res.status_code == 403 and "activated" in res.json()["detail"] and res.headers["x-error-code"] == "activation_required"
     # A forged token for the pending account is refused by every protected endpoint.
-    from core.security import access_token_for
+    from app.core.security import access_token_for
 
     user = session.query(User).filter_by(phone_number=NEW_PHONE).one()
     forged = {"Authorization": f"Bearer {access_token_for(user)}"}

@@ -28,7 +28,7 @@ export interface RawMeasurement {
   sequence?: number | null;
 }
 
-/** A normalised reading, ready to store (mirrors backend schemas/sync.py CoolerReadingIn). */
+/** A normalised reading, ready to store (mirrors backend app/domain/schemas/sync.py CoolerReadingIn). */
 export interface SensorReading {
   cooler_id: string;
   sensor_id: string | null;

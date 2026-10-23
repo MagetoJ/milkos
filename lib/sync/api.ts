@@ -1,4 +1,4 @@
-// HTTP calls of the sync protocol (backend/routers/sync.py). Every call carries the access token and
+// HTTP calls of the sync protocol (backend/app/api/routers/sync.py). Every call carries the access token and
 // this device's id; the server derives the cooperative from the account, never from what we send.
 import { getSession } from '@/lib/auth';
 import { reportRequest } from '@/lib/offline/connectivity';

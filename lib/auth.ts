@@ -27,9 +27,6 @@ export const ROUTE_ACCESS: Record<string, UserRole[]> = {
   '/farmer': ['FARMER'],
 };
 
-/** Pages anyone may open without signing in (they never show cooperative data). */
-export const PUBLIC_PATHS = ['/', '/login', '/register', '/activate-account', '/forgot-password', '/reset-password', '/application-status'];
-
 /** Where an account that must replace its password is sent (the server refuses everything else until it does). */
 export const CHANGE_PASSWORD_PATH = '/change-password';
 

@@ -1,12 +1,11 @@
-import uuid
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from models.cooperative import Cooperative
-from models.membership import CooperativeMembership
-from models.user import User
-from schemas.auth import UserRole
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.membership import CooperativeMembership
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 
 
 def test_same_user_can_have_distinct_roles_across_cooperatives(session):

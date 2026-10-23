@@ -90,11 +90,6 @@ export async function listAll<T>(table: 'cooperative' | 'centres' | 'coolers' | 
   return rows.map((r) => publicRow<T>(r));
 }
 
-export async function getRow<T>(table: string, id: string): Promise<T | null> {
-  const row = (await userDb().table(table).get(id)) as Row | undefined;
-  return row ? publicRow<T>(row) : null;
-}
-
 export async function getRawRow(table: string, id: string): Promise<Row | undefined> {
   return (await userDb().table(table).get(id)) as Row | undefined;
 }

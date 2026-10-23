@@ -1,6 +1,6 @@
 """The SMS gateway contract. services/notifications.py depends only on this."""
 from dataclasses import dataclass
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol
 
 
 @dataclass(frozen=True)
@@ -11,7 +11,6 @@ class SmsResult:
     retryable: bool = True               # False for permanent refusals (invalid number, blacklisted...)
 
 
-@runtime_checkable
 class SMSGatewayInterface(Protocol):
     name: str
 

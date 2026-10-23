@@ -1,4 +1,4 @@
-// Role -> permission table, mirrored from backend/core/permissions.py (backend/tests/test_permissions_mirror.py fails
+// Role -> permission table, mirrored from backend/app/core/permissions.py (backend/tests/test_permissions_mirror.py fails
 // if the two differ). The UI uses it only to HIDE what a person cannot use; the backend still enforces every action.
 import table from './permissions.json';
 

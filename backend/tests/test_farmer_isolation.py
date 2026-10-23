@@ -4,8 +4,8 @@ import uuid
 
 import pytest
 
-from models.farmer import Farmer
-from schemas.auth import UserRole
+from app.infrastructure.db.models.farmer import Farmer
+from app.domain.schemas.auth import UserRole
 from tests.test_batches import BATCHES, batch_body, confirm, world  # noqa: F401  (fixture)
 from tests.test_cooperative_module import headers_for, make_user
 from tests.test_finance import DAY, TODAY, price

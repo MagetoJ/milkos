@@ -62,8 +62,6 @@ export class ScaleNotStableError extends Error {
   }
 }
 
-export class ScaleUnavailableError extends Error {}
-
 /** How a batch's weight was obtained (backend WeightSource). */
 export type WeightSource = 'SCALE' | 'MANUAL' | 'SIMULATED';
 

@@ -3,10 +3,10 @@ import sys
 
 from sqlalchemy.orm import Session
 
-from core.security import hash_password
-from db import SessionLocal
-from models.user import User
-from schemas.auth import UserRole
+from app.core.security import hash_password
+from app.infrastructure.db.database import SessionLocal
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 
 
 def seed_superadmin() -> int:

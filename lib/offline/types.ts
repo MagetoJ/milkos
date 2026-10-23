@@ -3,7 +3,7 @@
 /** Sync state of one local record. */
 export type RecordSyncStatus = 'synced' | 'pending' | 'syncing' | 'failed' | 'conflict';
 
-/** Entities the server accepts from devices (see backend/schemas/sync.py). */
+/** Entities the server accepts from devices (see backend/app/domain/schemas/sync.py). */
 export type MutationEntity = 'farmer' | 'centre' | 'collection' | 'collection_batch' | 'cooler_reading' | 'sensor_event';
 export type MutationOperation = 'create' | 'update';
 

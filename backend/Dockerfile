@@ -24,4 +24,4 @@ EXPOSE 8000
 # Bring the schema to head and make sure the superadmin exists (both idempotent), then serve.
 # `&&` means a failed migration or a missing SUPERADMIN_PASSWORD stops the container
 # instead of starting an API that can't work.
-CMD ["sh", "-c", "alembic upgrade head && python seed_superadmin.py && exec uvicorn main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && python seed_superadmin.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

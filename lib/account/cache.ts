@@ -50,11 +50,3 @@ export async function cacheAccount(userId: string, data: { profile?: AccountProf
     /* IndexedDB unavailable (private mode): settings still work online */
   }
 }
-
-export async function forgetCachedAccount(userId: string): Promise<void> {
-  try {
-    await metaDb().kv.delete(key(userId));
-  } catch {
-    /* nothing to forget */
-  }
-}

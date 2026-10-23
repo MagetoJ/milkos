@@ -1,7 +1,7 @@
 'use client';
 
 // Forced password change. The server refuses every other request from an account flagged must_change_password
-// (core/access.py); this page is where such an account lands after signing in.
+// (backend/app/api/dependencies/auth.py); this page is where such an account lands after signing in.
 import { useEffect, useState, type FormEvent } from 'react';
 import { PublicShell } from '@/components/public/public-shell';
 import { Labeled, Notice, PasswordChecklist, field, primary } from '@/components/settings/settings-ui';

@@ -1,9 +1,9 @@
 import pytest
 
-from core.security import hash_password
-from models.cooperative import Cooperative
-from models.user import User
-from schemas.auth import UserRole
+from app.core.security import hash_password
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 from tests.conftest import activate, fund, login
 
 PASSWORD = "Dairy#2026x"

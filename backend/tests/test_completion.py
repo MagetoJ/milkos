@@ -1,11 +1,11 @@
 """Collector phone masking, payment 'request information', the farmer's own view and cross-cooperative isolation."""
 import uuid
 
-from models.admin import AuditLog
-from models.user import User
-from schemas.auth import UserRole
+from app.infrastructure.db.models.admin import AuditLog
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 from tests.test_batches import BATCHES, batch_body, confirm, world  # noqa: F401  (fixture)
-from tests.test_cooperative_module import PASSWORD, headers_for, make_user
+from tests.test_cooperative_module import headers_for, make_user
 from tests.test_sync import pull_all, register
 
 COOP = "/api/v1/cooperative"
@@ -81,7 +81,7 @@ def test_farmer_sees_only_their_own_collections_with_prices(client, session, wor
     assert client.post(f"{COOP}/prices", json={"price_per_kg": 50, "effective_from": "2020-01-01"}, headers=world["admin_a"]).status_code == 201
     batch = confirm(client, world["col_a"], batch_body(world, [(world["jane"], 10), (world["peter"], 5)], captured=15))
     jane_user = make_user(session, world["a"], UserRole.FARMER, "jane@farm.ke", "+254712345601")
-    from models.farmer import Farmer
+    from app.infrastructure.db.models.farmer import Farmer
 
     session.get(Farmer, uuid.UUID(world["jane"]["id"])).user_id = jane_user.id
     session.commit()

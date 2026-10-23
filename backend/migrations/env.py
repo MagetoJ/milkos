@@ -2,10 +2,10 @@ from logging.config import fileConfig
 
 from alembic import context
 
-# db.py loads backend/.env and builds the engine from DATABASE_URL (an already-set
+# app/core/config.py loads backend/.env (app/infrastructure/db/database.py) and builds the engine from DATABASE_URL (an already-set
 # environment variable wins, which is how the tests point this at SQLite).
-import db
-import models  # noqa: F401  (registers every table on Base.metadata)
+from app.infrastructure.db import database as db
+from app.infrastructure.db import models  # noqa: F401  (registers every table on Base.metadata)
 
 config = context.config
 if config.config_file_name is not None:
@@ -38,7 +38,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     with db.engine.connect() as connection:
         if connection.dialect.name == "sqlite":
-            # Batch mode rebuilds a table by DROP + RENAME. With foreign keys enforced (db.py turns them
+            # Batch mode rebuilds a table by DROP + RENAME. With foreign keys enforced (database.py turns them
             # on), dropping e.g. `cooperatives` would fire ON DELETE CASCADE and wipe dependent rows.
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             connection.commit()

@@ -16,7 +16,7 @@ def run(code_or_args, db_url):
 
 SMOKE = """
     from fastapi.testclient import TestClient
-    from main import app
+    from app.main import app
     with TestClient(app) as c:
         assert c.get("/openapi.json").status_code == 200
         r = c.post("/api/v1/auth/register", json={
@@ -43,7 +43,8 @@ def test_startup_does_not_create_tables(tmp_path):
     """The app must not silently create_all(): without migrations the tables don't exist."""
     url = f"sqlite:///{(tmp_path / 'unmigrated.db').as_posix()}"
     code = """
-        import main, db
+        from app import main
+        from app.infrastructure.db import database as db
         from sqlalchemy import inspect
         print(inspect(db.engine).get_table_names())
     """
@@ -182,7 +183,8 @@ def test_0007_turns_collections_into_batches_and_balances_into_the_ledger(tmp_pa
 PARITY = """
     from alembic.autogenerate import compare_metadata
     from alembic.migration import MigrationContext
-    import db, models
+    from app.infrastructure.db import database as db
+    from app.infrastructure.db import models
     with db.engine.connect() as conn:
         diff = compare_metadata(MigrationContext.configure(conn), db.Base.metadata)
     # SQLite can't report server defaults / check constraints reliably; tables, columns and indexes must match.

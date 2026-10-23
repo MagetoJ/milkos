@@ -3,10 +3,9 @@
 The first implementation runs tasks in-process (FastAPI BackgroundTasks); a Celery/Redis one can replace it
 without touching callers, which is why the payload rule below matters.
 """
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol
 
 
-@runtime_checkable
 class TaskDispatcher(Protocol):
     def enqueue(self, task: str, payload: Mapping[str, Any]) -> None:
         """Schedule the task registered as `task`.

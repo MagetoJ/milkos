@@ -4,7 +4,7 @@
 // change, every minute while the app is visible, and when someone presses "Sync now". Failures are
 // classified (network, expired session, forbidden device, server error, validation, conflict) and handled
 // differently; nothing is retried aggressively: repeated failures back off up to 30 minutes.
-import { getConnectivity, isServerReachable, probe, subscribeConnectivity } from '@/lib/offline/connectivity';
+import { isServerReachable, probe, subscribeConnectivity } from '@/lib/offline/connectivity';
 import { refreshWithDeviceSession } from '@/lib/offline/auth';
 import { getMeta, openUserDb, setMeta, type UserDB } from '@/lib/offline/db';
 import { emitLocalChange, onLocalChange } from '@/lib/offline/events';
@@ -351,10 +351,3 @@ class SyncEngine {
 
 export const syncEngine = new SyncEngine();
 export type { SyncEngine };
-
-/** Is the app connected to the server right now, as far as anyone knows? */
-export function connectionLabel(): 'online' | 'offline' | 'checking' {
-  const c = getConnectivity();
-  if (!c.network || c.server === 'unreachable') return 'offline';
-  return c.server === 'reachable' ? 'online' : 'checking';
-}

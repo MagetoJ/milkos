@@ -5,14 +5,14 @@ import uuid
 
 import pytest
 
-from models.admin import AuditLog
-from models.notifications import Notification
-from models.operations import CollectionBatch, LineStatus, MilkCollection
-from schemas.auth import UserRole
-from services import sms
-from services.immutability import ImmutableRecordError
+from app.infrastructure.db.models.admin import AuditLog
+from app.infrastructure.db.models.notifications import Notification
+from app.infrastructure.db.models.operations import CollectionBatch, LineStatus, MilkCollection
+from app.domain.schemas.auth import UserRole
+from app.infrastructure.gateways import sms
+from app.infrastructure.db.immutability import ImmutableRecordError
 from tests.test_cooperative_module import headers_for, make_coop, make_user
-from tests.test_sync import FakeSms, grant_credits, h, mutation, push, register
+from tests.test_sync import FakeSms, grant_credits, mutation, push, register
 
 BATCHES = "/api/v1/collection-batches"
 REQUESTS = "/api/v1/collection-requests"
@@ -36,7 +36,7 @@ def _farmer(client, headers, first, phone, **extra):
 
 @pytest.fixture
 def world(client, session):
-    from services.collectors import ensure_profile
+    from app.services.collectors import ensure_profile
 
     a, b = make_coop(session, 1), make_coop(session, 2)
     make_user(session, a, UserRole.COOP_ADMIN, "admin@a.coop", "+254700000011")
@@ -133,7 +133,7 @@ def test_manual_weight_is_labelled_and_never_names_a_scale(client, session, worl
     batch = confirm(client, world["col_a"], body)
     assert batch["weight_source"] == "MANUAL" and batch["scale_name"] is None
     # Staff are told about manually typed weights.
-    from models.inbox import InboxNotification
+    from app.infrastructure.db.models.inbox import InboxNotification
 
     assert session.query(InboxNotification).filter_by(type="MANUAL_WEIGHT").count() == 1
 
@@ -261,7 +261,7 @@ def test_receipts_sent_only_when_the_provider_accepts(client, session, world):
     detail = client.get(f"{BATCHES}/{batch['id']}", headers=world["col_a"]).json()
     assert {l["receipt_status"] for l in detail["lines"]} == {"SENT"}
 
-    from services import sms_credits
+    from app.services import sms_credits
 
     balances = sms_credits.balances(session, world["a"].id)
     assert balances["available"] == 3 and balances["consumed"] == 2 and balances["reserved"] == 0
@@ -279,7 +279,7 @@ def test_receipts_without_provider_or_credits_are_never_sent(client, session, wo
     failed = session.query(Notification).filter_by(type="COLLECTION_RECEIPT", farmer_id=uuid.UUID(world["peter"]["id"])).one()
     assert failed.status == "FAILED" and failed.sent_at is None
 
-    from services import sms_credits
+    from app.services import sms_credits
 
     # Every reservation was refunded: nothing lost.
     assert sms_credits.balances(session, world["a"].id)["available"] == 5

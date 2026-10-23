@@ -8,12 +8,12 @@ from uuid import UUID
 
 import pytest
 
-from models.admin import AuditLog, SMSCreditPayment
-from models.cooperative import Cooperative
-from models.farmer import Farmer
-from models.operations import Collector
-from models.user import User
-from schemas.auth import UserRole
+from app.infrastructure.db.models.admin import AuditLog, SMSCreditPayment
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.farmer import Farmer
+from app.infrastructure.db.models.operations import Collector
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 from tests.conftest import SUPERADMIN_EMAIL, activate, fund
 from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
 

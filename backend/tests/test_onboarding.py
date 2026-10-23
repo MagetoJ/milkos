@@ -2,10 +2,10 @@ import uuid
 
 import pytest
 
-from models.admin import CooperativeApplication
-from models.cooperative import Cooperative
-from models.user import User
-from schemas.auth import UserRole
+from app.infrastructure.db.models.admin import CooperativeApplication
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.user import User
+from app.domain.schemas.auth import UserRole
 from tests.conftest import login
 
 REGISTER = "/api/v1/auth/register"
@@ -150,10 +150,10 @@ def test_phone_of_farmer_is_409_with_specific_message(client, session):
 
 def test_database_constraint_catches_a_race(client, monkeypatch):
     """If two requests pass the checks at the same time, the unique index still stops the second."""
-    import routers.auth
+    from app.services import onboarding
 
     assert client.post(REGISTER, json=application()).status_code == 201
-    monkeypatch.setattr(routers.auth, "find_conflict", lambda db, payload: None)
+    monkeypatch.setattr(onboarding, "find_conflict", lambda db, payload: None)
     res = client.post(REGISTER, json=application(
         admin_email="racer@example.com", admin_phone="0799111222", cooperative_name="Racer"
     ))

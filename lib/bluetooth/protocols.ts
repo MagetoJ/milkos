@@ -68,10 +68,6 @@ export function getProtocol(key: string | null | undefined): GattProtocol {
   return (key && registry.get(key)) || STANDARD;
 }
 
-export function listProtocols(): GattProtocol[] {
-  return [...registry.values()];
-}
-
 /** Every service any known protocol may open (Web Bluetooth only exposes services requested up front). */
 export function allOptionalServices(): (string | number)[] {
   const out = new Set<string | number>();

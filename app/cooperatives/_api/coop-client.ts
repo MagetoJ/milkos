@@ -13,7 +13,7 @@ import { ApiError, createApi, NEEDS_CONNECTION, send } from '@/lib/api-client';
 import { isServerReachable } from '@/lib/offline/connectivity';
 import { hasUserDb, userDb } from '@/lib/offline/db';
 import { saveChange } from '@/lib/offline/mutations';
-import { getRawRow, initialSyncDone, listAll, listFarmers as listLocalFarmers, publicRow, readingsFor } from '@/lib/offline/repositories';
+import { getRawRow, initialSyncDone, listAll, listFarmers as listLocalFarmers, publicRow } from '@/lib/offline/repositories';
 import { validateCentre, validateFarmer } from '@/lib/offline/validation';
 import { uuid } from '@/lib/offline/ids';
 import type { PulledEntity } from '@/lib/offline/types';
@@ -32,12 +32,10 @@ import type {
   TeamUpdateInput,
 } from '../_types/coop-types';
 import type {
-  AlertNotification,
   Collector,
   CollectorInput,
   Cooler,
   CoolerInput,
-  CoolerReading,
   Device,
   SensorDevice,
 } from '@/app/superadmin/_types/platform-types';
@@ -256,10 +254,6 @@ export const updateMember = (id: string, data: TeamUpdateInput) =>
   onlineOnly('team_member', () => request<TeamMember>(`/team/${id}`, send('PATCH', data)));
 
 // Account activation and status (online only: these act on people's sign-in, never queued offline).
-export const listAccounts = (params: { role?: string; account_status?: string; search?: string } = {}) => {
-  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v) as [string, string][]).toString();
-  return request<TeamMember[]>(`/accounts${q ? `?${q}` : ''}`);
-};
 export const resendActivation = (id: string) => onlineOnly(null, () => request<TeamMember>(`/accounts/${id}/resend-activation`, send('POST')));
 export const revokeInvitation = (id: string, reason?: string) =>
   onlineOnly(null, () => request<TeamMember>(`/accounts/${id}/revoke-invitation`, send('POST', { reason })));
@@ -293,17 +287,7 @@ export const updateCollector = (id: string, data: CollectorInput) =>
 
 export const listSensors = () => localFirst(() => listAll<SensorDevice>('sensors', byName), () => request<SensorDevice[]>('/sensors'));
 export const registerSensor = (data: Record<string, unknown>) => onlineOnly('sensor', () => request<SensorDevice>('/sensors', send('POST', data)));
-export const updateSensor = (id: string, data: Record<string, unknown>) =>
-  onlineOnly('sensor', () => request<SensorDevice>(`/sensors/${id}`, send('PATCH', data)));
-export const listCoolerReadings = (coolerId: string, limit = 50) =>
-  localFirst(() => readingsFor<CoolerReading>(coolerId, limit), () => request<CoolerReading[]>(`/coolers/${coolerId}/readings?limit=${limit}`));
-export const listNotifications = () => request<{ items: AlertNotification[]; total: number }>('/notifications?page_size=50');
-export const retryNotification = (id: string) =>
-  onlineOnly('notification', () => request<AlertNotification>(`/notifications/${id}/retry`, send('POST')));
-export const checkAlerts = () => request<{ created: number }>('/coolers/alerts/check', send('POST'));
 
 // ---------------- devices ----------------
 
 export const listDevices = () => request<Device[]>('/devices');
-export const updateDevice = (id: string, data: { is_active?: boolean; label?: string }) =>
-  onlineOnly(null, () => request<Device>(`/devices/${id}`, send('PATCH', data)));

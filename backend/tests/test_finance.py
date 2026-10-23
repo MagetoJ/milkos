@@ -1,17 +1,14 @@
 """SMS credit ledger, SMS credit center, milk pricing, farmer payments and their interaction with corrections."""
 import datetime
 import io
-import uuid
 import zipfile
 
-import pytest
-
-from models.admin import AuditLog, SMSCreditPayment
-from models.cooperative import Cooperative
-from models.finance import CreditTxn, SmsCreditTransaction
-from services import sms, sms_credits
+from app.infrastructure.db.models.admin import AuditLog
+from app.infrastructure.db.models.cooperative import Cooperative
+from app.infrastructure.db.models.finance import CreditTxn, SmsCreditTransaction
+from app.services import sms_credits
 from tests.test_batches import BATCHES, COOP, REQUESTS, batch_body, confirm, correction_body, world  # noqa: F401
-from tests.test_sync import FakeSms, grant_credits
+from tests.test_sync import grant_credits
 
 SA = "/api/v1/superadmin"
 TODAY = datetime.date.today()

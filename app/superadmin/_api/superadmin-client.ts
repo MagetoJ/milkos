@@ -31,14 +31,12 @@ import type {
   PlatformUserDetail,
   RolesMatrix,
   SearchResult,
-  SensorDevice,
   SyncHealth,
   Setting,
   SmsPackage,
   UserInput,
 } from '../_types/platform-types';
 
-export { ApiError } from '@/lib/api-client';
 export { authHeaders };
 
 const request = createApi('/api/v1/superadmin');
@@ -97,8 +95,6 @@ export const listUsers = (params: Params) => request<Page<PlatformUser>>(`/users
 export const getUser = (id: string) => request<PlatformUserDetail>(`/users/${id}`);
 export const createUser = (data: UserInput) => request<PlatformUser>('/users', send('POST', data));
 export const updateUser = (id: string, data: UserInput) => request<PlatformUser>(`/users/${id}`, send('PUT', data));
-export const setUserActive = (id: string, is_active: boolean, reason?: string) =>
-  request<PlatformUser>(`/users/${id}/status`, send('PATCH', { is_active, reason }));
 // Administrators never set passwords: these send the person a one-time link by SMS.
 export const sendUserPasswordReset = (id: string) =>
   request<{ sent: boolean; sms_sent: boolean; sms_status: string; sms_error: string | null }>(`/users/${id}/reset-password`, send('POST'));
@@ -155,6 +151,5 @@ export const getSyncHealth = () => request<SyncHealth>('/sync/health');
 export const listDevices = (params: Params) => request<Page<Device>>(`/sync/devices${toQuery(params)}`);
 export const updateDevice = (id: string, data: { is_active?: boolean; label?: string }, release = false) =>
   request<Device>(`/sync/devices/${id}${release ? '?release=true' : ''}`, send('PATCH', data));
-export const listSensorDevices = (params: Params) => request<Page<SensorDevice>>(`/sensors${toQuery(params)}`);
 export const listCoolerReadings = (params: Params) => request<Page<CoolerReading>>(`/cooler-readings${toQuery(params)}`);
 export const listNotifications = (params: Params) => request<Page<AlertNotification>>(`/notifications${toQuery(params)}`);

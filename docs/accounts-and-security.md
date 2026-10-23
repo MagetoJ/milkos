@@ -52,7 +52,7 @@ resend after 60 s, at most 5 sends per challenge. Used for activation and phone 
 * bcrypt; rules: 8+ characters with upper case, lower case and a digit.
 * Administrators never set, see or receive a password. "Reset" sends the person a one-time reset link.
 * Password reset (`password_resets`) is a separate table and flow from activation; only ACTIVE accounts get one.
-* `must_change_password` is enforced by the backend (`core/access.py`): such an account can only call
+* `must_change_password` is enforced by the backend (`backend/app/api/dependencies/auth.py`): such an account can only call
   `/api/v1/account/me` and `/api/v1/account/password`.
 * Five wrong passwords lock sign-in for 15 minutes.
 

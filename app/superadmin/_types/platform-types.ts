@@ -1,4 +1,4 @@
-// Shapes returned by /api/v1/superadmin/* (see backend/routers/superadmin and backend/services).
+// Shapes returned by /api/v1/superadmin/* (see backend/app/api/routers/superadmin and backend/app/services).
 import type { UserRole } from '@/lib/auth';
 
 export interface Page<T> {

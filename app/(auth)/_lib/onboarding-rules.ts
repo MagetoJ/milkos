@@ -1,4 +1,4 @@
-// Mirrors backend/core/validation.py. The backend is the authority; these give instant feedback.
+// Mirrors backend/app/core/validation.py. The backend is the authority; these give instant feedback.
 
 export const KENYAN_COUNTIES = [
   'Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 'Homa Bay', 'Isiolo',

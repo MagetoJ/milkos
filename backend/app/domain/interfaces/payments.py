@@ -1,7 +1,7 @@
 """The payout gateway contract (M-Pesa B2C, bank transfer...). services/farmer_payments.py depends only on this."""
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol
 
 
 @dataclass(frozen=True)
@@ -11,7 +11,6 @@ class PayoutResult:
     error: Optional[str] = None
 
 
-@runtime_checkable
 class PaymentGatewayInterface(Protocol):
     name: str
 

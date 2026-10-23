@@ -23,7 +23,7 @@ PENDING_ONLY = sa.text("status = 'PENDING'")
 
 
 def _check_existing_data() -> None:
-    from core.validation import normalize_phone
+    from app.core.validation import normalize_phone
 
     bind = op.get_bind()
     problems = []

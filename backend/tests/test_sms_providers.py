@@ -2,8 +2,8 @@
 import httpx
 import pytest
 
-from services import sms
-from services.sms.providers import AfricasTalkingProvider, WebhookSmsProvider
+from app.infrastructure.gateways import sms
+from app.infrastructure.gateways.sms.providers import AfricasTalkingProvider, WebhookSmsProvider
 
 
 def client(handler):
@@ -58,7 +58,7 @@ def test_provider_selection_from_environment(monkeypatch):
     monkeypatch.delenv("SMS_PROVIDER", raising=False)
     assert sms.get_provider() is None
     monkeypatch.setenv("SMS_PROVIDER", "africastalking")
-    with pytest.raises(sms.SmsProviderError):
+    with pytest.raises(sms.GatewayConfigurationError):
         sms.get_provider()  # credentials missing
     monkeypatch.setenv("AFRICASTALKING_USERNAME", "sandbox")
     monkeypatch.setenv("AFRICASTALKING_API_KEY", "k")
@@ -66,5 +66,5 @@ def test_provider_selection_from_environment(monkeypatch):
     provider = sms.get_provider()
     assert provider.name == "africastalking" and provider.url == AfricasTalkingProvider.SANDBOX_URL
     monkeypatch.setenv("SMS_PROVIDER", "carrier-pigeon")
-    with pytest.raises(sms.SmsProviderError):
+    with pytest.raises(sms.GatewayConfigurationError):
         sms.get_provider()

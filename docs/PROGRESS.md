@@ -55,3 +55,32 @@ Behaviour notes
 
 Not verified
 - The signed-in shells were not looked at in a browser (no seeded session available); verified by typecheck, 92 frontend tests, a production build, and the routes returning 200. A visual/responsive pass is part of Phase 5.
+
+## Backend restructure: layered `backend/app/` (2026-10-20)
+
+Layout and rules: `backend/app/README.md`. Entry point is now `uvicorn app.main:app` (`backend/Dockerfile` updated).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Move `core/`, `db.py`, `models/`, `schemas/`, `services/`, `routers/`, `main.py` into `app/{api,services,domain,infrastructure,core}` | **Done** | `git mv` (history kept); every import rewritten |
+| Domain interfaces: SMS, payments, tasks, repositories; domain exceptions | **Done** | `app/domain/` |
+| Services free of FastAPI (domain exceptions instead of `HTTPException`; `api/errors.py` maps them, same bodies) | **Done** | `tests/test_architecture.py` |
+| Routers free of database access (queries moved into services; `services/platform_admin/` for the superadmin console) | **Done** | `tests/test_architecture.py::test_routers_do_not_touch_the_database` |
+| Dependencies in `app/api/dependencies/` (db, auth, pagination, tasks, feature gate); `core.access -> routers.auth` import cycle removed | **Done** | |
+| Tenant-scoped repository behind `own()` (another cooperative's row is a 404) | **Done** | `SqlTenantRepository`, test in `test_architecture.py` |
+| Background tasks: receipt SMS after batch confirm, SMS after sync push and alert housekeeping on sync status run after the response | **Done** | `app/infrastructure/tasks`, `app/services/background.py` |
+| Feature gate placeholder (`require_feature`) | **Done, not applied to any endpoint** | Every cooperative has every feature until plans exist |
+| API contract unchanged | **Verified** | OpenAPI from before and after: 153 paths, 176 operations, 79 schemas identical; only 3 endpoint descriptions reworded |
+| `pytest` (SQLite) | **261 passed** (249 existing + 12 new) | |
+
+Behaviour changes
+- `POST /api/v1/collection-batches` returns before the receipt SMS are sent, so its response shows each line's receipt
+  as `PENDING`. The app already labels that as waiting (`lib/collections/receipts.ts`) and updates when the result
+  syncs; the batch detail endpoint shows the outcome. SMS whose result is part of a response (sign-in and phone codes,
+  activation links) are still sent synchronously.
+- `GET /api/v1/sync/status` raises stale-cooler alerts and retries due SMS after responding instead of before.
+- A few 401/403 responses now carry `WWW-Authenticate: Bearer` / `X-Error-Code` headers they previously lacked.
+
+Not verified
+- `pytest` against PostgreSQL (no local instance; runs in CI).
+- The Docker image was not rebuilt.

@@ -2,7 +2,7 @@
 Tests run against a throwaway SQLite database built by the real Alembic migrations.
 
 DATABASE_URL is set here, before anything imports `db`, so the tests can never reach Supabase
-(db.py's load_dotenv() does not override a variable that is already set).
+(app/core/config.py's load_dotenv() does not override a variable that is already set).
 """
 import os
 import tempfile
@@ -26,7 +26,7 @@ import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 
-import db  # noqa: E402
+from app.infrastructure.db import database as db  # noqa: E402
 
 assert db.engine.dialect.name == "sqlite" or (_PG and db.engine.url.host in ("127.0.0.1", "localhost")), \
     "tests must never run against a real database"
@@ -42,7 +42,7 @@ def migrated_database():
 
 @pytest.fixture(autouse=True)
 def clean_tables(migrated_database):
-    from core import ratelimit
+    from app.core import ratelimit
 
     ratelimit.reset()
     yield
@@ -63,7 +63,7 @@ def session():
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
-    from main import app
+    from app.main import app
 
     with TestClient(app) as c:
         yield c
@@ -75,9 +75,9 @@ SUPERADMIN_PASSWORD = "SuperAdmin#2026"
 
 @pytest.fixture
 def superadmin_headers(client, session):
-    from core.security import hash_password
-    from models.user import User
-    from schemas.auth import UserRole
+    from app.core.security import hash_password
+    from app.infrastructure.db.models.user import User
+    from app.domain.schemas.auth import UserRole
 
     session.add(User(
         email=SUPERADMIN_EMAIL, password_hash=hash_password(SUPERADMIN_PASSWORD), full_name="Root",
@@ -106,7 +106,7 @@ class RecordingSms:
         self.accept = accept
 
     def send_sms(self, to, message):
-        from services.sms import SmsResult
+        from app.domain.interfaces import SmsResult
 
         if not self.accept:
             return SmsResult(False, error="Simulated provider refusal", retryable=True)
@@ -137,7 +137,7 @@ class RecordingSms:
 
 @pytest.fixture
 def sms_outbox():
-    from services import sms
+    from app.infrastructure.gateways import sms
 
     box = RecordingSms()
     sms.set_provider(box)
@@ -149,7 +149,7 @@ def fund(session, cooperative_id, credits=100):
     """Give a cooperative SMS credits through the ledger (activation SMS from cooperative staff cost one)."""
     import uuid as _uuid
 
-    from services import sms_credits
+    from app.services import sms_credits
 
     sms_credits.adjust(session, cooperative_id, credits, "test credits", None, f"test:{_uuid.uuid4()}")
     session.commit()

@@ -148,7 +148,7 @@ export async function bootSession(allowed: UserRole[]): Promise<Boot> {
       if (!result.me) return offlineOrUnreachable(offline, allowed);
       const me = result.me;
       if (me.must_change_password) {
-        // The server refuses everything else until the password is replaced (core/access.py).
+        // The server refuses everything else until the password is replaced (backend/app/api/dependencies/auth.py).
         if (typeof window !== 'undefined') window.location.replace(CHANGE_PASSWORD_PATH);
         return { mode: 'blocked', message: 'Choose a new password to continue.' };
       }

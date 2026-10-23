@@ -1,5 +1,5 @@
 // Validation applied on the device before a change is queued, mirroring the server's rules
-// (backend/core/validation.py, schemas/cooperative_module.py, schemas/platform.py, schemas/sync.py) so
+// (backend/app/core/validation.py, app/domain/schemas/cooperative_module.py, platform.py, sync.py) so
 // offline users see mistakes immediately. The server re-validates everything when the change syncs.
 import { ApiError } from '@/lib/api-client';
 
