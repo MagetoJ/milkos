@@ -1,0 +1,42 @@
+# Render Blueprint for the MilkOS API. The database is on Supabase. See DEPLOY.md.
+# Render dashboard: New > Blueprint > pick this repository. Values marked `sync: false` are asked for once.
+
+services:
+  - type: web
+    name: milkos-api
+    runtime: python
+    rootDir: backend
+    plan: free # free instances sleep after 15 idle minutes; the first request then waits ~1 minute
+    buildCommand: pip install -r requirements.txt
+    # Bring the schema to head and make sure the superadmin exists (both idempotent), then serve.
+    startCommand: alembic upgrade head && python seed_superadmin.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      # Supabase SESSION pooler string (Render can't reach the IPv6-only direct host), with the
+      # postgresql:// scheme and sslmode=require, e.g.
+      # postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      # The Netlify site, e.g. https://milkos.netlify.app (SMS links and Google sign-in return here).
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: SCALE_ACCEPT_SIMULATED
+        value: "false"
+      - key: SENSOR_ACCEPT_SIMULATED
+        value: "false"
+      # Optional integrations: add them in the dashboard when you have credentials (see backend/.env.example):
+      # MFA_ENCRYPTION_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SMS_PROVIDER, AFRICASTALKING_*,
+      # SMS_WEBHOOK_URL, SMS_WEBHOOK_TOKEN, SMS_DELIVERY_REPORT_TOKEN

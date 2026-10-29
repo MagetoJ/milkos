@@ -8,6 +8,7 @@ import { Labeled, Notice, PasswordChecklist, field, primary } from '@/components
 import { PASSWORD_RULES, changePassword, passwordProblems } from '@/lib/account/api';
 import { ApiError } from '@/lib/api-client';
 import { getSession, homeFor, loginUrl } from '@/lib/auth';
+import { PasswordInput } from '@/components/ui/password-input';
 
 export default function ChangePasswordPage() {
   const [current, setCurrent] = useState('');
@@ -40,13 +41,13 @@ export default function ChangePasswordPage() {
     <PublicShell title="Choose a new password" subtitle="Your account needs a new password before you can continue.">
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Labeled label="Current password">
-          {(a) => <input {...a} type="password" autoComplete="current-password" className={field} value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />}
+          {(a) => <PasswordInput {...a} autoComplete="current-password" className={field} value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />}
         </Labeled>
         <Labeled label="New password">
-          {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={next} onChange={(e) => setNext(e.target.value)} />}
+          {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={next} onChange={(e) => setNext(e.target.value)} />}
         </Labeled>
         <Labeled label="Repeat new password">
-          {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
+          {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
         </Labeled>
         <PasswordChecklist value={next} rules={PASSWORD_RULES} />
         {error && <Notice tone="danger">{error}</Notice>}

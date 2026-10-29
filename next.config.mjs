@@ -1,6 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        'localhost:3000',
+        'framing-unreeling-relax.ngrok-free.dev',
+        '*.ngrok-free.dev',
+      ],
+    },
+  },
+  // Standalone is for the Docker image; Netlify (which sets NETLIFY=true) packages the app itself.
+  output: process.env.NETLIFY ? undefined : 'standalone',
   // Identifies the build: the service worker URL carries it, so each deployment installs a new worker.
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION ?? `0.1.0-${Date.now().toString(36)}`,

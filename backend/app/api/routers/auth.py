@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from datetime import timedelta
+from app.core.config import settings
 
 from app.api.cookies import clear_session_cookie, set_session_cookie
 from app.api.dependencies.auth import get_current_user, token_from_request
@@ -23,6 +25,18 @@ from app.infrastructure.gateways import google_oauth
 from app.services import accounts, authentication, notifications, onboarding
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+
+
+access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES) # 15 minutes
+
+response.set_cookie(
+    key="session_token",
+    value=token,
+    httponly=True,
+    max_age=15 * 60,  # 900 seconds
+    samesite="lax",
+    secure=True,
+)
 
 
 def _client(request: Request) -> tuple:

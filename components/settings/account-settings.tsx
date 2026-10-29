@@ -19,6 +19,7 @@ import { ApiError } from '@/lib/api-client';
 import { formatDateTime, humanize } from '@/lib/format';
 import { getDeviceId } from '@/lib/offline/device';
 import { useIsOnline } from '@/lib/sync/hooks';
+import { PasswordInput } from '@/components/ui/password-input';
 import {
   CodeInput, Labeled, LockedValue, NeedsConnection, Notice, PasswordChecklist, SettingsCard, Toggle, ValueRow, danger, field,
   primary, secondary, useCountdown,
@@ -143,7 +144,7 @@ function ProfileSection({ profile, online, onSaved }: { profile: AccountProfile;
         </div>
         {emailChanged && (
           <Labeled label="Current password" hint="Needed to change your sign-in email." error={errors.current_password}>
-            {(a) => <input {...a} type="password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />}
+            {(a) => <PasswordInput {...a} className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />}
           </Labeled>
         )}
         <dl className="divide-y divide-mo-line border-t border-mo-line">
@@ -239,7 +240,7 @@ function PhoneSection({ profile, online, deviceId, onSaved }: {
               {(a) => <input {...a} type="tel" inputMode="tel" autoComplete="tel" className={field} value={phone} onChange={(e) => setPhone(e.target.value)} />}
             </Labeled>
             <Labeled label="Current password" error={errors.password}>
-              {(a) => <input {...a} type="password" autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
+              {(a) => <PasswordInput {...a} autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
             </Labeled>
           </div>
           {errors.form && <Notice tone="danger">{errors.form}</Notice>}
@@ -305,14 +306,14 @@ function PasswordSection({ profile, online, deviceId }: { profile: AccountProfil
       {profile.must_change_password && <div className="mb-4"><Notice tone="warn">You must choose a new password before you can continue.</Notice></div>}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Labeled label="Current password" error={errors.current_password}>
-          {(a) => <input {...a} type="password" autoComplete="current-password" className={field} value={current} onChange={(e) => setCurrent(e.target.value)} />}
+          {(a) => <PasswordInput {...a} autoComplete="current-password" className={field} value={current} onChange={(e) => setCurrent(e.target.value)} />}
         </Labeled>
         <div className="grid gap-4 sm:grid-cols-2">
           <Labeled label="New password" error={errors.new_password}>
-            {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={next} onChange={(e) => setNext(e.target.value)} />}
+            {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={next} onChange={(e) => setNext(e.target.value)} />}
           </Labeled>
           <Labeled label="Repeat new password" error={errors.repeat}>
-            {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
+            {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
           </Labeled>
         </div>
         <PasswordChecklist value={next} rules={PASSWORD_RULES} />
@@ -381,7 +382,7 @@ function MfaSection({ profile, online, onChanged }: { profile: AccountProfile; o
       {step === 'password' && (
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void run(async () => { setSecret(await startMfa(password)); setPassword(''); setStep('scan'); }); }}>
           <Labeled label="Confirm your password">
-            {(a) => <input {...a} type="password" autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
+            {(a) => <PasswordInput {...a} autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
           </Labeled>
           {error && <Notice tone="danger">{error}</Notice>}
           <div className="flex gap-2"><button className={primary} disabled={!password || busy}>Continue</button><button type="button" className={secondary} onClick={reset}>Cancel</button></div>
@@ -418,7 +419,7 @@ function MfaSection({ profile, online, onChanged }: { profile: AccountProfile; o
         }}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Labeled label="Password">
-              {(a) => <input {...a} type="password" autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
+              {(a) => <PasswordInput {...a} autoComplete="current-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} />}
             </Labeled>
             <Labeled label="Code from the app (or a recovery code)">
               {(a) => <input {...a} inputMode="text" autoComplete="one-time-code" className={field} value={code} onChange={(e) => setCode(e.target.value.trim())} />}

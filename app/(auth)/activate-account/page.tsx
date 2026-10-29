@@ -13,6 +13,7 @@ import {
   sendActivationCode, tokenFromLocation, verifyActivationCode, type ActivationView,
 } from '@/lib/account/api';
 import { ApiError } from '@/lib/api-client';
+import { PasswordInput } from '@/components/ui/password-input';
 import { formatDateTime, humanize } from '@/lib/format';
 
 const STATE_MESSAGE: Record<string, string> = {
@@ -197,10 +198,10 @@ export default function ActivateAccountPage() {
           </h2>
           <form onSubmit={finish} className="space-y-3" noValidate>
             <Labeled label="New password">
-              {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} disabled={needsCode} />}
+              {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} disabled={needsCode} />}
             </Labeled>
             <Labeled label="Repeat password">
-              {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} disabled={needsCode} />}
+              {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} disabled={needsCode} />}
             </Labeled>
             <PasswordChecklist value={password} rules={PASSWORD_RULES} />
             <p className="text-sm text-mo-muted">Only you will know this password. MilkOS staff and your administrator can&apos;t see it.</p>

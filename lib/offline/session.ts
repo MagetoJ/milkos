@@ -59,6 +59,13 @@ export function checkOfflineSession(record: OfflineSessionRecord | null, now = D
   if (Date.parse(record.expiresAt) <= now) return { ok: false, reason: 'expired' };
   return { ok: true };
 }
+/**time inactivity */
+
+export const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+export function isSessionExpired(lastActiveTimestamp: number): boolean {
+  return Date.now() - lastActiveTimestamp > SESSION_TIMEOUT_MS;
+}
+
 
 /** Remember the latest clock reading so a clock turned back can be noticed. */
 export async function touchSessionClock(record: OfflineSessionRecord, now = Date.now()): Promise<void> {

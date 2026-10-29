@@ -7,6 +7,7 @@ import { CHANGE_PASSWORD_PATH, getSession, homeFor, postLoginRedirect, saveToken
 import { verifyMfaLogin } from '@/lib/account/api';
 import { ApiError } from '@/lib/api-client';
 import { provisionDevice } from '@/lib/offline/auth';
+import { PasswordInput } from '@/components/ui/password-input';
 
 const inputClass =
   'h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base sm:text-sm !text-white placeholder-zinc-400 outline-none ' +
@@ -150,8 +151,8 @@ export function LoginForm() {
             <label htmlFor="login-password" className="block text-xs font-bold text-white">Password</label>
             <Link href="/forgot-password" className="text-xs font-semibold text-emerald-300 underline-offset-2 hover:underline">Forgot password?</Link>
           </div>
-          <input
-            id="login-password" type="password" required autoComplete="current-password" value={password}
+          <PasswordInput
+            id="login-password" required autoComplete="current-password" value={password}
             onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className={inputClass}
           />
         </div>

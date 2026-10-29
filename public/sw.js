@@ -38,7 +38,7 @@ const SHELL_PAGES = [
   '/collector/notifications',
   '/superadmin',
 ];
-const SHELL_ASSETS = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icon.svg'];
+const SHELL_ASSETS = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 const isStatic = (url) => url.pathname.startsWith('/_next/static/');
 const isPrivate = (url) => url.pathname.startsWith('/api/');

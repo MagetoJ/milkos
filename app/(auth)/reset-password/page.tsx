@@ -7,6 +7,7 @@ import { PublicShell } from '@/components/public/public-shell';
 import { Labeled, Notice, PasswordChecklist, field, primary } from '@/components/settings/settings-ui';
 import { PASSWORD_RULES, completeReset, forgetTokenInLocation, inspectReset, passwordProblems, tokenFromLocation, type LinkState } from '@/lib/account/api';
 import { ApiError } from '@/lib/api-client';
+import { PasswordInput } from '@/components/ui/password-input';
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -57,10 +58,10 @@ export default function ResetPasswordPage() {
     <PublicShell title="Choose a new password" subtitle={phone ? <>For the account on <span className="font-mono">{phone}</span>.</> : undefined}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Labeled label="New password">
-          {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />}
+          {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />}
         </Labeled>
         <Labeled label="Repeat password">
-          {(a) => <input {...a} type="password" autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
+          {(a) => <PasswordInput {...a} autoComplete="new-password" className={field} value={repeat} onChange={(e) => setRepeat(e.target.value)} />}
         </Labeled>
         <PasswordChecklist value={password} rules={PASSWORD_RULES} />
         <p className="text-sm text-mo-muted">Every device signed in to this account will be signed out.</p>
