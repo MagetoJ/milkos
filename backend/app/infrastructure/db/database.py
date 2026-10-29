@@ -1,29 +1,33 @@
-"""The engine, the session factory and the declarative Base. Request sessions come from app.api.dependencies.db."""
-from sqlalchemy import create_engine, event
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.core import config
+from app.core.config import settings
 
-DATABASE_URL = config.DATABASE_URL
+def clean_db_url(url_str: str) -> str:
+    # Ensure standard synchronous driver prefix
+    if "+asyncpg" in url_str:
+        url_str = url_str.replace("+asyncpg", "")
+    
+    parsed = urlparse(url_str)
+    query_params = parse_qs(parsed.query)
+    
+    # Replace invalid 'ssl' with 'sslmode' for psycopg 3
+    if "ssl" in query_params:
+        ssl_val = query_params.pop("ssl")[0]
+        if ssl_val in ("require", "verify-full", "prefer"):
+            query_params["sslmode"] = [ssl_val]
+            
+    # For localhost, remove sslmode entirely to avoid connection issues
+    if parsed.hostname in ("localhost", "127.0.0.1"):
+        query_params.pop("sslmode", None)
+        
+    new_query = urlencode(query_params, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in backend/.env")
+DATABASE_URL = clean_db_url(str(settings.DATABASE_URL))
 
-# Ensure postgresql:// scheme prefix
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,      # Tests connection before using it to prevent stale pool errors
-    pool_recycle=300         # Recycles connections every 5 minutes for Supabase pooler
-)
-
-if engine.dialect.name == "sqlite":
-    # Tests run on SQLite, which ignores foreign keys (and ON DELETE rules) unless asked.
-    @event.listens_for(engine, "connect")
-    def _enable_sqlite_foreign_keys(dbapi_connection, _record):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
-
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 Base = declarative_base()

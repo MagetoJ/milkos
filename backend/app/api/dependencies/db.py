@@ -1,12 +1,8 @@
-"""The database session for one request. Routers depend on this, never on the engine."""
-from typing import Iterator
-
-from sqlalchemy.orm import Session
-
+from typing import Generator
 from app.infrastructure.db.database import SessionLocal
 
 
-def get_db() -> Iterator[Session]:
+def get_db() -> Generator:
     db = SessionLocal()
     try:
         yield db

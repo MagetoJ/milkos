@@ -1,22 +1,20 @@
 """Signing in and out, account activation, password reset and the public cooperative application:
 /api/v1/auth. Rules live in app.services.authentication, accounts and onboarding; this module handles HTTP."""
 import os
+from datetime import timedelta
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from datetime import timedelta
-from app.core.config import get_settings
-
-settings = get_settings()
 
 from app.api.cookies import clear_session_cookie, set_session_cookie
 from app.api.dependencies.auth import get_current_user, token_from_request
 from app.api.dependencies.db import get_db
 from app.core import ratelimit
 from app.core.client import client_ip, user_agent
+from app.core.config import get_settings
 from app.core.security import constant_time_equals
 from app.domain.exceptions import InvalidRequest, NotFound, ValidationFailed
 from app.domain.schemas.auth import (
@@ -26,19 +24,11 @@ from app.domain.schemas.auth import (
 from app.infrastructure.gateways import google_oauth
 from app.services import accounts, authentication, notifications, onboarding
 
+settings = get_settings()
+
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
-
-access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES) # 15 minutes
-
-response.set_cookie(
-    key="session_token",
-    value=token,
-    httponly=True,
-    max_age=15 * 60,  # 900 seconds
-    samesite="lax",
-    secure=True,
-)
+access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)  # 15 minutes
 
 
 def _client(request: Request) -> tuple:

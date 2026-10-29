@@ -4,12 +4,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-# Import settings and Base
-from app.core.config import get_settings
+from app.core.config import settings, get_settings
 from app.infrastructure.db.database import Base
 
-# Import all models so SQLAlchemy attaches their metadata to Base
-import app.models  # noqa: F401
+# Import model package so metadata attaches to Base
+import app.infrastructure.db.models  # noqa: F401
 
 config = context.config
 
@@ -31,9 +30,10 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations():
-    settings = get_settings()
-    # Use your DATABASE_URL from settings or Alembic config
+    # Ensure postgresql:// is mapped to postgresql+asyncpg:// for async engine
     database_url = str(settings.DATABASE_URL)
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connectable = create_async_engine(database_url)
 
@@ -48,9 +48,8 @@ def run_migrations_online():
 
 
 if context.is_offline_mode():
-    # Fallback for offline generation
     context.configure(
-        url=str(get_settings().DATABASE_URL),
+        url=str(settings.DATABASE_URL),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
