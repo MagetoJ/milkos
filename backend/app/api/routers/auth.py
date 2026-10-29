@@ -8,7 +8,9 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import timedelta
-from app.core.config import settings
+from app.core.config import get_settings
+
+settings = get_settings()
 
 from app.api.cookies import clear_session_cookie, set_session_cookie
 from app.api.dependencies.auth import get_current_user, token_from_request
