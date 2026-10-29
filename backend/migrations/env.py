@@ -4,7 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import settings, get_settings
+from app.core.config import settings
 from app.infrastructure.db.database import Base
 
 # Import model package so metadata attaches to Base
@@ -41,6 +41,16 @@ async def run_async_migrations():
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()
+
+
+def run_async_migrations():
+    # Use formatted database URL from settings
+    database_url = settings.DATABASE_URL
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    database_url = database_url.replace("sslmode=prefer", "sslmode=require")
+
+    connectable = create_async_engine(database_url)
 
 
 def run_migrations_online():

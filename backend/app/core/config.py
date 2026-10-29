@@ -37,6 +37,24 @@ def get_settings() -> Settings:
     """Dependency / Helper getter for settings."""
     return settings
 
+def get_database_url(url: str) -> str:
+    if not url:
+        return url
+    
+    # Standardize scheme for asyncpg
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    # Ensure sslmode is valid for asyncpg
+    if "?sslmode=" in url or "&sslmode=" in url:
+        # Convert invalid/unsupported query params if necessary or set sslmode=require for Render
+        url = url.replace("sslmode=prefer", "sslmode=require")
+        url = url.replace("sslmode=no-verify", "sslmode=disable")
+        
+    return url
+
 
 # Top-level module exports to support direct imports like `from app.core.config import DATABASE_URL`
 DATABASE_URL = settings.DATABASE_URL
