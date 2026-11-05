@@ -1,17 +1,15 @@
-# Netlify build for the Next.js web app. Netlify detects Next.js and adds its Next.js runtime itself.
 [build]
-  command = "pnpm build"
+  command = "pnpm run build"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "22"
+  PNPM_FLAGS = "--no-frozen-lockfile" # Prevents builds from failing on lockfile mismatches in CI
   NEXT_TELEMETRY_DISABLED = "1"
 
-# The browser only ever talks to the Netlify site; /api/v1/* is proxied to the API on Render.
-# Same-origin keeps the session cookie first-party and makes CORS unnecessary.
-# Change the host if Render gave your service a different URL.
+# Proxy API calls to your FastAPI backend on Render
 [[redirects]]
   from = "/api/v1/*"
-  to = "https://milkos-api.onrender.com/api/v1/:splat"
+  to = "https://milkos.onrender.com/api/v1/:splat"
   status = 200
   force = true
