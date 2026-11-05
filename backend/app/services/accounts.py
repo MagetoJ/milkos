@@ -43,7 +43,7 @@ from app.infrastructure.db.models.sync import DeviceSession
 from app.infrastructure.db.models.user import (
     AccountActivation, AccountStatus, OtpPurpose, PasswordReset, PhoneVerification, User,
 )
-from app.services import notifications, security_events, settings
+from app.services import email_notices, notifications, security_events, settings
 
 logger = logging.getLogger("milkflow.accounts")
 
@@ -76,6 +76,7 @@ class PendingSms:
     text: str
     user_id: UUID
     kind: str  # ACTIVATION / OTP / RESET / NOTICE
+    email: Optional[dict] = None  # {"subject","text","html"}: a copy sent to the account's email address, if it has one
 
 
 # ---------------- reading state ----------------
@@ -164,6 +165,10 @@ def dispatch(db: Session, pending: Optional[PendingSms], *, ip: Optional[str] = 
     """Send a queued SMS (call after the transaction that queued it has committed). Records the outcome."""
     if pending is None:
         return None
+    if pending.email:
+        # Independent of the SMS: sent even when the SMS fails or no SMS provider is configured. Never raises.
+        recipient = db.get(User, pending.user_id)
+        email_notices.send(recipient.email if recipient else None, pending.email, kind=pending.kind)
     n = db.get(Notification, pending.notification_id)
     if n is None:
         return None
@@ -230,6 +235,9 @@ def _issue_activation(db: Session, user: User, actor: Optional[User], reason: st
     text = f"{head} Activate it here: {APP_URL}{ACTIVATION_PATH}#t={token} . This link expires in {expiry}."
     stored = f"{head} Activate it here: [one-time link hidden] . This link expires in {expiry}."
     pending = _queue_sms(db, user, kind="ACTIVATION", ntype="ACCOUNT_ACTIVATION", text=text, stored=stored, actor=actor)
+    if user.email:
+        pending.email = email_notices.activation_email(
+            user.full_name, coop.name if coop else None, f"{APP_URL}{ACTIVATION_PATH}#t={token}", expiry)
     activation.notification_id = pending.notification_id
     return pending
 
@@ -510,6 +518,8 @@ def _issue_reset(db: Session, user: User, actor: Optional[User]) -> PendingSms:
     text = f"MilkOS password reset: {APP_URL}{RESET_PATH}#t={token} . The link expires in {minutes} minutes. If you didn't ask for this, ignore this message."
     stored = f"MilkOS password reset: [one-time link hidden] . The link expires in {minutes} minutes. If you didn't ask for this, ignore this message."
     pending = _queue_sms(db, user, kind="RESET", ntype="PASSWORD_RESET", text=text, stored=stored, actor=actor)
+    if user.email:
+        pending.email = email_notices.reset_email(user.full_name, f"{APP_URL}{RESET_PATH}#t={token}", minutes)
     reset.notification_id = pending.notification_id
     return pending
 

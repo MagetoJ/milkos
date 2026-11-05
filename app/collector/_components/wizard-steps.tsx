@@ -19,6 +19,7 @@ import type { UseScale } from '@/lib/scale/use-scale';
 import { useDebounced } from '@/lib/hooks/use-debounced';
 import type { RecordSyncStatus } from '@/lib/offline/types';
 import { AllocationSummaryCard } from './allocation-summary';
+import { PrintReceiptsButton } from './print-receipts';
 import { ScaleDisplay } from './scale-display';
 import { bigInput, Button, Card, Notice, SectionTitle } from './ui';
 
@@ -486,11 +487,16 @@ export function SuccessStep({
   syncStatus,
   receiptStatuses,
   onNew,
+  cooperativeName = null,
+  collectorName = null,
 }: {
   draft: CollectionDraft;
   syncStatus: RecordSyncStatus | null;
   receiptStatuses: (string | null)[];
   onNew: () => void;
+  /** Printed on the paper receipts. */
+  cooperativeName?: string | null;
+  collectorName?: string | null;
 }) {
   const result = (draft.result ?? {}) as { id?: string; reference?: string };
   const saved = syncStatus === 'synced';
@@ -523,6 +529,12 @@ export function SuccessStep({
         </dl>
       </Card>
       <div className="grid gap-3">
+        <PrintReceiptsButton
+          draft={draft}
+          cooperativeName={cooperativeName}
+          collectorName={collectorName}
+          reference={saved && result.reference ? result.reference : null}
+        />
         <Button variant="primary" onClick={onNew}><Plus aria-hidden className="size-5" /> New Collection</Button>
         <Link href={`/collector/collections?id=${encodeURIComponent(result.id ?? draft.id)}`} className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#C9D2CB] bg-white px-5 text-base font-bold">
           View Collection

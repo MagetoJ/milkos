@@ -10,6 +10,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Bell, CloudOff, Ellipsis, History, Home, Plus, RefreshCw, Users, type LucideIcon } from 'lucide-react';
 import { inboxCount } from '@/app/cooperatives/_api/finance-client';
+import { BluetoothGlobalHeader } from '@/components/layout/Header';
 import { CoolerSwitcher, coolerStatus, type ContextCooler } from '@/components/shell/context-switchers';
 import { coolerOptions } from '@/lib/collections/batch-client';
 import { useWorkingCooler } from '@/lib/hooks/use-working-cooler';
@@ -108,6 +109,7 @@ export function CollectorShell({
             {userName && <p className="truncate text-xs text-[#5E6B64]">{userName}</p>}
           </div>
           <div className="flex items-center gap-1">
+            <BluetoothGlobalHeader href="/collector/settings/hardware" />
             <SyncBadge />
             <Link
               href="/collector/notifications"

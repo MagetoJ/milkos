@@ -181,6 +181,8 @@ export function CollectionWizard() {
           draft={{ ...draft, result: { ...(draft.result ?? {}), ...(liveRow ? { id: liveRow.id, reference: liveRow.reference } : {}) } }}
           syncStatus={syncStatus}
           receiptStatuses={receiptStatuses}
+          cooperativeName={cooperativeName}
+          collectorName={collector.name}
           onNew={() => dispatch({ type: 'reset' })}
         />
       )}

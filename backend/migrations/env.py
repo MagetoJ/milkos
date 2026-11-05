@@ -1,70 +1,56 @@
-import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import settings
-from app.infrastructure.db.database import Base
-
-# Import model package so metadata attaches to Base
-import app.infrastructure.db.models  # noqa: F401
+# database.py builds the (synchronous) engine from DATABASE_URL; an already-set environment variable wins,
+# which is how the tests point this at SQLite.
+from app.infrastructure.db import database as db
+import app.infrastructure.db.models  # noqa: F401  (registers every table on Base.metadata)
 
 config = context.config
-
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-target_metadata = Base.metadata
+target_metadata = db.Base.metadata
 
 
-def do_run_migrations(connection):
+def include_object(obj, name, type_, reflected, compare_to):
+    # Tables that exist in the database but have no model must never show up as "drop table" in an autogenerate.
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+    return True
+
+
+def run_migrations_offline() -> None:
     context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        compare_type=True,
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-async def run_async_migrations():
-    # Ensure postgresql:// is mapped to postgresql+asyncpg:// for async engine
-    database_url = str(settings.DATABASE_URL)
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-    connectable = create_async_engine(database_url)
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
-
-
-def run_async_migrations():
-    # Use formatted database URL from settings
-    database_url = settings.DATABASE_URL
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    database_url = database_url.replace("sslmode=prefer", "sslmode=require")
-
-    connectable = create_async_engine(database_url)
-
-
-def run_migrations_online():
-    asyncio.run(run_async_migrations())
-
-
-if context.is_offline_mode():
-    context.configure(
-        url=str(settings.DATABASE_URL),
+        url=db.DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+        render_as_batch=True,
     )
     with context.begin_transaction():
         context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    with db.engine.connect() as connection:
+        if connection.dialect.name == "sqlite":
+            # Batch mode rebuilds a table by DROP + RENAME; with foreign keys enforced that could cascade-delete rows.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+            render_as_batch=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
 else:
     run_migrations_online()
