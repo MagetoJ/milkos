@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { BluetoothConnected, BluetoothOff } from "lucide-react";
 import { useBluetooth } from "@/lib/bluetooth/bluetooth-context";
-import { BluetoothGlobalHeader } from "@/components/layout/BluetoothGlobalHeader";
 
 export function BluetoothGlobalHeader() {
   const { connectedDevices } = useBluetooth();
@@ -12,19 +11,24 @@ export function BluetoothGlobalHeader() {
 
   // Sync saved hardware setup from localStorage on mount
   useEffect(() => {
-    const scale = localStorage.getItem("milkOS_scale_device_id") || localStorage.getItem("milkos_saved_scale");
-    const printer = localStorage.getItem("milkOS_printer_device_id") || localStorage.getItem("milkos_saved_printer");
-    setHasSavedHardware(!!(scale || printer));
+    const scale =
+      localStorage.getItem("milkOS_scale_device_id") ||
+      localStorage.getItem("milkos_saved_scale");
+    const printer =
+      localStorage.getItem("milkOS_printer_device_id") ||
+      localStorage.getItem("milkos_saved_printer");
+    setHasSavedHardware(Boolean(scale || printer));
   }, []);
 
-  const connectedScales = connectedDevices.filter((d) => d.type === "scale" && d.connected);
-  const connectedPrinters = connectedDevices.filter((d) => d.type === "printer" && d.connected);
-
-  const isScaleConnected = connectedScales.length > 0;
-  const isPrinterConnected = connectedPrinters.length > 0;
+  const isScaleConnected = connectedDevices.some(
+    (d) => d.type === "scale" && d.connected
+  );
+  const isPrinterConnected = connectedDevices.some(
+    (d) => d.type === "printer" && d.connected
+  );
   const isAnyActive = isScaleConnected || isPrinterConnected;
 
-  // Determine badge label dynamically
+  // Determine status badge label
   const getStatusLabel = () => {
     if (isScaleConnected && isPrinterConnected) return "Scale & Printer Active";
     if (isScaleConnected) return "Scale Active";
@@ -35,7 +39,6 @@ export function BluetoothGlobalHeader() {
 
   return (
     <div className="flex items-center gap-3">
-      {/* Quick Hardware Status Indicator */}
       <Link
         href="/settings/hardware"
         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${

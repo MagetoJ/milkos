@@ -8,8 +8,9 @@ import { Printer } from 'lucide-react';
 import { isBluetoothSupported } from '@/lib/bluetooth/capability';
 import type { CollectionDraft } from '@/lib/collections/draft';
 import { buildCollectionReceiptBytes } from '@/lib/printer/escpos-encoder';
-import { printToBluetoothPrinter } from '@/lib/printer/printer-service';
-import { joinBytes, receiptsFromDraft } from '@/lib/printer/receipts';
+import { printToBluetoothPrinter } from '@/lib/printer/web-bluetooth-printer';
+import { joinBytes, receiptsFromDraft } from '@/lib/collections/receipts';
+
 import { Button } from './ui';
 
 export function PrintReceiptsButton({
@@ -35,8 +36,21 @@ export function PrintReceiptsButton({
     setBusy(true);
     setStatus(null);
     try {
-      const sent = await printToBluetoothPrinter(joinBytes(receipts.map(buildCollectionReceiptBytes)));
-      if (sent) setStatus({ ok: true, text: `Sent ${receipts.length} receipt${receipts.length === 1 ? '' : 's'} to the printer.` });
+      const sent = await printToBluetoothPrinter(
+        joinBytes(
+          receipts.map((receipt) =>
+            buildCollectionReceiptBytes({
+              ...receipt,
+              cooperativeName: receipt.cooperativeName ?? '',
+            }),
+          ),
+        ),
+      );
+      setStatus(
+        sent
+          ? { ok: true, text: `Sent ${receipts.length} receipt${receipts.length === 1 ? '' : 's'} to the printer.` }
+          : { ok: false, text: 'Printing was not completed.' },
+      );
     } catch (err) {
       setStatus({ ok: false, text: err instanceof Error ? err.message : 'Printing failed.' });
     } finally {
