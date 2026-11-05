@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/offline/service-worker'
+import { BluetoothProvider } from "@/lib/bluetooth/bluetooth-context"
 
 export const metadata: Metadata = {
   title: 'MilkOS — Collection OS',
@@ -25,12 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
-        {children}
-        <ServiceWorkerRegistrar />
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+      <body className="antialiased min-h-screen bg-gray-50">
+        <BluetoothProvider>
+          {children}
+          <ServiceWorkerRegistrar />
+          {process.env.NODE_ENV === 'production' && <Analytics />}
+        </BluetoothProvider>
       </body>
     </html>
   )
 }
-
