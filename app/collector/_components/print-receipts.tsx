@@ -13,6 +13,19 @@ import { joinBytes, receiptsFromDraft } from '@/lib/collections/receipts';
 
 import { Button } from './ui';
 
+type ReceiptSession = 'Morning' | 'Evening';
+
+// Typical density of raw cow milk, used only when a receipt has no recorded weight.
+const MILK_KG_PER_LITRE = 1.03;
+
+// The printer encoder requires exactly "Morning" or "Evening", but receipts may carry a missing or free-form
+// session. Keep a valid value as-is; otherwise infer it from the collection time (before noon = Morning).
+function resolveSession(session: string | undefined, timestamp: string): ReceiptSession {
+  if (session === 'Morning' || session === 'Evening') return session;
+  const hour = new Date(timestamp).getHours();
+  return Number.isNaN(hour) || hour < 12 ? 'Morning' : 'Evening';
+}
+
 export function PrintReceiptsButton({
   draft,
   cooperativeName,
@@ -42,6 +55,10 @@ export function PrintReceiptsButton({
             buildCollectionReceiptBytes({
               ...receipt,
               cooperativeName: receipt.cooperativeName ?? '',
+              collectorName: receipt.collectorName ?? '',
+              session: resolveSession(receipt.session, receipt.timestamp),
+              weightKg:
+                receipt.weightKg ?? Math.round(receipt.liters * MILK_KG_PER_LITRE * 100) / 100,
             }),
           ),
         ),

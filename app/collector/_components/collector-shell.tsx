@@ -109,7 +109,9 @@ export function CollectorShell({
             {userName && <p className="truncate text-xs text-[#5E6B64]">{userName}</p>}
           </div>
           <div className="flex items-center gap-1">
-            <BluetoothGlobalHeader href="/collector/settings/hardware" />
+            <Link href="/collector/settings/hardware">
+              <BluetoothGlobalHeader />
+            </Link>
             <SyncBadge />
             <Link
               href="/collector/notifications"
