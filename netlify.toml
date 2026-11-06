@@ -1,13 +1,6 @@
 [build]
   command = "pnpm run build"
-  publish = ".next"
 
-[build.environment]
-  NODE_VERSION = "22"
-  PNPM_FLAGS = "--no-frozen-lockfile" # Prevents builds from failing on lockfile mismatches in CI
-  NEXT_TELEMETRY_DISABLED = "1"
-
-# Proxy API calls to your FastAPI backend on Render
 [[redirects]]
   from = "/api/v1/*"
   to = "https://milkos.onrender.com/api/v1/:splat"
