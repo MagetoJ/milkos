@@ -9,21 +9,29 @@ def _flag(name: str, default: str = "false", true_values: frozenset = frozenset(
     return os.getenv(name, default).strip().lower() in true_values
 
 
+# Always allowed, even if CORS_ORIGINS is set in the environment.
+_REQUIRED_CORS_ORIGINS = ["https://milkos.netlify.app"]
+_DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
+    origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    return list(dict.fromkeys(_REQUIRED_CORS_ORIGINS + origins))
+
+
 class Settings:
+    # Set DATABASE_URL in backend/.env locally and in Render's environment. No real credentials here.
     DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        "postgresql://milkos_user:Lokeshen@58@localhost:5432/milkos_db"
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5432/milkos_db",
     )
     SECRET_KEY: Optional[str] = os.getenv("SECRET_KEY", "change-this-in-production")
     BCRYPT_ROUNDS: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     APP_URL: str = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
-    CORS_ORIGINS: list[str] = [
-        origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
-        if origin.strip()
-    ]
+    CORS_ORIGINS: list[str] = _cors_origins()
     COOKIE_SECURE: bool = _flag("COOKIE_SECURE")
     GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -37,10 +45,11 @@ def get_settings() -> Settings:
     """Dependency / Helper getter for settings."""
     return settings
 
+
 def get_database_url(url: str) -> str:
     if not url:
         return url
-    
+
     # Standardize scheme for asyncpg
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -52,7 +61,7 @@ def get_database_url(url: str) -> str:
         # Convert invalid/unsupported query params if necessary or set sslmode=require for Render
         url = url.replace("sslmode=prefer", "sslmode=require")
         url = url.replace("sslmode=no-verify", "sslmode=disable")
-        
+
     return url
 
 

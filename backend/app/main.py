@@ -26,6 +26,7 @@ app = FastAPI(
     ),
 )
 
+# CORS lives in app/core/middleware.py (origins come from config.CORS_ORIGINS).
 install_middleware(app)
 register_error_handlers(app)
 
@@ -43,6 +44,12 @@ app.include_router(inbox.router)
 app.include_router(reports.router)
 app.include_router(workspace.router)
 app.include_router(farmer.router)
+
+
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+def root():
+    """Friendly root so Render's HEAD / probe and quick browser checks don't 404."""
+    return {"service": "MilkOS API", "status": "ok"}
 
 
 @app.get("/api/v1/health", tags=["Health"])
