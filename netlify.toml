@@ -1,8 +1,8 @@
 [build]
-  command = "pnpm run build"
+  publish = "public"
 
+# Send unknown paths to index.html (useful for single-page apps)
 [[redirects]]
-  from = "/api/v1/*"
-  to = "https://milkos.onrender.com/api/v1/:splat"
+  from = "/*"
+  to = "/index.html"
   status = 200
-  force = true
