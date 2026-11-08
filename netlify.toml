@@ -1,0 +1,31 @@
+# netlify.toml
+# Place this file in the ROOT of your repo (same folder as package.json).
+
+[build]
+  command = "pnpm build"
+  # Do NOT set `publish`. The Next.js runtime below configures it automatically.
+
+[build.environment]
+  # Next.js 16 needs Node 20.9+; 22 is a safe LTS choice.
+  NODE_VERSION = "22"
+
+# Official Netlify runtime for Next.js. It handles routing, SSR, API routes,
+# middleware and image optimization, which is what prevents 404 errors.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Basic security headers (optional, safe defaults)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# IMPORTANT: Do NOT add the typical SPA rule below. It is for plain React/Vite
+# apps and will break Next.js routing:
+#   [[redirects]]
+#     from = "/*"
+#     to = "/index.html"
+#     status = 200
