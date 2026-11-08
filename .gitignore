@@ -24,3 +24,8 @@ __pycache__/
 
 # pnpm local store
 .pnpm-store/
+
+# Python virtual environments (do not commit)
+backend/.venv/
+.venv/
+venv/

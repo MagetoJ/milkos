@@ -1,4 +1,14 @@
 /** @type {import('next').NextConfig} */
+
+// Where the FastAPI backend lives.
+//  - Netlify:  the Render service (override with the BACKEND_INTERNAL_URL env var)
+//  - Docker:   "http://backend:8000" (passed as a build arg)
+//  - Local:    the backend on your machine
+const backendUrl = (
+  process.env.BACKEND_INTERNAL_URL ??
+  (process.env.NETLIFY ? 'https://milkos.onrender.com' : 'http://127.0.0.1:8000')
+).replace(/\/+$/, ''); // drop any trailing slash
+
 const nextConfig = {
   experimental: {
     serverActions: {
@@ -31,8 +41,7 @@ const nextConfig = {
     return [
       {
         source: '/api/v1/:path*',
-        // "http://backend:8000" in Docker (set as a build arg); local `pnpm dev` hits the local backend
-        destination: `${process.env.BACKEND_INTERNAL_URL ?? 'http://127.0.0.1:8000'}/api/v1/:path*`,
+        destination: `${backendUrl}/api/v1/:path*`,
       },
     ];
   },

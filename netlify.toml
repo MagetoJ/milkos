@@ -1,5 +1,5 @@
-# netlify.toml
-# Place this file in the ROOT of your repo (same folder as package.json).
+# netlify.toml (place in the ROOT of the repo, next to package.json)
+# Architecture: browser -> Netlify (Next.js) --/api/v1/* proxied--> Render (FastAPI) -> Supabase
 
 [build]
   command = "pnpm build"
@@ -8,13 +8,23 @@
 [build.environment]
   # Next.js 16 needs Node 20.9+; 22 is a safe LTS choice.
   NODE_VERSION = "22"
+  # Where the FastAPI backend lives (also read by next.config.mjs at build time).
+  BACKEND_INTERNAL_URL = "https://milkos.onrender.com"
 
-# Official Netlify runtime for Next.js. It handles routing, SSR, API routes,
-# middleware and image optimization, which is what prevents 404 errors.
+# Official Netlify runtime for Next.js (routing, SSR, API routes, middleware, images).
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Basic security headers (optional, safe defaults)
+# Proxy every API call to the Render backend. status = 200 makes it a transparent
+# proxy (not a redirect), so the session cookie stays first-party and CORS is not needed.
+# `force = true` makes this rule win even if a matching file/route exists.
+[[redirects]]
+  from = "/api/v1/*"
+  to = "https://milkos.onrender.com/api/v1/:splat"
+  status = 200
+  force = true
+
+# Basic security headers
 [[headers]]
   for = "/*"
   [headers.values]
@@ -23,9 +33,11 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
-# IMPORTANT: Do NOT add the typical SPA rule below. It is for plain React/Vite
-# apps and will break Next.js routing:
-#   [[redirects]]
-#     from = "/*"
-#     to = "/index.html"
-#     status = 200
+# The service worker must always be re-checked, never served stale.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# NOTE: do NOT add the SPA rule "/* -> /index.html". It breaks Next.js routing.
