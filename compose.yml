@@ -34,6 +34,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://milkos:${POSTGRES_PASSWORD:-milkos_dev_password}@db:5432/milkos
+      PORT: "8000"
     expose:
       - "8000"
     depends_on:
@@ -65,3 +66,4 @@ services:
 
 volumes:
   milkos_postgres_data:
+

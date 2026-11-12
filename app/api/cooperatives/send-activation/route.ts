@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resend } from "@/lib/email/resend";
+import { getResend } from "@/lib/email/resend";
 import { CooperativeActivationEmail } from "@/components/emails/CooperativeActivation";
 
 export async function POST(req: Request) {
@@ -9,6 +9,8 @@ export async function POST(req: Request) {
     if (!cooperativeEmail || !cooperativeName || !activationToken) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    const resend = getResend();
 
     // Default domain during testing is 'onboarding@resend.dev'
     // Replace with your verified domain (e.g., 'onboarding@milkos.app') once configured in Resend.
