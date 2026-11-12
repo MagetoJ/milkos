@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { PRINTER_SERVICES, rememberPrinter } from "@/lib/printer/printer-session";
 
 export type BluetoothDeviceType = "scale" | "printer" | "unknown";
 
@@ -44,7 +45,11 @@ export const BluetoothProvider = ({ children }: { children: ReactNode }) => {
 
       setIsScanning(true);
       try {
-        const options: RequestDeviceOptions = serviceUUID
+        // A printer is always requested with the shared printer services: the browser only lets the app use the
+        // services listed here, and printing needs the same ones no matter which screen paired the printer.
+        const options: RequestDeviceOptions = type === "printer"
+          ? { acceptAllDevices: true, optionalServices: PRINTER_SERVICES }
+          : serviceUUID
           ? { filters: [{ services: [serviceUUID] }] }
           : {
               acceptAllDevices: true,
@@ -56,6 +61,7 @@ export const BluetoothProvider = ({ children }: { children: ReactNode }) => {
 
         const device = await navigator.bluetooth.requestDevice(options);
         
+        if (type === "printer") rememberPrinter(device); // printing reuses this printer instead of asking again
         const gattServer = await device.gatt?.connect();
 
         const wrappedDevice: BluetoothDeviceWrapper = {

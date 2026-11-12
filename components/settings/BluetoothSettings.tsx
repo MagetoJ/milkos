@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { choosePrinter, forgetPrinter } from "@/lib/printer/printer-session";
 
 interface SavedDevice {
   id: string;
@@ -35,22 +36,14 @@ export function BluetoothSettings() {
       setIsScanning(true);
       setStatusMessage(`Scanning for nearby Bluetooth ${type}s...`);
 
-      // Filter settings depending on peripheral type
-      const options: RequestDeviceOptions =
-        type === "scale"
-          ? {
+      // The printer goes through the shared printer module (same services everywhere, remembered for printing).
+      const device =
+        type === "printer"
+          ? await choosePrinter()
+          : await navigator.bluetooth.requestDevice({
               filters: [{ services: ["0000180f-0000-1000-8000-00805f9b34fb"] }], // Battery/Generic BLE service
               optionalServices: ["0000180f-0000-1000-8000-00805f9b34fb"],
-            }
-          : {
-              acceptAllDevices: true,
-              optionalServices: [
-                "000018f0-0000-1000-8000-00805f9b34fb",
-                "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-              ],
-            };
-
-      const device = await navigator.bluetooth.requestDevice(options);
+            });
 
       const deviceConfig: SavedDevice = {
         id: device.id,
@@ -85,7 +78,7 @@ export function BluetoothSettings() {
       localStorage.removeItem("milkos_saved_scale");
       setSavedScale(null);
     } else {
-      localStorage.removeItem("milkos_saved_printer");
+      forgetPrinter(); // disconnects it and clears every saved trace, so printing asks to pair again
       setSavedPrinter(null);
     }
     setStatusMessage(`Removed saved ${type}.`);

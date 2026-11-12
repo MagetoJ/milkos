@@ -72,8 +72,14 @@ interface BluetoothDevice extends EventTarget {
   readonly watchingAdvertisements: boolean;
 }
 
+interface WatchAdvertisementsOptions {
+  signal?: AbortSignal;
+}
+
 interface Bluetooth extends EventTarget {
   getAvailability(): Promise<boolean>;
+  /** Devices this site was already allowed to use (not in every browser). */
+  getDevices?(): Promise<BluetoothDevice[]>;
   requestDevice(options?: RequestDeviceOptions): Promise<BluetoothDevice>;
 }
 
