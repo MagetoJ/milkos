@@ -2,7 +2,17 @@
 import datetime
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Uuid,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.infrastructure.db.database import Base

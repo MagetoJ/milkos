@@ -12,16 +12,19 @@ from typing import Optional
 
 from app.domain.interfaces.sms import GatewayConfigurationError, SMSGatewayInterface
 
-_override: Optional[SMSGatewayInterface] = None
+_override: SMSGatewayInterface | None = None
 _override_set = False
 
 
-def _truthy(value: Optional[str]) -> bool:
+def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def provider_from_env() -> Optional[SMSGatewayInterface]:
-    from app.infrastructure.gateways.sms.providers import AfricasTalkingProvider, WebhookSmsProvider
+def provider_from_env() -> SMSGatewayInterface | None:
+    from app.infrastructure.gateways.sms.providers import (
+        AfricasTalkingProvider,
+        WebhookSmsProvider,
+    )
 
     name = (os.getenv("SMS_PROVIDER") or "").strip().lower()
     if not name:
@@ -38,14 +41,14 @@ def provider_from_env() -> Optional[SMSGatewayInterface]:
     raise GatewayConfigurationError(f"Unknown SMS_PROVIDER '{name}'. Use 'africastalking' or 'webhook'.")
 
 
-def get_provider() -> Optional[SMSGatewayInterface]:
+def get_provider() -> SMSGatewayInterface | None:
     """The configured provider, or None. A misconfigured provider raises GatewayConfigurationError."""
     if _override_set:
         return _override
     return provider_from_env()
 
 
-def set_provider(provider: Optional[SMSGatewayInterface]) -> None:
+def set_provider(provider: SMSGatewayInterface | None) -> None:
     """Use `provider` instead of the environment's (tests, alternative integrations)."""
     global _override, _override_set
     _override, _override_set = provider, True

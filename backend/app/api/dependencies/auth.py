@@ -10,7 +10,6 @@ They return an app.services.principal.Principal; its docstring has the tenant-is
 """
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends, Request
@@ -31,7 +30,7 @@ from app.services.principal import FORBIDDEN, NOT_LINKED, SUSPENDED, Principal
 PASSWORD_CHANGE_ALLOWED = frozenset({"/api/v1/account/password", "/api/v1/account/me"})
 
 
-def token_from_request(request: Request) -> Optional[str]:
+def token_from_request(request: Request) -> str | None:
     """The access token, if any: the session cookie first, then an `Authorization: Bearer` header."""
     token = request.cookies.get(COOKIE_NAME)
     if not token:

@@ -33,9 +33,10 @@ by the services.
 """
 import datetime
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Callable, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ValidationError
@@ -48,18 +49,38 @@ from app.domain.exceptions import Conflict, DomainError, NotFound, PermissionDen
 from app.domain.interfaces import TaskDispatcher
 from app.domain.schemas.auth import UserRole
 from app.domain.schemas.collections import BatchCreate
-from app.domain.schemas.cooperative_module import CentreCreate, CentreUpdate, FarmerCreate, FarmerUpdate
+from app.domain.schemas.cooperative_module import (
+    CentreCreate,
+    CentreUpdate,
+    FarmerCreate,
+    FarmerUpdate,
+)
 from app.domain.schemas.platform import CollectionCreate, CollectionUpdate
 from app.domain.schemas.sync import CoolerReadingIn, Mutation, SensorEventIn
 from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.operations import CollectionBatch, MilkCollection
 from app.infrastructure.db.models.sensors import CoolerReading
-from app.infrastructure.db.models.sync import Device, DeviceSession, MutationStatus, SyncMutation
-from app.services import audit, background, batches, centres, collections, cooler_readings, farmers, sensors
+from app.infrastructure.db.models.sync import (
+    Device,
+    DeviceSession,
+    MutationStatus,
+    SyncMutation,
+)
+from app.services import (
+    audit,
+    background,
+    batches,
+    centres,
+    collections,
+    cooler_readings,
+    farmers,
+    sensors,
+)
 from app.services.common import SyncOrigin
 from app.services.principal import Principal
-from app.services.sync import devices, pull as pull_service, serializers
+from app.services.sync import devices, serializers
+from app.services.sync import pull as pull_service
 
 logger = logging.getLogger("milkflow.sync")
 
@@ -70,14 +91,14 @@ REF_FIELDS = ("farmer_id", "centre_id", "cooler_id", "collector_id", "sensor_id"
 
 
 class Refused(Exception):
-    def __init__(self, status: str, code: str, message: str, fields: Optional[dict] = None, entity: Optional[dict] = None):
+    def __init__(self, status: str, code: str, message: str, fields: dict | None = None, entity: dict | None = None):
         super().__init__(message)
         self.status, self.code, self.message = status, code, message
         self.fields = fields or {}
         self.entity = entity
 
 
-def _rejected(code: str, message: str, fields: Optional[dict] = None) -> Refused:
+def _rejected(code: str, message: str, fields: dict | None = None) -> Refused:
     return Refused("rejected", code, message, fields)
 
 
@@ -101,7 +122,7 @@ class Applied:
 
 # ---------------- helpers ----------------
 
-def _require_role(ctx: Ctx, roles: set[str], permission: Optional[Permission] = None) -> None:
+def _require_role(ctx: Ctx, roles: set[str], permission: Permission | None = None) -> None:
     if ctx.principal.role not in roles or (permission is not None and not ctx.principal.can(permission)):
         raise _rejected("forbidden", "Your role can't make this change.")
 
@@ -140,7 +161,7 @@ def _resolve_refs(ctx: Ctx) -> None:
             ctx.payload[key] = mapping[str(value)]
 
 
-def _server_id_for_create(ctx: Ctx, model) -> tuple[UUID, Optional[Any]]:
+def _server_id_for_create(ctx: Ctx, model) -> tuple[UUID, Any | None]:
     """(id to create with, existing row if this very record already exists for the caller)."""
     local = ctx.mutation.local_id
     row = ctx.db.get(model, local)
@@ -161,7 +182,7 @@ def _norm(value: Any) -> Any:
     return value
 
 
-def _stale_fields(ctx: Ctx, row, changes: dict, fields: Optional[set[str]]) -> dict:
+def _stale_fields(ctx: Ctx, row, changes: dict, fields: set[str] | None) -> dict:
     """Fields the device changed that the server also changed since `base_version`."""
     m = ctx.mutation
     if m.base_version is None or row.sync_version == m.base_version:
@@ -372,7 +393,7 @@ def _result(m: Mutation, status: str, *, server_id=None, entity=None, error=None
     }
 
 
-def _entity(db: Session, principal: Principal, entity_type: str, server_id) -> Optional[dict]:
+def _entity(db: Session, principal: Principal, entity_type: str, server_id) -> dict | None:
     return serializers.one(db, principal, entity_type, server_id) if server_id else None
 
 

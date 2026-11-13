@@ -1,14 +1,15 @@
 """Small helpers shared by the routers and services."""
 import re
+from collections.abc import Iterable
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any, Iterable, Optional
+from typing import Any
 from uuid import UUID
 
 from app.domain.exceptions import Conflict, NotFound, ValidationFailed
 
 
-def iso(value: Optional[datetime | date | time]) -> Optional[str]:
+def iso(value: datetime | date | time | None) -> str | None:
     """Columns store naive UTC; mark datetimes as UTC so browsers don't read them as local time."""
     if value is None:
         return None
@@ -17,7 +18,7 @@ def iso(value: Optional[datetime | date | time]) -> Optional[str]:
     return value.isoformat()
 
 
-def num(value: Optional[Decimal | float | int]) -> Optional[float]:
+def num(value: Decimal | float | None) -> float | None:
     return float(value) if value is not None else None
 
 
@@ -29,7 +30,7 @@ def parse_uuid(value: str, what: str) -> UUID:
         raise NotFound(what)
 
 
-def optional_uuid(value: Optional[str], what: str) -> Optional[UUID]:
+def optional_uuid(value: str | None, what: str) -> UUID | None:
     """parse_uuid for an optional query parameter: None when it wasn't given."""
     return parse_uuid(value, what) if value else None
 
@@ -39,7 +40,7 @@ def field_error(field: str, message: str) -> ValidationFailed:
     return ValidationFailed(message, field)
 
 
-def conflict(field: Optional[str], message: str) -> Conflict:
+def conflict(field: str | None, message: str) -> Conflict:
     """A 409 in the validation-error shape, tied to `field` (or to the whole form)."""
     return Conflict(message, loc=["body", field] if field else ["body"])
 
@@ -50,7 +51,7 @@ def reject_nulls(data: dict, *fields: str) -> None:
             raise field_error(name, "This field can't be empty.")
 
 
-def next_sequence(values: Iterable[Optional[str]], prefix: str, width: int) -> str:
+def next_sequence(values: Iterable[str | None], prefix: str, width: int) -> str:
     """Next number in a PREFIX-0001 series, ignoring values that don't follow the pattern."""
     pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
     highest = 0
@@ -67,12 +68,12 @@ def like(term: str) -> str:
     return f"%{escaped}%"
 
 
-def phone_digits(term: str) -> Optional[str]:
+def phone_digits(term: str) -> str | None:
     """The national part of a phone number typed as 07.., 2547.., +2547.. (for LIKE matching)."""
     if not re.fullmatch(r"\+?\d+", term):
         return None
     digits = term.lstrip("+")
-    digits = digits[1:] if digits.startswith("0") else digits[3:] if digits.startswith("254") else digits
+    digits = digits[1:] if digits.startswith("0") else digits.removeprefix("254")
     return digits if len(digits) >= 3 else None
 
 

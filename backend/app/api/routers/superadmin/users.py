@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -7,7 +6,12 @@ from app.api.dependencies.auth import require_superadmin
 from app.api.dependencies.db import get_db
 from app.api.dependencies.pagination import page_params
 from app.domain.schemas.auth import UserRole
-from app.domain.schemas.platform import AccountStatusChange, UserCreate, UserStatusChange, UserUpdate
+from app.domain.schemas.platform import (
+    AccountStatusChange,
+    UserCreate,
+    UserStatusChange,
+    UserUpdate,
+)
 from app.infrastructure.db.pagination import PageParams
 from app.services import accounts, users
 from app.services.platform_admin import people
@@ -18,11 +22,11 @@ router = APIRouter(prefix="/users")
 
 @router.get("")
 def list_users(
-    search: Optional[str] = Query(None, max_length=100),
-    role: Optional[UserRole] = None,
-    cooperative_id: Optional[str] = Query(None, description="A cooperative id, or 'none' for platform accounts"),
-    is_active: Optional[bool] = None,
-    account_status: Optional[str] = Query(None, max_length=30),
+    search: str | None = Query(None, max_length=100),
+    role: UserRole | None = None,
+    cooperative_id: str | None = Query(None, description="A cooperative id, or 'none' for platform accounts"),
+    is_active: bool | None = None,
+    account_status: str | None = Query(None, max_length=30),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

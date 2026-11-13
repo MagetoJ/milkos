@@ -3,7 +3,8 @@
 The first implementation runs tasks in-process (FastAPI BackgroundTasks); a Celery/Redis one can replace it
 without touching callers, which is why the payload rule below matters.
 """
-from typing import Any, Mapping, Protocol
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 
 class TaskDispatcher(Protocol):

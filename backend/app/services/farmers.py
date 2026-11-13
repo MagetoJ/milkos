@@ -1,5 +1,4 @@
 """Farmer records: one implementation used by the cooperative workspace and the superadmin."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -7,7 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.utils import (
-    changed, conflict, field_error, iso, like, next_sequence, num, parse_uuid, phone_digits, reject_nulls, snapshot,
+    changed,
+    conflict,
+    field_error,
+    iso,
+    like,
+    next_sequence,
+    num,
+    parse_uuid,
+    phone_digits,
+    reject_nulls,
+    snapshot,
 )
 from app.core.validation import normalize_phone
 from app.domain.schemas.cooperative_module import FarmerCreate, FarmerUpdate
@@ -25,7 +34,7 @@ AUDITED = (
 )
 
 
-def farmer_json(farmer: Farmer, centre_name: Optional[str] = None, cooperative: Optional[Cooperative] = None) -> dict:
+def farmer_json(farmer: Farmer, centre_name: str | None = None, cooperative: Cooperative | None = None) -> dict:
     data = {
         "id": str(farmer.id),
         "cooperative_id": str(farmer.cooperative_id),
@@ -55,9 +64,9 @@ def farmer_json(farmer: Farmer, centre_name: Optional[str] = None, cooperative: 
 
 
 def find_conflict(
-    db: Session, cooperative_id: UUID, *, number: Optional[str], phone: Optional[str], national_id: Optional[str],
-    exclude_id: Optional[UUID] = None,
-) -> Optional[tuple[str, str]]:
+    db: Session, cooperative_id: UUID, *, number: str | None, phone: str | None, national_id: str | None,
+    exclude_id: UUID | None = None,
+) -> tuple[str, str] | None:
     def taken(column, value) -> bool:
         query = db.query(Farmer.id).filter(Farmer.cooperative_id == cooperative_id, column == value)
         if exclude_id:
@@ -91,7 +100,7 @@ def _apply_payment_rules(farmer: Farmer) -> None:
             raise field_error("payment_method", "Choose how this farmer is paid (M-Pesa or bank).")
 
 
-def search_filter(query, search: Optional[str]):
+def search_filter(query, search: str | None):
     """Every word must match somewhere: "jane limuru" finds Jane in Limuru."""
     for term in (search or "").split():
         clauses = [
@@ -106,8 +115,8 @@ def search_filter(query, search: Optional[str]):
 
 
 def create(
-    db: Session, principal: Principal, payload: FarmerCreate, origin: Optional[SyncOrigin] = None,
-) -> tuple[Farmer, Optional[CollectionCentre]]:
+    db: Session, principal: Principal, payload: FarmerCreate, origin: SyncOrigin | None = None,
+) -> tuple[Farmer, CollectionCentre | None]:
     cooperative = target_cooperative(db, principal, payload.cooperative_id)
     centre = check_centre(db, cooperative.id, payload.centre_id)
     explicit_number = payload.farmer_number is not None
@@ -262,8 +271,8 @@ def collection_stats(db: Session, farmer_ids: list[UUID]) -> dict[UUID, dict]:
     }
 
 
-def list_page(db: Session, cooperative_id: UUID, search: Optional[str], centre_id: Optional[str],
-              status: Optional[str], page: int, page_size: int) -> dict:
+def list_page(db: Session, cooperative_id: UUID, search: str | None, centre_id: str | None,
+              status: str | None, page: int, page_size: int) -> dict:
     """One page of the register, by name. `centre_id` 'none' means farmers without a centre."""
     query = (
         db.query(Farmer, CollectionCentre.name)

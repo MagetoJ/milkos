@@ -3,7 +3,6 @@
 No provider is enabled by default: until SMS_PROVIDER is set, notifications are stored and marked FAILED
 with "SMS provider not configured" - never reported as sent.
 """
-from typing import Optional
 
 import httpx
 
@@ -23,8 +22,8 @@ class AfricasTalkingProvider:
     SANDBOX_URL = "https://api.sandbox.africastalking.com/version1/messaging"
     ACCEPTED_CODES = {100, 101, 102}  # Processed, Sent, Queued
 
-    def __init__(self, username: str, api_key: str, sender_id: Optional[str] = None, sandbox: bool = False,
-                 client: Optional[httpx.Client] = None):
+    def __init__(self, username: str, api_key: str, sender_id: str | None = None, sandbox: bool = False,
+                 client: httpx.Client | None = None):
         if not username or not api_key:
             raise GatewayConfigurationError("AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY must be set.")
         self.username = username
@@ -72,7 +71,7 @@ class WebhookSmsProvider:
     """
     name = "webhook"
 
-    def __init__(self, url: str, token: Optional[str] = None, client: Optional[httpx.Client] = None):
+    def __init__(self, url: str, token: str | None = None, client: httpx.Client | None = None):
         if not url:
             raise GatewayConfigurationError("SMS_WEBHOOK_URL must be set.")
         self.url = url

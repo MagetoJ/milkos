@@ -8,7 +8,6 @@ What each caller sees is decided by services.collections.scope (from the databas
 Superadmins use /api/v1/superadmin/collections instead.
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -31,29 +30,29 @@ NOT_FOR_PLATFORM_STAFF = "Platform administrators use /api/v1/superadmin/collect
 
 @router.get("")
 def list_collections(
-    search: Optional[str] = Query(None, max_length=100),
-    cooperative_id: Optional[str] = None,
-    farmer_id: Optional[str] = None,
-    collector_id: Optional[str] = None,
-    cooler_id: Optional[str] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
-    quality_status: Optional[str] = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
-    batch_id: Optional[str] = None,
-    centre_id: Optional[str] = None,
+    search: str | None = Query(None, max_length=100),
+    cooperative_id: str | None = None,
+    farmer_id: str | None = None,
+    collector_id: str | None = None,
+    cooler_id: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    quality_status: str | None = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
+    batch_id: str | None = None,
+    centre_id: str | None = None,
     include_history: bool = Query(False, description="Also list superseded and reversed lines"),
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.COLLECTION_READ)),
     db: Session = Depends(get_db),
 ):
     principal.require_tenant(NOT_FOR_PLATFORM_STAFF)
-    filters = dict(
-        farmer_id=optional_uuid(farmer_id, "Farmer"), collector_id=optional_uuid(collector_id, "Collector"),
-        cooler_id=optional_uuid(cooler_id, "Cooler"),
-        date_from=date_from, date_to=date_to, quality_status=quality_status, search=search,
-        batch_id=optional_uuid(batch_id, "Collection"), centre_id=optional_uuid(centre_id, "Centre"),
-        include_history=include_history or bool(batch_id),
-    )
+    filters = {
+        "farmer_id": optional_uuid(farmer_id, "Farmer"), "collector_id": optional_uuid(collector_id, "Collector"),
+        "cooler_id": optional_uuid(cooler_id, "Cooler"),
+        "date_from": date_from, "date_to": date_to, "quality_status": quality_status, "search": search,
+        "batch_id": optional_uuid(batch_id, "Collection"), "centre_id": optional_uuid(centre_id, "Centre"),
+        "include_history": include_history or bool(batch_id),
+    }
     # A cooperative_id other than the caller's own is refused (403) inside the service's scope().
     result = collections.list_page(db, principal, optional_uuid(cooperative_id, "Cooperative"), filters, params)
     result["role"] = principal.role
@@ -75,7 +74,7 @@ def record_collection(
 
 @router.get("/options")
 def recording_options(
-    search: Optional[str] = Query(None, max_length=100),
+    search: str | None = Query(None, max_length=100),
     principal: Principal = Depends(require_permission(Permission.COLLECTION_CREATE)),
     db: Session = Depends(get_db),
 ):

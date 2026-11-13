@@ -12,7 +12,6 @@ only the batches they recorded, a farmer only batches with a line of theirs. Pla
 console. A batch of another cooperative is indistinguishable from a missing one (404).
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -24,7 +23,12 @@ from app.api.dependencies.tasks import get_tasks
 from app.core.permissions import Permission
 from app.core.utils import optional_uuid
 from app.domain.interfaces import TaskDispatcher
-from app.domain.schemas.collections import BatchCreate, CorrectionRequestCreate, RequestReview, ReversalRequestCreate
+from app.domain.schemas.collections import (
+    BatchCreate,
+    CorrectionRequestCreate,
+    RequestReview,
+    ReversalRequestCreate,
+)
 from app.infrastructure.db.models.operations import BatchStatus
 from app.infrastructure.db.pagination import PageParams
 from app.services import background, batches, corrections
@@ -39,15 +43,15 @@ NOT_FOR_PLATFORM_STAFF = "Platform administrators use the superadmin console."
 
 @router.get("")
 def list_batches(
-    search: Optional[str] = Query(None, max_length=100),
-    batch_status: Optional[str] = Query(None, alias="status", pattern="^(CONFIRMED|CORRECTION_PENDING|REVERSAL_PENDING|CORRECTED|REVERSED)$"),
+    search: str | None = Query(None, max_length=100),
+    batch_status: str | None = Query(None, alias="status", pattern="^(CONFIRMED|CORRECTION_PENDING|REVERSAL_PENDING|CORRECTED|REVERSED)$"),
     include_history: bool = False,
-    cooler_id: Optional[str] = None,
-    centre_id: Optional[str] = None,
-    collector_id: Optional[str] = None,
-    farmer_id: Optional[str] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
+    cooler_id: str | None = None,
+    centre_id: str | None = None,
+    collector_id: str | None = None,
+    farmer_id: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.COLLECTION_READ)),
     db: Session = Depends(get_db),
@@ -119,8 +123,8 @@ def request_reversal(
 
 @requests_router.get("")
 def list_requests(
-    request_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|APPROVED|REJECTED|CANCELLED)$"),
-    request_type: Optional[str] = Query(None, alias="type", pattern="^(CORRECTION|REVERSAL)$"),
+    request_status: str | None = Query(None, alias="status", pattern="^(PENDING|APPROVED|REJECTED|CANCELLED)$"),
+    request_type: str | None = Query(None, alias="type", pattern="^(CORRECTION|REVERSAL)$"),
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.COLLECTION_READ)),
     db: Session = Depends(get_db),

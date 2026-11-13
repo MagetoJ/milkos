@@ -2,10 +2,11 @@ from logging.config import fileConfig
 
 from alembic import context
 
+import app.infrastructure.db.models  # noqa: F401  (registers every table on Base.metadata)
+
 # database.py builds the (synchronous) engine from DATABASE_URL; an already-set environment variable wins,
 # which is how the tests point this at SQLite.
 from app.infrastructure.db import database as db
-import app.infrastructure.db.models  # noqa: F401  (registers every table on Base.metadata)
 
 config = context.config
 if config.config_file_name is not None:
@@ -16,9 +17,7 @@ target_metadata = db.Base.metadata
 
 def include_object(obj, name, type_, reflected, compare_to):
     # Tables that exist in the database but have no model must never show up as "drop table" in an autogenerate.
-    if type_ == "table" and reflected and compare_to is None:
-        return False
-    return True
+    return not (type_ == "table" and reflected and compare_to is None)
 
 
 def run_migrations_offline() -> None:

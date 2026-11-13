@@ -1,12 +1,17 @@
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_core import PydanticCustomError
 
 from app.core.validation import (
-    clean_text, normalize_county, normalize_email, normalize_kra_pin, normalize_national_id, normalize_phone,
-    normalize_registration_number, pydantic_field,
+    clean_text,
+    normalize_county,
+    normalize_email,
+    normalize_kra_pin,
+    normalize_national_id,
+    normalize_phone,
+    normalize_registration_number,
+    pydantic_field,
 )
 
 
@@ -38,9 +43,9 @@ class CooperativeRegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=64, description="Account Password")
 
     # Operational Details
-    estimated_daily_liters: Optional[float] = Field(None, gt=0, le=10_000_000, description="Estimated daily milk volume in Liters")
-    initial_coolers_count: Optional[int] = Field(1, ge=0, le=1000, description="Number of collection centers/coolers")
-    additional_info: Optional[str] = Field(None, max_length=2000, description="Additional background information")
+    estimated_daily_liters: float | None = Field(None, gt=0, le=10_000_000, description="Estimated daily milk volume in Liters")
+    initial_coolers_count: int | None = Field(1, ge=0, le=1000, description="Number of collection centers/coolers")
+    additional_info: str | None = Field(None, max_length=2000, description="Additional background information")
 
     _clean_names = field_validator("cooperative_name", "location", "admin_full_name")(clean_text)
     _email = field_validator("admin_email")(normalize_email)
@@ -54,7 +59,7 @@ class CooperativeRegisterRequest(BaseModel):
 
     @field_validator("additional_info")
     @classmethod
-    def blank_to_none(cls, v: Optional[str]) -> Optional[str]:
+    def blank_to_none(cls, v: str | None) -> str | None:
         return v or None
 
     @field_validator("password")
@@ -74,8 +79,8 @@ class CooperativeRegisterResponse(BaseModel):
 # --- Login Input Validation ---
 class UserLogin(BaseModel):
     """Sign in with an email address or a phone number. `email` is kept for older clients."""
-    identifier: Optional[str] = Field(None, max_length=255)
-    email: Optional[str] = Field(None, max_length=255)
+    identifier: str | None = Field(None, max_length=255)
+    email: str | None = Field(None, max_length=255)
     password: str = Field(..., min_length=1, max_length=128)
 
     @property
@@ -109,8 +114,8 @@ class PasswordSet(TokenBody):
 
 
 class ResendActivation(BaseModel):
-    token: Optional[str] = Field(None, max_length=200)
-    identifier: Optional[str] = Field(None, max_length=255)
+    token: str | None = Field(None, max_length=200)
+    identifier: str | None = Field(None, max_length=255)
 
 
 class ResetRequest(BaseModel):

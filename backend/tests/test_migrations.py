@@ -11,7 +11,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 def run(code_or_args, db_url):
     env = {**os.environ, "DATABASE_URL": db_url}
     args = code_or_args if isinstance(code_or_args, list) else ["-c", textwrap.dedent(code_or_args)]
-    return subprocess.run([sys.executable, *args], cwd=BACKEND_DIR, env=env, capture_output=True, text=True, timeout=120)
+    return subprocess.run([sys.executable, *args], cwd=BACKEND_DIR, env=env, capture_output=True, text=True, timeout=120, check=False)
 
 
 SMOKE = """

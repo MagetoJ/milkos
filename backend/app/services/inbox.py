@@ -8,7 +8,7 @@ Nobody sees another cooperative's events.
 `notify` only adds rows (no commit): call it inside the transaction of the event it describes.
 """
 import datetime
-from typing import Iterable, Optional
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import and_, exists, or_
@@ -23,11 +23,11 @@ STAFF = ("COOP_ADMIN", "MANAGER")
 
 
 def notify(
-    db: Session, *, cooperative_id: Optional[UUID], category: str, type: str, title: str,
-    roles: Iterable[str] = (), recipient_user_id: Optional[UUID] = None, severity: str = "INFO",
-    body: Optional[str] = None, entity_type: Optional[str] = None, entity_id=None, link: Optional[str] = None,
+    db: Session, *, cooperative_id: UUID | None, category: str, type: str, title: str,
+    roles: Iterable[str] = (), recipient_user_id: UUID | None = None, severity: str = "INFO",
+    body: str | None = None, entity_type: str | None = None, entity_id=None, link: str | None = None,
     dedupe_minutes: int = 0,
-) -> Optional[InboxNotification]:
+) -> InboxNotification | None:
     """Add a notification. With dedupe_minutes, an identical one (same type, entity and audience) raised
     within that window is not repeated."""
     roles = tuple(roles)
@@ -49,7 +49,7 @@ def notify(
     return row
 
 
-def platform(db: Session, **kwargs) -> Optional[InboxNotification]:
+def platform(db: Session, **kwargs) -> InboxNotification | None:
     """A platform-level event for platform staff."""
     return notify(db, cooperative_id=None, roles=("SUPER_ADMIN",), **kwargs)
 
@@ -102,7 +102,7 @@ def item_json(n: InboxNotification, read: bool) -> dict:
     }
 
 
-def mark_read(db: Session, principal: Principal, ids: Optional[list[UUID]]) -> int:
+def mark_read(db: Session, principal: Principal, ids: list[UUID] | None) -> int:
     """Mark the given notifications (or every visible unread one) as read for the caller."""
     query = visible(db, principal).filter(unread_filter(principal))
     if ids is not None:
@@ -119,7 +119,7 @@ def unread_count(db: Session, principal: Principal) -> int:
     return visible(db, principal).filter(unread_filter(principal)).count()
 
 
-def list_page(db: Session, principal: Principal, unread_only: bool, category: Optional[str], params: PageParams) -> dict:
+def list_page(db: Session, principal: Principal, unread_only: bool, category: str | None, params: PageParams) -> dict:
     """One page of the caller's notifications, newest first, each marked read or unread, plus the unread total."""
     query = visible(db, principal)
     if unread_only:

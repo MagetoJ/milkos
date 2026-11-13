@@ -6,13 +6,18 @@ import json
 import pytest
 
 from app.core.validation import mask_phone_local, normalize_phone
+from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import AuditLog
 from app.infrastructure.db.models.finance import CreditTxn, SmsCreditTransaction
 from app.infrastructure.db.models.notifications import Notification
-from app.infrastructure.db.models.user import AccountActivation, PasswordReset, PhoneVerification, User
-from app.domain.schemas.auth import UserRole
-from app.services import mfa, notifications
+from app.infrastructure.db.models.user import (
+    AccountActivation,
+    PasswordReset,
+    PhoneVerification,
+    User,
+)
 from app.infrastructure.gateways import sms
+from app.services import mfa, notifications
 from tests.conftest import RecordingSms, activate, fund, login
 from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
 
@@ -143,8 +148,8 @@ def test_invalid_and_expired_links_reveal_nothing(client, session, world):
     invite_collector(client, world)
     token = world["sms"].token_for(NEW_PHONE)
     row = session.query(AccountActivation).one()
-    row.expires_at = datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
-    row.created_at = datetime.datetime.utcnow() - datetime.timedelta(minutes=31)
+    row.expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=1)
+    row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=31)
     session.commit()
     page = client.post(f"{AUTH}/activation/inspect", json={"token": token}).json()
     assert page == {"state": "EXPIRED", "can_request_new_link": True}  # no name, phone or cooperative
@@ -160,7 +165,7 @@ def test_resend_revokes_the_old_link_and_has_a_cooldown(client, session, world):
     first = world["sms"].token_for(NEW_PHONE)
     url = f"{COOP}/accounts/{member['id']}/resend-activation"
     assert client.post(url, headers=world["admin_a"]).status_code == 429  # just sent
-    session.query(AccountActivation).update({AccountActivation.created_at: datetime.datetime.utcnow() - datetime.timedelta(minutes=5)})
+    session.query(AccountActivation).update({AccountActivation.created_at: datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=5)})
     session.commit()
     res = client.post(url, headers=world["admin_a"])
     assert res.status_code == 200 and res.json()["activation_sms"]["sms_sent"] is True
@@ -213,12 +218,12 @@ def test_otp_expiry_attempt_limit_and_resend_cooldown(client, session, world):
     good = world["sms"].code_for(NEW_PHONE)
     assert client.post(f"{AUTH}/activation/verify-code", json={"token": token, "code": good}).status_code == 400
     # A new code (after the cooldown) works until it expires.
-    session.query(PhoneVerification).update({PhoneVerification.last_sent_at: datetime.datetime.utcnow() - datetime.timedelta(minutes=2)})
+    session.query(PhoneVerification).update({PhoneVerification.last_sent_at: datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=2)})
     session.commit()
     assert client.post(f"{AUTH}/activation/send-code", json={"token": token}).status_code == 200
     fresh = world["sms"].code_for(NEW_PHONE)
     session.query(PhoneVerification).filter(PhoneVerification.revoked_at.is_(None)).update(
-        {PhoneVerification.expires_at: datetime.datetime.utcnow() - datetime.timedelta(seconds=1)})
+        {PhoneVerification.expires_at: datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=1)})
     session.commit()
     expired = client.post(f"{AUTH}/activation/verify-code", json={"token": token, "code": fresh})
     assert expired.status_code == 400 and "expired" in expired.json()["detail"]
@@ -251,7 +256,7 @@ def test_failed_activation_sms_is_refunded_never_reported_sent_and_not_auto_retr
     assert session.query(AuditLog).filter_by(action="ACTIVATION_SMS_FAILED").count() == 1
     # Retrying = a NEW link once the provider works again.
     sms.set_provider(world["sms"])
-    session.query(AccountActivation).update({AccountActivation.created_at: datetime.datetime.utcnow() - datetime.timedelta(minutes=5)})
+    session.query(AccountActivation).update({AccountActivation.created_at: datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=5)})
     session.commit()
     res = client.post(f"{COOP}/accounts/{body['id']}/resend-activation", headers=world["admin_a"])
     assert res.json()["activation_sms"]["sms_sent"] is True
@@ -354,7 +359,7 @@ def test_password_reset_is_separate_from_activation(client, session, world):
     # Expired reset links fail.
     client.post(f"{AUTH}/password-reset/request", json={"identifier": "admin@a.coop"})
     session.query(PasswordReset).filter(PasswordReset.used_at.is_(None)).update(
-        {PasswordReset.expires_at: datetime.datetime.utcnow() - datetime.timedelta(minutes=1)})
+        {PasswordReset.expires_at: datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=1)})
     session.commit()
     expired = world["sms"].token_for("+254700000011")
     assert client.post(f"{AUTH}/password-reset/inspect", json={"token": expired}).json() == {"state": "EXPIRED"}

@@ -1,8 +1,10 @@
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
+
 
 def clean_db_url(url_str: str) -> str:
     # Only PostgreSQL DSNs need cleaning. urlunparse() would turn sqlite:////tmp/x.db into the invalid

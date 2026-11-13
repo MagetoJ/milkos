@@ -4,8 +4,9 @@ List endpoints return {"items", "total", "page", "page_size", "pages"} and accep
 `page`, `page_size` (max 100) and `sort` ("field" ascending, "-field" descending, from a whitelist).
 """
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 from app.domain.exceptions import ValidationFailed
 
@@ -14,14 +15,14 @@ from app.domain.exceptions import ValidationFailed
 class PageParams:
     page: int
     page_size: int
-    sort: Optional[str]
+    sort: str | None
 
     @property
     def offset(self) -> int:
         return (self.page - 1) * self.page_size
 
 
-def apply_sort(query, sort: Optional[str], columns: dict[str, Any], default: list):
+def apply_sort(query, sort: str | None, columns: dict[str, Any], default: list):
     """Order by a whitelisted column; ties (and no sort) fall back to `default`."""
     if not sort:
         return query.order_by(*default)

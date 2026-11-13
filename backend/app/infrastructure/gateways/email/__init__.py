@@ -11,11 +11,11 @@ from typing import Optional
 from app.domain.interfaces.email import EmailGatewayInterface
 from app.domain.interfaces.sms import GatewayConfigurationError
 
-_override: Optional[EmailGatewayInterface] = None
+_override: EmailGatewayInterface | None = None
 _override_set = False
 
 
-def provider_from_env() -> Optional[EmailGatewayInterface]:
+def provider_from_env() -> EmailGatewayInterface | None:
     from app.infrastructure.gateways.email.providers import ResendProvider
 
     name = (os.getenv("EMAIL_PROVIDER") or "").strip().lower()
@@ -26,14 +26,14 @@ def provider_from_env() -> Optional[EmailGatewayInterface]:
     raise GatewayConfigurationError(f"Unknown EMAIL_PROVIDER '{name}'. Use 'resend'.")
 
 
-def get_provider() -> Optional[EmailGatewayInterface]:
+def get_provider() -> EmailGatewayInterface | None:
     """The configured provider, or None. A misconfigured provider raises GatewayConfigurationError."""
     if _override_set:
         return _override
     return provider_from_env()
 
 
-def set_provider(provider: Optional[EmailGatewayInterface]) -> None:
+def set_provider(provider: EmailGatewayInterface | None) -> None:
     global _override, _override_set
     _override, _override_set = provider, True
 

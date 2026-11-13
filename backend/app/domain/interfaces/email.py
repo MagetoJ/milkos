@@ -1,13 +1,13 @@
 """The email gateway contract. Services depend only on this, never on a provider SDK."""
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 @dataclass(frozen=True)
 class EmailResult:
     accepted: bool                       # True only when the provider has taken responsibility for delivery
-    provider_message_id: Optional[str] = None
-    error: Optional[str] = None
+    provider_message_id: str | None = None
+    error: str | None = None
     retryable: bool = True               # False for permanent refusals (invalid address, unverified domain...)
 
 

@@ -1,6 +1,5 @@
 """Cooperative dashboard figures and charts. Every number is a database aggregate over one cooperative."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import and_, case, distinct, func
@@ -17,7 +16,13 @@ from app.infrastructure.db.models.finance import FarmerPayment, PaymentStatus
 from app.infrastructure.db.models.inbox import InboxNotification
 from app.infrastructure.db.models.notifications import Notification, NotificationStatus
 from app.infrastructure.db.models.operations import (
-    BatchStatus, CollectionBatch, CollectionCorrectionRequest, Collector, LineStatus, MilkCollection, QualityStatus,
+    BatchStatus,
+    CollectionBatch,
+    CollectionCorrectionRequest,
+    Collector,
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
     RequestStatus,
 )
 from app.infrastructure.db.models.user import User
@@ -93,8 +98,8 @@ def kpis(db: Session, cooperative_id: UUID) -> dict:
 RANGES = {"today": 1, "7d": 7, "30d": 30, "3m": 90}
 
 
-def charts(db: Session, cooperative_id: UUID, days: int = 14, start: Optional[datetime.date] = None,
-           end: Optional[datetime.date] = None) -> dict:
+def charts(db: Session, cooperative_id: UUID, days: int = 14, start: datetime.date | None = None,
+           end: datetime.date | None = None) -> dict:
     """Daily trend for `days` days ending today, or for an explicit [start, end] window (both inclusive)."""
     today = datetime.datetime.utcnow().date()
     if start is not None and end is not None:
@@ -230,8 +235,8 @@ def overview(db: Session, coop: Cooperative, role: str) -> dict:
     }
 
 
-def trends(db: Session, cooperative_id: UUID, range: str, date_from: Optional[datetime.date],
-           date_to: Optional[datetime.date]) -> dict:
+def trends(db: Session, cooperative_id: UUID, range: str, date_from: datetime.date | None,
+           date_to: datetime.date | None) -> dict:
     """Collection, farmer and SMS trend per day: today, 7 days, 30 days, 3 months or a custom window of at most
     one year."""
     if range == "custom":

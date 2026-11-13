@@ -14,7 +14,7 @@ The cooperative is ALWAYS the caller's own (from the database). A `cooperative_i
 never used for authorization; one naming another cooperative is rejected.
 """
 import datetime as dt
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -32,9 +32,9 @@ class _Body(BaseModel):
 
 class DeviceRegister(_Body):
     device_identifier: str = Field(..., min_length=8, max_length=64, pattern=r"^[A-Za-z0-9\-]+$")
-    platform: Optional[str] = Field(None, max_length=100)
-    app_version: Optional[str] = Field(None, max_length=50)
-    label: Optional[str] = Field(None, max_length=100)
+    platform: str | None = Field(None, max_length=100)
+    app_version: str | None = Field(None, max_length=50)
+    label: str | None = Field(None, max_length=100)
 
 
 class DeviceSessionToken(_Body):
@@ -43,8 +43,8 @@ class DeviceSessionToken(_Body):
 
 
 class DeviceUpdate(_Body):
-    is_active: Optional[bool] = None
-    label: Optional[str] = Field(None, max_length=100)
+    is_active: bool | None = None
+    label: str | None = Field(None, max_length=100)
 
 
 # ---------------- push ----------------
@@ -54,9 +54,9 @@ class Mutation(_Body):
     entity_type: EntityType
     operation: Operation
     local_id: UUID = Field(..., description="Client id of the record; reused as the server id for creates.")
-    base_version: Optional[int] = Field(None, ge=0, description="sync_version the edit was based on (updates).")
-    base: Optional[dict[str, Any]] = Field(None, description="Field values the edit started from (updates).")
-    client_timestamp: Optional[dt.datetime] = Field(None, description="Device clock; metadata only.")
+    base_version: int | None = Field(None, ge=0, description="sync_version the edit was based on (updates).")
+    base: dict[str, Any] | None = Field(None, description="Field values the edit started from (updates).")
+    client_timestamp: dt.datetime | None = Field(None, description="Device clock; metadata only.")
     payload: dict[str, Any]
 
 
@@ -75,10 +75,10 @@ class MutationResult(BaseModel):
     entity_type: str
     local_id: UUID
     status: MutationOutcome
-    server_id: Optional[str] = None
-    server_version: Optional[int] = None
-    entity: Optional[dict[str, Any]] = None
-    error: Optional[MutationError] = None
+    server_id: str | None = None
+    server_version: int | None = None
+    entity: dict[str, Any] | None = None
+    error: MutationError | None = None
 
 
 class PushResponse(BaseModel):
@@ -94,7 +94,7 @@ class Change(BaseModel):
     entity_type: str
     entity_id: str
     op: Literal["upsert", "delete"]
-    data: Optional[dict[str, Any]] = None
+    data: dict[str, Any] | None = None
 
 
 class PullResponse(BaseModel):
@@ -120,20 +120,20 @@ class SensorCreate(_Body):
     sensor_identifier: str = Field(..., min_length=1, max_length=128)
     sensor_type: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Z0-9_]+$")
     transport: SensorTransportIn
-    protocol: Optional[str] = Field(None, max_length=80)
-    bluetooth_device_id: Optional[str] = Field(None, max_length=255)
-    bluetooth_name: Optional[str] = Field(None, max_length=255)
-    firmware_version: Optional[str] = Field(None, max_length=50)
-    calibration: Optional[dict[str, Any]] = None
-    cooler_id: Optional[UUID] = None
+    protocol: str | None = Field(None, max_length=80)
+    bluetooth_device_id: str | None = Field(None, max_length=255)
+    bluetooth_name: str | None = Field(None, max_length=255)
+    firmware_version: str | None = Field(None, max_length=50)
+    calibration: dict[str, Any] | None = None
+    cooler_id: UUID | None = None
 
 
 class SensorUpdate(_Body):
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    protocol: Optional[str] = Field(None, max_length=80)
-    calibration: Optional[dict[str, Any]] = None
-    cooler_id: Optional[UUID] = None   # null unbinds
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=2, max_length=255)
+    protocol: str | None = Field(None, max_length=80)
+    calibration: dict[str, Any] | None = None
+    cooler_id: UUID | None = None   # null unbinds
+    is_active: bool | None = None
 
 
 ReadingSourceIn = Literal["BLUETOOTH", "NATIVE_BRIDGE", "MANUAL", "SIMULATED"]
@@ -141,21 +141,21 @@ ReadingSourceIn = Literal["BLUETOOTH", "NATIVE_BRIDGE", "MANUAL", "SIMULATED"]
 
 class CoolerReadingIn(_Body):
     cooler_id: UUID
-    sensor_id: Optional[UUID] = None
-    volume_litres: Optional[float] = Field(None, ge=0, le=1_000_000)
-    temperature_celsius: Optional[float] = Field(None, ge=-30, le=80)
-    battery_percent: Optional[int] = Field(None, ge=0, le=100)
-    signal_strength: Optional[int] = Field(None, ge=-150, le=20)
+    sensor_id: UUID | None = None
+    volume_litres: float | None = Field(None, ge=0, le=1_000_000)
+    temperature_celsius: float | None = Field(None, ge=-30, le=80)
+    battery_percent: int | None = Field(None, ge=0, le=100)
+    signal_strength: int | None = Field(None, ge=-150, le=20)
     measured_at: dt.datetime
     source: ReadingSourceIn
-    measurement_id: Optional[str] = Field(None, max_length=120, description="Sensor's own event id, if any.")
-    sequence: Optional[int] = Field(None, ge=0)
+    measurement_id: str | None = Field(None, max_length=120, description="Sensor's own event id, if any.")
+    sequence: int | None = Field(None, ge=0)
 
     @field_validator("measured_at")
     @classmethod
     def naive_utc(cls, v: dt.datetime) -> dt.datetime:
         if v.tzinfo is not None:
-            v = v.astimezone(dt.timezone.utc).replace(tzinfo=None)
+            v = v.astimezone(dt.UTC).replace(tzinfo=None)
         return v
 
 
@@ -168,5 +168,5 @@ class SensorEventIn(_Body):
     @classmethod
     def naive_utc(cls, v: dt.datetime) -> dt.datetime:
         if v.tzinfo is not None:
-            v = v.astimezone(dt.timezone.utc).replace(tzinfo=None)
+            v = v.astimezone(dt.UTC).replace(tzinfo=None)
         return v

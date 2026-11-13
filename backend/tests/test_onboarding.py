@@ -2,10 +2,10 @@ import uuid
 
 import pytest
 
+from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import CooperativeApplication
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.user import User
-from app.domain.schemas.auth import UserRole
 from tests.conftest import login
 
 REGISTER = "/api/v1/auth/register"
@@ -91,10 +91,10 @@ def test_register_then_approve_lets_the_admin_log_in(client, session, superadmin
 ])
 def test_duplicate_registration_number_or_kra_pin_is_409_while_pending(client, duplicate):
     assert client.post(REGISTER, json=application()).status_code == 201
-    other_person = dict(
-        cooperative_name="Another Co-op", admin_email="other@example.com", admin_phone="0799000111",
-        admin_id_number="12345678", registration_number="CS/99999", kra_pin="A123456789B",
-    )
+    other_person = {
+        "cooperative_name": "Another Co-op", "admin_email": "other@example.com", "admin_phone": "0799000111",
+        "admin_id_number": "12345678", "registration_number": "CS/99999", "kra_pin": "A123456789B",
+    }
     other_person.update(duplicate)
     res = client.post(REGISTER, json=application(**other_person))
     assert res.status_code == 409, res.text
@@ -106,10 +106,10 @@ def test_duplicate_of_registered_cooperative_is_409(client, superadmin_headers, 
     app_id = client.post(REGISTER, json=application()).json()["application_id"]
     assert decide(client, superadmin_headers, app_id, "APPROVE").status_code == 200
 
-    fresh = dict(
-        cooperative_name="Different Name", admin_email="new@example.com", admin_phone="0799000111",
-        admin_id_number="12345678", registration_number="CS/99999", kra_pin="A123456789B",
-    )
+    fresh = {
+        "cooperative_name": "Different Name", "admin_email": "new@example.com", "admin_phone": "0799000111",
+        "admin_id_number": "12345678", "registration_number": "CS/99999", "kra_pin": "A123456789B",
+    }
     fresh[field] = application()[field]
     res = client.post(REGISTER, json=application(**fresh))
     assert res.status_code == 409

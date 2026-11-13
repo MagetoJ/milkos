@@ -5,16 +5,12 @@ Revises: a74ed1a07e42
 Create Date: 2026-11-12 12:23:45.412492
 
 """
-from typing import Sequence, Union
-
-from alembic import op
-import sqlalchemy as sa
-
+from collections.abc import Sequence
 
 revision: str = '7bf62a1bc3c1'
-down_revision: Union[str, Sequence[str], None] = 'a74ed1a07e42'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'a74ed1a07e42'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

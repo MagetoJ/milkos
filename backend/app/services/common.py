@@ -1,7 +1,6 @@
 """Helpers shared by the services."""
 import datetime
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -19,15 +18,15 @@ class SyncOrigin:
     `entity_id` is the id the device generated, reused as the server id so later offline records that
     reference it (a collection for a farmer created offline) resolve without a mapping step.
     """
-    entity_id: Optional[UUID] = None
-    device_id: Optional[UUID] = None
-    client_recorded_at: Optional[datetime.datetime] = None
+    entity_id: UUID | None = None
+    device_id: UUID | None = None
+    client_recorded_at: datetime.datetime | None = None
 
     def id_kwargs(self) -> dict:
         return {"id": self.entity_id} if self.entity_id else {}
 
 
-def target_cooperative(db: Session, principal: Principal, requested: Optional[UUID]) -> Cooperative:
+def target_cooperative(db: Session, principal: Principal, requested: UUID | None) -> Cooperative:
     """The cooperative a new record will belong to.
 
     Superadmin: must name one (it must exist). Everyone else: always their own; naming another is refused.
@@ -43,7 +42,7 @@ def target_cooperative(db: Session, principal: Principal, requested: Optional[UU
     return principal.cooperative
 
 
-def check_centre(db: Session, cooperative_id: UUID, centre_id: Optional[UUID]) -> Optional[CollectionCentre]:
+def check_centre(db: Session, cooperative_id: UUID, centre_id: UUID | None) -> CollectionCentre | None:
     if centre_id is None:
         return None
     centre = db.get(CollectionCentre, centre_id)

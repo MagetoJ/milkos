@@ -11,7 +11,6 @@ database, never from the request.
   FARMER                 not offline-enabled
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.orm import Session
@@ -22,11 +21,18 @@ from app.api.dependencies.tasks import get_tasks
 from app.core.utils import iso
 from app.domain.exceptions import NotFound, PermissionDenied
 from app.domain.interfaces import TaskDispatcher
-from app.domain.schemas.sync import ConflictResolution, PullResponse, PushRequest, PushResponse
+from app.domain.schemas.sync import (
+    ConflictResolution,
+    PullResponse,
+    PushRequest,
+    PushResponse,
+)
 from app.infrastructure.db.models.sync import DeviceSession
 from app.services import background
 from app.services.principal import Principal
-from app.services.sync import devices, pull as pull_service, push as push_service
+from app.services.sync import devices
+from app.services.sync import pull as pull_service
+from app.services.sync import push as push_service
 
 router = APIRouter(prefix="/api/v1/sync", tags=["Offline sync"])
 
@@ -38,7 +44,7 @@ class SyncCaller:
 
 def sync_caller(
     principal: Principal = Depends(load_principal),
-    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
+    x_device_id: str | None = Header(None, alias="X-Device-Id"),
     db: Session = Depends(get_db),
 ) -> SyncCaller:
     device, session = devices.authorize_request(db, principal, x_device_id)

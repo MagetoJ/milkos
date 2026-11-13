@@ -1,8 +1,10 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, Enum
-from sqlalchemy.dialects.postgresql import UUID
+from datetime import UTC, datetime
+
 from app.db.base_class import Base
+from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
+from sqlalchemy.dialects.postgresql import UUID
+
 
 class MilkCollection(Base):
     __tablename__ = "milk_collections"
@@ -22,8 +24,8 @@ class MilkCollection(Base):
     collected_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
         index=True,
     )

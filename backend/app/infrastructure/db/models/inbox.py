@@ -7,7 +7,16 @@ platform staff only. Read state is per user in inbox_reads.
 import datetime
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 
 from app.infrastructure.db.database import Base
 

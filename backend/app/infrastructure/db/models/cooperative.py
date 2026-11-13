@@ -1,7 +1,18 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String, Text, Uuid, text, true
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+    text,
+    true,
+)
 from sqlalchemy.orm import relationship
 
 from app.infrastructure.db.database import Base

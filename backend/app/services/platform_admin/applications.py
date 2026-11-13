@@ -1,7 +1,6 @@
 """Cooperative onboarding applications: the review queue and approve/reject decisions."""
 import logging
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -21,14 +20,14 @@ from app.services.principal import Principal
 logger = logging.getLogger("milkflow.superadmin")
 
 
-def require_reason(action: str, reason: Optional[str]) -> Optional[str]:
+def require_reason(action: str, reason: str | None) -> str | None:
     cleaned = (reason or "").strip()
     if action == "REJECT" and len(cleaned) < 5:
         raise ValidationFailed("Give a reason (at least 5 characters) when rejecting.")
     return cleaned or None
 
 
-def applicant_account(db: Session, record: CooperativeApplication) -> Optional[User]:
+def applicant_account(db: Session, record: CooperativeApplication) -> User | None:
     """The COOP_ADMIN user created at registration. Applications from before admin_user_id existed fall back to email."""
     if record.admin_user_id:
         return db.get(User, record.admin_user_id)
@@ -70,7 +69,7 @@ def pending(db: Session) -> list[dict]:
     return [application_json(a) for a in rows]
 
 
-def list_page(db: Session, status: Optional[str], search: Optional[str], params: PageParams) -> dict:
+def list_page(db: Session, status: str | None, search: str | None, params: PageParams) -> dict:
     query = db.query(CooperativeApplication)
     if status:
         query = query.filter(CooperativeApplication.status == status)
@@ -89,7 +88,7 @@ def list_page(db: Session, status: Optional[str], search: Optional[str], params:
     return paginate(query, params, application_json)
 
 
-def decide(db: Session, admin: Principal, app_id: str, action: str, reason: Optional[str]) -> tuple[CooperativeApplication, Optional[Cooperative]]:
+def decide(db: Session, admin: Principal, app_id: str, action: str, reason: str | None) -> tuple[CooperativeApplication, Cooperative | None]:
     """Approve (creates the cooperative and activates its admin) or reject (frees the applicant's details). Commits,
     then tells the applicant."""
     reason = require_reason(action, reason)

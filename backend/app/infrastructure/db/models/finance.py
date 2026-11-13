@@ -8,8 +8,21 @@ import datetime
 import uuid
 
 from sqlalchemy import (
-    JSON, Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Uuid,
-    text, true,
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+    text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 

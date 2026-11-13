@@ -22,11 +22,11 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 # Fast password hashing for tests only (production keeps bcrypt's default cost).
 os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
-import pytest  # noqa: E402
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
+import pytest
+from alembic import command
+from alembic.config import Config
 
-from app.infrastructure.db import database as db  # noqa: E402
+from app.infrastructure.db import database as db
 
 assert db.engine.dialect.name == "sqlite" or (_PG and db.engine.url.host in ("127.0.0.1", "localhost")), \
     "tests must never run against a real database"
@@ -63,6 +63,7 @@ def session():
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
+
     from app.main import app
 
     with TestClient(app) as c:
@@ -76,8 +77,8 @@ SUPERADMIN_PASSWORD = "SuperAdmin#2026"
 @pytest.fixture
 def superadmin_headers(client, session):
     from app.core.security import hash_password
-    from app.infrastructure.db.models.user import User
     from app.domain.schemas.auth import UserRole
+    from app.infrastructure.db.models.user import User
 
     session.add(User(
         email=SUPERADMIN_EMAIL, password_hash=hash_password(SUPERADMIN_PASSWORD), full_name="Root",

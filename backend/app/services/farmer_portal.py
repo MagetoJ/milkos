@@ -8,7 +8,6 @@ kept forever). One not yet paid shows the cooperative's price for its date as an
 """
 import datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -19,10 +18,20 @@ from app.infrastructure.db.models.admin import Cooler
 from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
-from app.infrastructure.db.models.finance import FarmerPayment, FarmerPaymentLine, MilkPrice, PaymentStatus, PriceStatus
+from app.infrastructure.db.models.finance import (
+    FarmerPayment,
+    FarmerPaymentLine,
+    MilkPrice,
+    PaymentStatus,
+    PriceStatus,
+)
 from app.infrastructure.db.models.notifications import Notification
 from app.infrastructure.db.models.operations import (
-    CollectionBatch, Collector, LineStatus, MilkCollection, QualityStatus,
+    CollectionBatch,
+    Collector,
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
 )
 from app.infrastructure.db.models.user import User
 from app.services import inbox, pricing
@@ -31,7 +40,7 @@ from app.services.principal import Principal
 RANGES = {"today": 0, "7d": 6, "30d": 29, "3m": 89}
 
 
-def _price_lookup(db: Session, farmer: Farmer, lines: list[MilkCollection]) -> dict[UUID, tuple[Optional[Decimal], bool]]:
+def _price_lookup(db: Session, farmer: Farmer, lines: list[MilkCollection]) -> dict[UUID, tuple[Decimal | None, bool]]:
     """collection id -> (price per KG, is_estimate)."""
     if not lines:
         return {}
@@ -64,7 +73,7 @@ def _receipts(db: Session, ids: list[UUID]) -> dict[UUID, Notification]:
     return {n.collection_id: n for n in rows}
 
 
-def _line_json(line: MilkCollection, price: tuple, receipt: Optional[Notification], names: dict) -> dict:
+def _line_json(line: MilkCollection, price: tuple, receipt: Notification | None, names: dict) -> dict:
     price_per_kg, estimate = price if price else (None, True)
     payable = line.quality_status == QualityStatus.ACCEPTED and line.record_status == LineStatus.ACTIVE
     amount = (Decimal(line.quantity_kg) * Decimal(price_per_kg)).quantize(Decimal("0.01")) if price_per_kg is not None and payable else None
@@ -110,8 +119,8 @@ def _serialize(db: Session, farmer: Farmer, lines: list[MilkCollection]) -> list
     return [_line_json(l, prices.get(l.id), receipts.get(l.id), names) for l in lines]
 
 
-def dashboard(db: Session, principal: Principal, range: str, date_from: Optional[datetime.date],
-              date_to: Optional[datetime.date]) -> dict:
+def dashboard(db: Session, principal: Principal, range: str, date_from: datetime.date | None,
+              date_to: datetime.date | None) -> dict:
     farmer = principal.farmer_profile()
     today = datetime.date.today()
     if range == "custom":
@@ -176,7 +185,7 @@ def dashboard(db: Session, principal: Principal, range: str, date_from: Optional
 
 
 def collections_page(db: Session, principal: Principal, page: int, page_size: int,
-                     date_from: Optional[datetime.date], date_to: Optional[datetime.date]) -> dict:
+                     date_from: datetime.date | None, date_to: datetime.date | None) -> dict:
     farmer = principal.farmer_profile()
     query = db.query(MilkCollection).filter(MilkCollection.farmer_id == farmer.id)
     if date_from:

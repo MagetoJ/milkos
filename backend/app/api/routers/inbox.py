@@ -1,5 +1,4 @@
 """In-app notification center: /api/v1/inbox. What a caller sees is decided by services/inbox.visible."""
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -17,13 +16,13 @@ router = APIRouter(prefix="/api/v1/inbox", tags=["Notification center"])
 
 
 class MarkRead(BaseModel):
-    ids: Optional[list[UUID]] = Field(None, max_length=500, description="Leave out to mark everything read.")
+    ids: list[UUID] | None = Field(None, max_length=500, description="Leave out to mark everything read.")
 
 
 @router.get("")
 def list_inbox(
     unread_only: bool = False,
-    category: Optional[str] = Query(None, pattern="^(COOLER|SMS|COLLECTION|PAYMENT|SYNC|SYSTEM)$"),
+    category: str | None = Query(None, pattern="^(COOLER|SMS|COLLECTION|PAYMENT|SYNC|SYSTEM)$"),
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(load_principal),
     db: Session = Depends(get_db),

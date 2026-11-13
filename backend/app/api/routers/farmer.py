@@ -5,7 +5,6 @@ no endpoint takes a farmer, cooperative or collection id from another farmer. Re
 collections, prices, payments, their member number or their cooperative. See app.services.farmer_portal.
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -23,7 +22,7 @@ farmer_only = require_roles(UserRole.FARMER)
 @router.get("/dashboard")
 def dashboard(
     range: str = Query("7d", pattern="^(today|7d|30d|3m|custom)$"),
-    date_from: Optional[datetime.date] = None, date_to: Optional[datetime.date] = None,
+    date_from: datetime.date | None = None, date_to: datetime.date | None = None,
     principal: Principal = Depends(farmer_only), db: Session = Depends(get_db),
 ):
     return farmer_portal.dashboard(db, principal, range, date_from, date_to)
@@ -32,7 +31,7 @@ def dashboard(
 @router.get("/collections")
 def my_collections(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
-    date_from: Optional[datetime.date] = None, date_to: Optional[datetime.date] = None,
+    date_from: datetime.date | None = None, date_to: datetime.date | None = None,
     principal: Principal = Depends(farmer_only), db: Session = Depends(get_db),
 ):
     return farmer_portal.collections_page(db, principal, page, page_size, date_from, date_to)

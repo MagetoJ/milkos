@@ -5,25 +5,41 @@ Bodies may carry `cooperative_id`. Only a superadmin may choose it; for everyone
 use the caller's own cooperative and refuse (403) a different one. See app.services.principal.
 """
 import datetime as dt
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from app.core.validation import (
-    clean_text, normalize_county, normalize_email, normalize_kra_pin, normalize_phone, normalize_registration_number,
+    clean_text,
+    normalize_county,
+    normalize_email,
+    normalize_kra_pin,
+    normalize_phone,
+    normalize_registration_number,
     pydantic_field,
 )
 from app.domain.schemas.auth import UserRole
-from app.domain.schemas.cooperative_module import _blank_to_none, _optional, normalize_code
+from app.domain.schemas.cooperative_module import (
+    _blank_to_none,
+    _optional,
+    normalize_code,
+)
 
 
 class _Body(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
-def _clean_optional(value: Optional[str]) -> Optional[str]:
+def _clean_optional(value: str | None) -> str | None:
     return clean_text(value) if value is not None else None
 
 
@@ -32,7 +48,7 @@ ActiveStatus = Literal["ACTIVE", "INACTIVE"]
 
 class StatusChange(_Body):
     status: ActiveStatus
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 # ---------------- cooperatives ----------------
@@ -53,11 +69,11 @@ class CooperativeCreate(_Body):
     registration_number: str
     kra_pin: str
     county: str
-    location: Optional[str] = Field(None, max_length=255)
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    estimated_daily_liters: Optional[float] = Field(None, gt=0, le=10_000_000)
-    admin: Optional[CooperativeAdminAccount] = None  # creates the cooperative's first COOP_ADMIN
+    location: str | None = Field(None, max_length=255)
+    contact_email: EmailStr | None = None
+    contact_phone: str | None = None
+    estimated_daily_liters: float | None = Field(None, gt=0, le=10_000_000)
+    admin: CooperativeAdminAccount | None = None  # creates the cooperative's first COOP_ADMIN
 
     _name = field_validator("name")(clean_text)
     _reg = field_validator("registration_number")(pydantic_field(normalize_registration_number, "registration_number"))
@@ -69,14 +85,14 @@ class CooperativeCreate(_Body):
 
 
 class CooperativeUpdate(_Body):
-    name: Optional[str] = Field(None, min_length=3, max_length=255)
-    registration_number: Optional[str] = None
-    kra_pin: Optional[str] = None
-    county: Optional[str] = None
-    location: Optional[str] = Field(None, max_length=255)
-    contact_email: Optional[EmailStr] = None
-    contact_phone: Optional[str] = None
-    estimated_daily_liters: Optional[float] = Field(None, gt=0, le=10_000_000)
+    name: str | None = Field(None, min_length=3, max_length=255)
+    registration_number: str | None = None
+    kra_pin: str | None = None
+    county: str | None = None
+    location: str | None = Field(None, max_length=255)
+    contact_email: EmailStr | None = None
+    contact_phone: str | None = None
+    estimated_daily_liters: float | None = Field(None, gt=0, le=10_000_000)
 
     _name = field_validator("name")(_clean_optional)
     _reg = field_validator("registration_number")(_optional(normalize_registration_number, "registration_number"))
@@ -89,7 +105,7 @@ class CooperativeUpdate(_Body):
 
 class CooperativeStatusChange(_Body):
     status: Literal["ACTIVE", "SUSPENDED"]
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
     @model_validator(mode="after")
     def reason_when_suspending(self):
@@ -114,11 +130,11 @@ class SmsCreditAdjustment(_Body):
 
 class UserCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: Optional[EmailStr] = None        # required for SUPER_ADMIN, COOP_ADMIN and MANAGER
+    email: EmailStr | None = None        # required for SUPER_ADMIN, COOP_ADMIN and MANAGER
     phone: str
     role: UserRole
-    cooperative_id: Optional[UUID] = None   # required for every role except SUPER_ADMIN
-    farmer_id: Optional[UUID] = None        # FARMER accounts are linked to an existing farmer record
+    cooperative_id: UUID | None = None   # required for every role except SUPER_ADMIN
+    farmer_id: UUID | None = None        # FARMER accounts are linked to an existing farmer record
     # No password: the person sets their own from the SMS activation link (services/accounts).
 
     _name = field_validator("full_name")(clean_text)
@@ -127,11 +143,11 @@ class UserCreate(_Body):
 
 
 class UserUpdate(_Body):
-    full_name: Optional[str] = Field(None, min_length=3, max_length=255)
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    role: Optional[UserRole] = None
-    cooperative_id: Optional[UUID] = None
+    full_name: str | None = Field(None, min_length=3, max_length=255)
+    email: EmailStr | None = None
+    phone: str | None = None
+    role: UserRole | None = None
+    cooperative_id: UUID | None = None
 
     _name = field_validator("full_name")(_clean_optional)
     _email = field_validator("email", mode="before")(lambda v: normalize_email(v) if isinstance(v, str) else v)
@@ -140,26 +156,26 @@ class UserUpdate(_Body):
 
 class UserStatusChange(_Body):
     is_active: bool
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class AccountStatusChange(_Body):
     status: Literal["ACTIVE", "SUSPENDED", "DISABLED"]
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 # ---------------- collectors ----------------
 
 class CollectorCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: Optional[EmailStr] = None  # collectors may sign in with their phone number alone
+    email: EmailStr | None = None  # collectors may sign in with their phone number alone
     phone: str
     # No password: the person sets their own from the SMS activation link (services/accounts).
-    cooperative_id: Optional[UUID] = None
-    collector_number: Optional[str] = None  # generated (COL-001, ...) when left out
-    assigned_area: Optional[str] = Field(None, max_length=255)
-    centre_id: Optional[UUID] = None
-    cooler_id: Optional[UUID] = None
+    cooperative_id: UUID | None = None
+    collector_number: str | None = None  # generated (COL-001, ...) when left out
+    assigned_area: str | None = Field(None, max_length=255)
+    centre_id: UUID | None = None
+    cooler_id: UUID | None = None
 
     _name = field_validator("full_name")(clean_text)
     _email = field_validator("email", mode="before")(lambda v: normalize_email(v) or None if isinstance(v, str) else v)
@@ -169,13 +185,13 @@ class CollectorCreate(_Body):
 
 
 class CollectorUpdate(_Body):
-    full_name: Optional[str] = Field(None, min_length=3, max_length=255)
-    phone: Optional[str] = None
-    collector_number: Optional[str] = None
-    assigned_area: Optional[str] = Field(None, max_length=255)
-    centre_id: Optional[UUID] = None
-    cooler_id: Optional[UUID] = None
-    status: Optional[ActiveStatus] = None
+    full_name: str | None = Field(None, min_length=3, max_length=255)
+    phone: str | None = None
+    collector_number: str | None = None
+    assigned_area: str | None = Field(None, max_length=255)
+    centre_id: UUID | None = None
+    cooler_id: UUID | None = None
+    status: ActiveStatus | None = None
 
     _name = field_validator("full_name")(_clean_optional)
     _phone = field_validator("phone")(_optional(normalize_phone, "phone"))
@@ -187,24 +203,24 @@ class CollectorUpdate(_Body):
 
 class _CoolerAlerts(_Body):
     """Who is in charge and when to alert (services/cooler_alerts.py). Empty threshold = alert off."""
-    manager_user_id: Optional[UUID] = None
-    low_volume_alert_litres: Optional[float] = Field(None, ge=0, le=1_000_000)
-    high_volume_alert_litres: Optional[float] = Field(None, ge=0, le=1_000_000)
-    min_temperature_c: Optional[float] = Field(None, ge=-30, le=80)
-    max_temperature_c: Optional[float] = Field(None, ge=-30, le=80)
-    stale_after_minutes: Optional[int] = Field(None, ge=5, le=10_080)
-    low_battery_percent: Optional[int] = Field(None, ge=1, le=99)
-    alerts_enabled: Optional[bool] = None
+    manager_user_id: UUID | None = None
+    low_volume_alert_litres: float | None = Field(None, ge=0, le=1_000_000)
+    high_volume_alert_litres: float | None = Field(None, ge=0, le=1_000_000)
+    min_temperature_c: float | None = Field(None, ge=-30, le=80)
+    max_temperature_c: float | None = Field(None, ge=-30, le=80)
+    stale_after_minutes: int | None = Field(None, ge=5, le=10_080)
+    low_battery_percent: int | None = Field(None, ge=1, le=99)
+    alerts_enabled: bool | None = None
 
 
 class CoolerCreate(_CoolerAlerts):
     name: str = Field(..., min_length=2, max_length=255)
-    code: Optional[str] = None  # generated (CLR-001, ...) when left out
-    cooperative_id: Optional[UUID] = None
-    centre_id: Optional[UUID] = None
-    location: Optional[str] = Field(None, max_length=255)
-    capacity_litres: Optional[float] = Field(None, gt=0, le=1_000_000)
-    scale_device_id: Optional[str] = Field(None, max_length=255)
+    code: str | None = None  # generated (CLR-001, ...) when left out
+    cooperative_id: UUID | None = None
+    centre_id: UUID | None = None
+    location: str | None = Field(None, max_length=255)
+    capacity_litres: float | None = Field(None, gt=0, le=1_000_000)
+    scale_device_id: str | None = Field(None, max_length=255)
     is_operational: bool = True
 
     _name = field_validator("name")(clean_text)
@@ -213,15 +229,15 @@ class CoolerCreate(_CoolerAlerts):
 
 
 class CoolerUpdate(_CoolerAlerts):
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    code: Optional[str] = None
-    centre_id: Optional[UUID] = None
-    location: Optional[str] = Field(None, max_length=255)
-    capacity_litres: Optional[float] = Field(None, gt=0, le=1_000_000)
-    scale_device_id: Optional[str] = Field(None, max_length=255)
-    is_operational: Optional[bool] = None
-    status: Optional[ActiveStatus] = None
-    last_temperature_c: Optional[float] = Field(None, ge=-30, le=60)
+    name: str | None = Field(None, min_length=2, max_length=255)
+    code: str | None = None
+    centre_id: UUID | None = None
+    location: str | None = Field(None, max_length=255)
+    capacity_litres: float | None = Field(None, gt=0, le=1_000_000)
+    scale_device_id: str | None = Field(None, max_length=255)
+    is_operational: bool | None = None
+    status: ActiveStatus | None = None
+    last_temperature_c: float | None = Field(None, ge=-30, le=60)
 
     _name = field_validator("name")(_clean_optional)
     _code = field_validator("code")(_optional(normalize_code, "code"))
@@ -235,38 +251,38 @@ QualityStatusIn = Literal["ACCEPTED", "REJECTED", "PENDING"]
 
 class CollectionCreate(_Body):
     farmer_id: UUID
-    cooperative_id: Optional[UUID] = None
-    collector_id: Optional[UUID] = None  # a collector always records under their own profile
-    cooler_id: Optional[UUID] = None
-    collection_date: Optional[dt.date] = None  # defaults to today (UTC)
-    collection_time: Optional[dt.time] = None  # defaults to now (UTC)
+    cooperative_id: UUID | None = None
+    collector_id: UUID | None = None  # a collector always records under their own profile
+    cooler_id: UUID | None = None
+    collection_date: dt.date | None = None  # defaults to today (UTC)
+    collection_time: dt.time | None = None  # defaults to now (UTC)
     quantity_litres: float = Field(..., gt=0, le=10_000)
-    fat_percentage: Optional[float] = Field(None, ge=0, le=20)
-    snf_percentage: Optional[float] = Field(None, ge=0, le=20)
-    temperature_c: Optional[float] = Field(None, ge=-5, le=60)
-    quality_status: Optional[QualityStatusIn] = None
-    rejection_reason: Optional[str] = Field(None, max_length=500)
-    notes: Optional[str] = Field(None, max_length=1000)
+    fat_percentage: float | None = Field(None, ge=0, le=20)
+    snf_percentage: float | None = Field(None, ge=0, le=20)
+    temperature_c: float | None = Field(None, ge=-5, le=60)
+    quality_status: QualityStatusIn | None = None
+    rejection_reason: str | None = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=1000)
 
     _text = field_validator("rejection_reason", "notes")(_blank_to_none)
 
     @field_validator("collection_date")
     @classmethod
-    def not_in_future(cls, v: Optional[dt.date]) -> Optional[dt.date]:
+    def not_in_future(cls, v: dt.date | None) -> dt.date | None:
         if v is not None and v > dt.datetime.utcnow().date() + dt.timedelta(days=1):
             raise PydanticCustomError("collection_date", "A collection can't be dated in the future.")
         return v
 
 
 class CollectionUpdate(_Body):
-    cooler_id: Optional[UUID] = None
-    quantity_litres: Optional[float] = Field(None, gt=0, le=10_000)
-    fat_percentage: Optional[float] = Field(None, ge=0, le=20)
-    snf_percentage: Optional[float] = Field(None, ge=0, le=20)
-    temperature_c: Optional[float] = Field(None, ge=-5, le=60)
-    quality_status: Optional[QualityStatusIn] = None
-    rejection_reason: Optional[str] = Field(None, max_length=500)
-    notes: Optional[str] = Field(None, max_length=1000)
+    cooler_id: UUID | None = None
+    quantity_litres: float | None = Field(None, gt=0, le=10_000)
+    fat_percentage: float | None = Field(None, ge=0, le=20)
+    snf_percentage: float | None = Field(None, ge=0, le=20)
+    temperature_c: float | None = Field(None, ge=-5, le=60)
+    quality_status: QualityStatusIn | None = None
+    rejection_reason: str | None = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=1000)
 
     _text = field_validator("rejection_reason", "notes")(_blank_to_none)
 
@@ -275,13 +291,13 @@ class CollectionUpdate(_Body):
 
 class PaymentDecision(_Body):
     action: Literal["VERIFY", "REJECT"]
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class SmsTopUpCreate(_Body):
-    package_id: Optional[UUID] = None
-    credits: Optional[int] = Field(None, gt=0, le=10_000_000)
-    amount_kes: Optional[float] = Field(None, gt=0, le=100_000_000)
+    package_id: UUID | None = None
+    credits: int | None = Field(None, gt=0, le=10_000_000)
+    amount_kes: float | None = Field(None, gt=0, le=100_000_000)
     mpesa_reference: str = Field(..., min_length=8, max_length=20)
 
     @field_validator("mpesa_reference")
@@ -301,10 +317,10 @@ class SmsPackageCreate(_Body):
 
 
 class SmsPackageUpdate(_Body):
-    name: Optional[str] = Field(None, min_length=2, max_length=100)
-    credits_amount: Optional[int] = Field(None, gt=0, le=10_000_000)
-    price_kes: Optional[float] = Field(None, gt=0, le=100_000_000)
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=2, max_length=100)
+    credits_amount: int | None = Field(None, gt=0, le=10_000_000)
+    price_kes: float | None = Field(None, gt=0, le=100_000_000)
+    is_active: bool | None = None
 
 
 # ---------------- settings ----------------

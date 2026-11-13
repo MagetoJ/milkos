@@ -1,14 +1,14 @@
 """The payout gateway contract (M-Pesa B2C, bank transfer...). services/farmer_payments.py depends only on this."""
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 @dataclass(frozen=True)
 class PayoutResult:
     accepted: bool                         # the provider took the instruction (NOT that the farmer was paid)
-    provider_reference: Optional[str] = None
-    error: Optional[str] = None
+    provider_reference: str | None = None
+    error: str | None = None
 
 
 class PaymentGatewayInterface(Protocol):

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -8,7 +7,10 @@ from app.api.dependencies.db import get_db
 from app.api.dependencies.pagination import page_params
 from app.core.utils import parse_uuid
 from app.domain.schemas.platform import (
-    CooperativeCreate, CooperativeStatusChange, CooperativeUpdate, SmsCreditAdjustment,
+    CooperativeCreate,
+    CooperativeStatusChange,
+    CooperativeUpdate,
+    SmsCreditAdjustment,
 )
 from app.infrastructure.db.pagination import PageParams
 from app.services import cooperatives
@@ -20,9 +22,9 @@ router = APIRouter(prefix="/cooperatives")
 
 @router.get("")
 def list_cooperatives(
-    search: Optional[str] = Query(None, max_length=100),
-    coop_status: Optional[str] = Query(None, alias="status", pattern="^(ACTIVE|SUSPENDED)$"),
-    county: Optional[str] = Query(None, max_length=50),
+    search: str | None = Query(None, max_length=100),
+    coop_status: str | None = Query(None, alias="status", pattern="^(ACTIVE|SUSPENDED)$"),
+    county: str | None = Query(None, max_length=50),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

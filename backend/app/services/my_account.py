@@ -3,7 +3,7 @@
 Every function acts on `principal.user` only; nothing takes a user id, a role or a cooperative from the request.
 Functions that end other sessions return the user so the API layer can give the caller a fresh token.
 """
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -12,7 +12,13 @@ from app.core.permissions import permission_names
 from app.core.security import verify_password
 from app.core.utils import iso
 from app.core.validation import mask_phone_local
-from app.domain.exceptions import Conflict, InvalidRequest, NotFound, PermissionDenied, ValidationFailed
+from app.domain.exceptions import (
+    Conflict,
+    InvalidRequest,
+    NotFound,
+    PermissionDenied,
+    ValidationFailed,
+)
 from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import Cooler
 from app.infrastructure.db.models.centre import CollectionCentre
@@ -28,7 +34,7 @@ from app.services.users import EMAIL_REQUIRED_ROLES as EMAIL_REQUIRED
 NAME_LOCKED = {UserRole.FARMER.value}          # the member register (kept by the cooperative) owns a farmer's name
 
 
-def reauth(user: User, password: Optional[str], field: str = "password") -> None:
+def reauth(user: User, password: str | None, field: str = "password") -> None:
     if not password or not verify_password(password, user.password_hash):
         raise InvalidRequest("Your current password is not right.", loc=["body", field], kind="value_error")
 
@@ -97,8 +103,8 @@ def account_json(db: Session, user: User) -> dict:
     }
 
 
-def update_profile(db: Session, principal: Principal, full_name: Optional[str], email: Optional[str], clear_email: bool,
-                   current_password: Optional[str]) -> User:
+def update_profile(db: Session, principal: Principal, full_name: str | None, email: str | None, clear_email: bool,
+                   current_password: str | None) -> User:
     """Name and email. Changing the email needs the current password. Commits when something changed."""
     user = principal.user
     role = user.role_value
@@ -127,7 +133,7 @@ def update_profile(db: Session, principal: Principal, full_name: Optional[str], 
 
 
 def change_password(db: Session, principal: Principal, current_password: str, new_password: str,
-                    keep_device_identifier: Optional[str]) -> User:
+                    keep_device_identifier: str | None) -> User:
     """Every other session is signed out. Commits."""
     user = principal.user
     reauth(user, current_password, "current_password")
@@ -141,7 +147,7 @@ def change_password(db: Session, principal: Principal, current_password: str, ne
 
 # ---------------- sessions & devices ----------------
 
-def _session_json(s: DeviceSession, d: Device, current_device: Optional[str]) -> dict:
+def _session_json(s: DeviceSession, d: Device, current_device: str | None) -> dict:
     return {
         "id": str(s.id),
         "device_id": str(d.id),
@@ -158,7 +164,7 @@ def _session_json(s: DeviceSession, d: Device, current_device: Optional[str]) ->
     }
 
 
-def list_sessions(db: Session, principal: Principal, current_device: Optional[str]) -> list[dict]:
+def list_sessions(db: Session, principal: Principal, current_device: str | None) -> list[dict]:
     now = accounts.now()
     rows = (
         db.query(DeviceSession, Device)
@@ -170,7 +176,7 @@ def list_sessions(db: Session, principal: Principal, current_device: Optional[st
     return [_session_json(s, d, current_device) for s, d in rows]
 
 
-def revoke_session(db: Session, principal: Principal, session_id: UUID, current_device: Optional[str]) -> bool:
+def revoke_session(db: Session, principal: Principal, session_id: UUID, current_device: str | None) -> bool:
     """Sign one device out. Commits. True when that device is the caller's own (it is now signed out)."""
     user = principal.user
     session = db.get(DeviceSession, session_id)
@@ -184,7 +190,7 @@ def revoke_session(db: Session, principal: Principal, session_id: UUID, current_
     return bool(device and current_device and device.device_identifier == current_device)
 
 
-def revoke_other_sessions(db: Session, principal: Principal, keep_device_identifier: Optional[str]) -> int:
+def revoke_other_sessions(db: Session, principal: Principal, keep_device_identifier: str | None) -> int:
     user = principal.user
     count = accounts.revoke_sessions(db, user, keep_device_identifier=keep_device_identifier)
     security_events.from_principal(db, principal, "SESSIONS_REVOKED", details={"count": count})

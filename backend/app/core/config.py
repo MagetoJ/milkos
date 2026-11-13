@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,15 +26,15 @@ class Settings:
         "DATABASE_URL",
         "postgresql://postgres:postgres@localhost:5432/milkos_db",
     )
-    SECRET_KEY: Optional[str] = os.getenv("SECRET_KEY", "change-this-in-production")
+    SECRET_KEY: str | None = os.getenv("SECRET_KEY", "change-this-in-production")
     BCRYPT_ROUNDS: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     APP_URL: str = os.getenv("APP_URL", "http://localhost:3000").rstrip("/")
     CORS_ORIGINS: list[str] = _cors_origins()
     COOKIE_SECURE: bool = _flag("COOKIE_SECURE")
-    GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
-    GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+    GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
 
 
 # Main settings instance

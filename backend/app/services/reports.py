@@ -1,6 +1,5 @@
 """Collection reports over a date range, for the whole platform or one cooperative."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import and_, case, distinct, func
@@ -15,7 +14,7 @@ from app.infrastructure.db.models.operations import MilkCollection, QualityStatu
 MAX_DAYS = 366
 
 
-def resolve_range(date_from: Optional[datetime.date], date_to: Optional[datetime.date]) -> tuple[datetime.date, datetime.date]:
+def resolve_range(date_from: datetime.date | None, date_to: datetime.date | None) -> tuple[datetime.date, datetime.date]:
     today = datetime.datetime.utcnow().date()
     end = date_to or today
     start = date_from or end - datetime.timedelta(days=29)
@@ -27,7 +26,7 @@ def resolve_range(date_from: Optional[datetime.date], date_to: Optional[datetime
 
 
 def collections_report(
-    db: Session, *, cooperative_id: Optional[UUID], date_from: Optional[datetime.date], date_to: Optional[datetime.date],
+    db: Session, *, cooperative_id: UUID | None, date_from: datetime.date | None, date_to: datetime.date | None,
 ) -> dict:
     start, end = resolve_range(date_from, date_to)
     # Superseded (corrected) and reversed lines never count.

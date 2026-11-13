@@ -25,23 +25,40 @@ from __future__ import annotations
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core import config
-from app.core.security import generate_otp, generate_token, hash_otp, hash_password, hash_token, verify_password
+from app.core.security import (
+    generate_otp,
+    generate_token,
+    hash_otp,
+    hash_password,
+    hash_token,
+    verify_password,
+)
 from app.core.validation import mask_phone_local, normalize_email, normalize_phone
 from app.domain.exceptions import (
-    Conflict, Gone, InvalidRequest, NotFound, PermissionDenied, RateLimited, ValidationFailed,
+    Conflict,
+    Gone,
+    InvalidRequest,
+    NotFound,
+    PermissionDenied,
+    RateLimited,
+    ValidationFailed,
 )
 from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.notifications import Notification, NotificationStatus
 from app.infrastructure.db.models.sync import DeviceSession
 from app.infrastructure.db.models.user import (
-    AccountActivation, AccountStatus, OtpPurpose, PasswordReset, PhoneVerification, User,
+    AccountActivation,
+    AccountStatus,
+    OtpPurpose,
+    PasswordReset,
+    PhoneVerification,
+    User,
 )
 from app.services import email_notices, notifications, security_events, settings
 
@@ -76,12 +93,12 @@ class PendingSms:
     text: str
     user_id: UUID
     kind: str  # ACTIVATION / OTP / RESET / NOTICE
-    email: Optional[dict] = None  # {"subject","text","html"}: a copy sent to the account's email address, if it has one
+    email: dict | None = None  # {"subject","text","html"}: a copy sent to the account's email address, if it has one
 
 
 # ---------------- reading state ----------------
 
-def find_by_identifier(db: Session, identifier: str) -> Optional[User]:
+def find_by_identifier(db: Session, identifier: str) -> User | None:
     """An account by email or phone number (any accepted format); None when it doesn't parse or doesn't exist."""
     value = (identifier or "").strip()
     if not value:
@@ -95,7 +112,7 @@ def find_by_identifier(db: Session, identifier: str) -> Optional[User]:
     return db.query(User).filter(User.phone_number == phone).first()
 
 
-def open_activation(db: Session, user_id: UUID) -> Optional[AccountActivation]:
+def open_activation(db: Session, user_id: UUID) -> AccountActivation | None:
     return (
         db.query(AccountActivation)
         .filter(AccountActivation.user_id == user_id, AccountActivation.used_at.is_(None), AccountActivation.revoked_at.is_(None))
@@ -104,7 +121,7 @@ def open_activation(db: Session, user_id: UUID) -> Optional[AccountActivation]:
     )
 
 
-def activation_summary(db: Session, user: User) -> Optional[dict]:
+def activation_summary(db: Session, user: User) -> dict | None:
     """What an administrator sees about a pending account (never the token)."""
     if user.status_value != AccountStatus.PENDING_ACTIVATION:
         return None
@@ -127,7 +144,7 @@ def activation_summary(db: Session, user: User) -> Optional[dict]:
             else sms.status if sms else None
         ),
         "sms_error": sms.error if sms else None,
-        "last_sms_attempt_at": _iso((sms.sent_at or sms.failed_at or sms.created_at)) if sms else None,
+        "last_sms_attempt_at": _iso(sms.sent_at or sms.failed_at or sms.created_at) if sms else None,
         "phone_verified": user.phone_verified_at is not None,
     }
 
@@ -140,7 +157,7 @@ def _iso(value):
 
 # ---------------- SMS ----------------
 
-def _billing(user: User, actor: Optional[User]) -> tuple[Optional[UUID], str]:
+def _billing(user: User, actor: User | None) -> tuple[UUID | None, str]:
     if user.cooperative_id is None:
         return None, "PLATFORM"
     if actor is not None and actor.role_value == UserRole.SUPER_ADMIN.value:
@@ -148,8 +165,8 @@ def _billing(user: User, actor: Optional[User]) -> tuple[Optional[UUID], str]:
     return user.cooperative_id, "COOPERATIVE"
 
 
-def _queue_sms(db: Session, user: User, *, kind: str, ntype: str, text: str, stored: str, phone: Optional[str] = None,
-               actor: Optional[User] = None, severity: str = "INFO") -> PendingSms:
+def _queue_sms(db: Session, user: User, *, kind: str, ntype: str, text: str, stored: str, phone: str | None = None,
+               actor: User | None = None, severity: str = "INFO") -> PendingSms:
     cooperative_id, billed_to = _billing(user, actor)
     n = Notification(
         cooperative_id=cooperative_id, billed_to=billed_to, recipient_user_id=user.id,
@@ -161,7 +178,7 @@ def _queue_sms(db: Session, user: User, *, kind: str, ntype: str, text: str, sto
     return PendingSms(notification_id=n.id, text=text, user_id=user.id, kind=kind)
 
 
-def dispatch(db: Session, pending: Optional[PendingSms], *, ip: Optional[str] = None, ua: Optional[str] = None) -> Optional[Notification]:
+def dispatch(db: Session, pending: PendingSms | None, *, ip: str | None = None, ua: str | None = None) -> Notification | None:
     """Send a queued SMS (call after the transaction that queued it has committed). Records the outcome."""
     if pending is None:
         return None
@@ -189,7 +206,7 @@ def dispatch(db: Session, pending: Optional[PendingSms], *, ip: Optional[str] = 
     return n
 
 
-def sms_outcome(n: Optional[Notification]) -> dict:
+def sms_outcome(n: Notification | None) -> dict:
     """What a caller may be told about a security SMS: whether the provider accepted it (never 'delivered' unless
     a delivery report said so)."""
     if n is None:
@@ -218,7 +235,7 @@ def _revoke_activations(db: Session, user_id: UUID, reason: str) -> None:
         otp.revoked_at = stamp
 
 
-def _issue_activation(db: Session, user: User, actor: Optional[User], reason: str) -> PendingSms:
+def _issue_activation(db: Session, user: User, actor: User | None, reason: str) -> PendingSms:
     _revoke_activations(db, user.id, reason)
     token = generate_token()
     minutes = _activation_minutes(db)
@@ -242,8 +259,8 @@ def _issue_activation(db: Session, user: User, actor: Optional[User], reason: st
     return pending
 
 
-def new_pending_user(*, full_name: str, phone: str, role: UserRole, email: Optional[str] = None,
-                     cooperative_id: Optional[UUID] = None, invited_by: Optional[UUID] = None) -> User:
+def new_pending_user(*, full_name: str, phone: str, role: UserRole, email: str | None = None,
+                     cooperative_id: UUID | None = None, invited_by: UUID | None = None) -> User:
     """A User row in PENDING_ACTIVATION with no password (the person sets it when activating)."""
     user = User(
         email=email or None, password_hash=None, full_name=full_name, phone_number=phone, role=role,
@@ -288,7 +305,7 @@ def resend_activation(db: Session, principal, user: User) -> PendingSms:
     return pending
 
 
-def revoke_invitation(db: Session, principal, user: User, reason: Optional[str]) -> User:
+def revoke_invitation(db: Session, principal, user: User, reason: str | None) -> User:
     _guard_admin_target(principal, user)
     if user.status_value != AccountStatus.PENDING_ACTIVATION:
         raise Conflict("Only an invitation that hasn't been accepted can be revoked.")
@@ -321,7 +338,7 @@ def requires_otp(db: Session) -> bool:
     return bool(settings.get(db, "security.activation_requires_otp"))
 
 
-def inspect_activation(db: Session, token: str, *, ip: Optional[str] = None, ua: Optional[str] = None) -> dict:
+def inspect_activation(db: Session, token: str, *, ip: str | None = None, ua: str | None = None) -> dict:
     """The activation page's view of a token. Account details only for a VALID token; otherwise just the state."""
     row = _token_row(db, AccountActivation, token)
     state = _token_state(row)
@@ -365,8 +382,8 @@ def _valid_activation(db: Session, token: str) -> tuple[AccountActivation, User]
 
 # ---------------- one-time codes ----------------
 
-def _send_otp(db: Session, user: User, purpose: str, phone: str, *, activation_id: Optional[UUID] = None,
-              requested_by: Optional[User] = None, billed_as: Optional[User] = None) -> tuple[PhoneVerification, PendingSms]:
+def _send_otp(db: Session, user: User, purpose: str, phone: str, *, activation_id: UUID | None = None,
+              requested_by: User | None = None, billed_as: User | None = None) -> tuple[PhoneVerification, PendingSms]:
     """Create (or resend) the code for `purpose`, honouring the resend cooldown and send limit."""
     stamp = now()
     query = db.query(PhoneVerification).filter(
@@ -399,7 +416,7 @@ def _send_otp(db: Session, user: User, purpose: str, phone: str, *, activation_i
     return otp, pending
 
 
-def _check_otp(db: Session, otp: Optional[PhoneVerification], code: str, user: User, ip=None, ua=None) -> None:
+def _check_otp(db: Session, otp: PhoneVerification | None, code: str, user: User, ip=None, ua=None) -> None:
     """Verify `code` against `otp`, counting the attempt. Raises with a safe message on failure (and commits the
     attempt count, so guesses can't be retried for free)."""
     stamp = now()
@@ -471,8 +488,8 @@ def complete_activation(db: Session, token: str, password: str, *, ip=None, ua=N
     return user
 
 
-def public_resend_activation(db: Session, *, token: Optional[str] = None, identifier: Optional[str] = None,
-                             ip=None, ua=None) -> Optional[PendingSms]:
+def public_resend_activation(db: Session, *, token: str | None = None, identifier: str | None = None,
+                             ip=None, ua=None) -> PendingSms | None:
     """Self-service 'send me a new link'. Always answered with GENERIC_RESEND, whatever happens here."""
     user = None
     if token:
@@ -503,7 +520,7 @@ def _reset_minutes(db: Session) -> int:
     return int(settings.get(db, "security.password_reset_minutes") or 30)
 
 
-def _issue_reset(db: Session, user: User, actor: Optional[User]) -> PendingSms:
+def _issue_reset(db: Session, user: User, actor: User | None) -> PendingSms:
     stamp = now()
     for row in db.query(PasswordReset).filter(PasswordReset.user_id == user.id, PasswordReset.used_at.is_(None), PasswordReset.revoked_at.is_(None)):
         row.revoked_at = stamp
@@ -524,7 +541,7 @@ def _issue_reset(db: Session, user: User, actor: Optional[User]) -> PendingSms:
     return pending
 
 
-def request_password_reset(db: Session, identifier: str, *, ip=None, ua=None) -> Optional[PendingSms]:
+def request_password_reset(db: Session, identifier: str, *, ip=None, ua=None) -> PendingSms | None:
     """Self-service request. Always answered with GENERIC_RESET."""
     user = find_by_identifier(db, identifier)
     if user is None or user.status_value != AccountStatus.ACTIVE:
@@ -598,7 +615,7 @@ def set_password(db: Session, user: User, password: str) -> None:
         row.revoked_at = now()
 
 
-def revoke_sessions(db: Session, user: User, keep_device_identifier: Optional[str], only_session_id: Optional[UUID] = None) -> int:
+def revoke_sessions(db: Session, user: User, keep_device_identifier: str | None, only_session_id: UUID | None = None) -> int:
     """End sessions: every offline device session of `user` (except the one on `keep_device_identifier`), or just
     `only_session_id`. Also bumps the session epoch, so every access token issued before stops working; devices
     whose session is still valid silently get a fresh token from their device session."""
@@ -651,7 +668,7 @@ def request_phone_verification(db: Session, principal, user: User) -> tuple[Phon
 
 
 def confirm_phone(db: Session, principal, user: User, verification_id: UUID, code: str,
-                  keep_device_identifier: Optional[str]) -> tuple[User, Optional[PendingSms]]:
+                  keep_device_identifier: str | None) -> tuple[User, PendingSms | None]:
     """Step 2: the right code makes the number verified (and, for a change, replaces the old one)."""
     from app.infrastructure.db.models.farmer import Farmer
 
@@ -688,7 +705,7 @@ def confirm_phone(db: Session, principal, user: User, verification_id: UUID, cod
     return user, notice
 
 
-def phone_changed_by_admin(db: Session, principal, user: User, old_phone: str) -> Optional[PendingSms]:
+def phone_changed_by_admin(db: Session, principal, user: User, old_phone: str) -> PendingSms | None:
     """An administrator replaced someone's number: it is unverified until its owner confirms it, and a pending
     invitation is re-sent to the new number (the old link went to the old one). Doesn't commit."""
     if old_phone == user.phone_number:
@@ -711,7 +728,7 @@ STATUS_EVENTS = {
 }
 
 
-def change_status(db: Session, principal, user: User, new_status: str, reason: Optional[str]) -> tuple[User, Optional[PendingSms]]:
+def change_status(db: Session, principal, user: User, new_status: str, reason: str | None) -> tuple[User, PendingSms | None]:
     """Suspend, disable or reactivate. Reactivating an account that never set a password sends a new activation
     link instead (it goes back to PENDING_ACTIVATION). Doesn't touch history. Commits."""
     if new_status not in STATUS_EVENTS:
@@ -745,7 +762,7 @@ def change_status(db: Session, principal, user: User, new_status: str, reason: O
 
 # ---------------- sign-in checks ----------------
 
-def login_block_reason(user: User) -> Optional[tuple[int, str, str]]:
+def login_block_reason(user: User) -> tuple[int, str, str] | None:
     """(http status, code, message) when this account may not sign in, else None."""
     state = user.status_value
     if state == AccountStatus.PENDING_ACTIVATION:

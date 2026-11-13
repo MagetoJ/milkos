@@ -3,7 +3,10 @@ import httpx
 import pytest
 
 from app.infrastructure.gateways import sms
-from app.infrastructure.gateways.sms.providers import AfricasTalkingProvider, WebhookSmsProvider
+from app.infrastructure.gateways.sms.providers import (
+    AfricasTalkingProvider,
+    WebhookSmsProvider,
+)
 
 
 def client(handler):

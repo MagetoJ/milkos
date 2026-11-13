@@ -4,7 +4,7 @@ Notification preferences are a fixed catalog per role (unknown keys are refused)
 notices) are always on, whatever is stored. Work preferences are validated against the caller's own cooperative
 (a default centre or cooler from another cooperative is refused).
 """
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -72,7 +72,7 @@ WORK_DEFAULTS = {
 }
 
 
-def _row(db: Session, user: User) -> Optional[UserPreference]:
+def _row(db: Session, user: User) -> UserPreference | None:
     return db.get(UserPreference, user.id)
 
 
@@ -135,7 +135,7 @@ def _check_work(db: Session, user: User, work: dict[str, Any]) -> dict[str, Any]
     return clean
 
 
-def update(db: Session, user: User, notifications: Optional[dict[str, bool]], work: Optional[dict[str, Any]]) -> dict:
+def update(db: Session, user: User, notifications: dict[str, bool] | None, work: dict[str, Any] | None) -> dict:
     row = _row(db, user)
     if row is None:
         row = UserPreference(user_id=user.id, notifications={}, work={})

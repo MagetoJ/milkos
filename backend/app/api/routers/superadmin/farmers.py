@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -19,10 +18,10 @@ router = APIRouter(prefix="/farmers")
 
 @router.get("")
 def list_farmers(
-    search: Optional[str] = Query(None, max_length=100),
-    cooperative_id: Optional[str] = None,
-    centre_id: Optional[str] = None,
-    farmer_status: Optional[str] = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
+    search: str | None = Query(None, max_length=100),
+    cooperative_id: str | None = None,
+    centre_id: str | None = None,
+    farmer_status: str | None = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

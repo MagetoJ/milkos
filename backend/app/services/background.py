@@ -4,8 +4,9 @@ Callers hand these to a TaskDispatcher (app.domain.interfaces) instead of doing 
 unreachable SMS provider never holds up the request that created the message. Delivery state lives in the
 notifications table, so a task that never runs leaves its messages PENDING for the next dispatch_due.
 """
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -25,12 +26,12 @@ HOUSEKEEPING = "notifications.housekeeping"
 class TaskActor:
     """Who caused the work, rebuilt in the task's own session; enough for audit.record."""
     user: User
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    device: Optional[Device] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    device: Device | None = None
 
 
-def _actor_ref(actor: Optional[Principal]) -> Optional[dict]:
+def _actor_ref(actor: Principal | None) -> dict | None:
     """The caller as plain values (a task may run in another process, so no ORM objects)."""
     if actor is None:
         return None
@@ -42,7 +43,7 @@ def _actor_ref(actor: Optional[Principal]) -> Optional[dict]:
     }
 
 
-def _load_actor(db: Session, ref: Optional[Mapping[str, Any]]) -> Optional[TaskActor]:
+def _load_actor(db: Session, ref: Mapping[str, Any] | None) -> TaskActor | None:
     if not ref:
         return None
     user = db.get(User, UUID(ref["user_id"]))
@@ -52,8 +53,8 @@ def _load_actor(db: Session, ref: Optional[Mapping[str, Any]]) -> Optional[TaskA
     return TaskActor(user=user, ip_address=ref.get("ip_address"), user_agent=ref.get("user_agent"), device=device)
 
 
-def deliver_later(tasks: TaskDispatcher, notification_ids: Iterable[UUID], actor: Optional[Principal] = None,
-                  retry_due_for: Optional[UUID] = None) -> None:
+def deliver_later(tasks: TaskDispatcher, notification_ids: Iterable[UUID], actor: Principal | None = None,
+                  retry_due_for: UUID | None = None) -> None:
     """Send these SMS after the response. With `retry_due_for`, also retry that cooperative's SMS whose retry time
     has come."""
     ids = [str(i) for i in notification_ids]
@@ -65,7 +66,7 @@ def deliver_later(tasks: TaskDispatcher, notification_ids: Iterable[UUID], actor
         })
 
 
-def housekeeping_later(tasks: TaskDispatcher, cooperative_id: Optional[UUID], actor: Optional[Principal] = None) -> None:
+def housekeeping_later(tasks: TaskDispatcher, cooperative_id: UUID | None, actor: Principal | None = None) -> None:
     """Raise stale-reading alerts and retry due SMS for one cooperative."""
     if cooperative_id is not None:
         tasks.enqueue(HOUSEKEEPING, {"cooperative_id": str(cooperative_id), "actor": _actor_ref(actor)})

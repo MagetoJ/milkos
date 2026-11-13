@@ -11,7 +11,6 @@ unique per cooler. The device-generated reading id is a second guard.
 import datetime
 import logging
 import os
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -20,7 +19,12 @@ from sqlalchemy.orm import Session
 from app.core.utils import field_error, iso, num
 from app.domain.schemas.sync import CoolerReadingIn
 from app.infrastructure.db.models.admin import Cooler, CoolerStatus
-from app.infrastructure.db.models.sensors import CoolerReading, ReadingQuality, ReadingSource, SensorDevice
+from app.infrastructure.db.models.sensors import (
+    CoolerReading,
+    ReadingQuality,
+    ReadingSource,
+    SensorDevice,
+)
 from app.services import cooler_alerts
 from app.services.principal import Principal
 
@@ -64,7 +68,7 @@ def measurement_key(data: CoolerReadingIn) -> str:
     return f"t:{who}:{stamp}:{data.sequence if data.sequence is not None else ''}"[:255]
 
 
-def _quality(cooler: Cooler, sensor: Optional[SensorDevice], data: CoolerReadingIn, now: datetime.datetime) -> tuple[str, list[str]]:
+def _quality(cooler: Cooler, sensor: SensorDevice | None, data: CoolerReadingIn, now: datetime.datetime) -> tuple[str, list[str]]:
     flags: list[str] = []
     capacity = num(cooler.capacity_litres)
     if data.volume_litres is not None and capacity and data.volume_litres > capacity * CAPACITY_TOLERANCE:
@@ -97,8 +101,8 @@ def _quality(cooler: Cooler, sensor: Optional[SensorDevice], data: CoolerReading
 
 
 def record(
-    db: Session, principal: Principal, data: CoolerReadingIn, *, reading_id: Optional[UUID] = None,
-    device_id: Optional[UUID] = None,
+    db: Session, principal: Principal, data: CoolerReadingIn, *, reading_id: UUID | None = None,
+    device_id: UUID | None = None,
 ) -> tuple[CoolerReading, bool, list]:
     """Store one reading. Returns (reading, was_duplicate, notifications created). Commits."""
     cooler = db.get(Cooler, data.cooler_id)

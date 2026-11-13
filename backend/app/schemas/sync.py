@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from uuid import UUID
+
 from pydantic import BaseModel
+
 
 class SyncMutationIn(BaseModel):
     id: int
@@ -16,9 +18,9 @@ class SyncPushRequest(BaseModel):
 class SyncMutationResult(BaseModel):
     queue_id: int
     client_tx_id: UUID
-    server_id: Optional[UUID] = None
+    server_id: UUID | None = None
     status: Literal["ok", "error"]
-    error: Optional[str] = None
+    error: str | None = None
 
 class SyncPushResponse(BaseModel):
     results: list[SyncMutationResult]
@@ -28,7 +30,7 @@ class FarmerSyncOut(BaseModel):
     member_number: str
     full_name: str
     phone: str
-    route_id: Optional[UUID] = None
+    route_id: UUID | None = None
     cooperative_id: UUID
     updated_at: datetime
 

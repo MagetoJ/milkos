@@ -12,14 +12,22 @@ Rules (enforced here, not in the UI):
 - COLLECTOR and FARMER accounts can't move to another cooperative (their records stay with the old one).
 - A superadmin can't deactivate or re-role themselves, and the last active superadmin can't be disabled.
 """
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.utils import changed, conflict, field_error, iso, like, phone_digits, reject_nulls, snapshot
+from app.core.utils import (
+    changed,
+    conflict,
+    field_error,
+    iso,
+    like,
+    phone_digits,
+    reject_nulls,
+    snapshot,
+)
 from app.core.validation import mask_phone_local
 from app.domain.exceptions import PermissionDenied
 from app.domain.schemas.auth import UserRole
@@ -37,7 +45,7 @@ UNMOVABLE_ROLES = {UserRole.COLLECTOR.value, UserRole.FARMER.value}
 EMAIL_REQUIRED_ROLES = {UserRole.SUPER_ADMIN.value, UserRole.COOP_ADMIN.value, UserRole.MANAGER.value}
 
 
-def search_filter(query, search: Optional[str]):
+def search_filter(query, search: str | None):
     """Every word must match the name or email, or (when it has digits) the phone number."""
     for term in (search or "").split():
         clauses = [User.full_name.ilike(like(term), escape="\\"), User.email.ilike(like(term), escape="\\")]
@@ -48,7 +56,7 @@ def search_filter(query, search: Optional[str]):
     return query
 
 
-def user_json(user: User, cooperative: Optional[Cooperative] = None, db: Optional[Session] = None) -> dict:
+def user_json(user: User, cooperative: Cooperative | None = None, db: Session | None = None) -> dict:
     data = {
         "id": str(user.id),
         "full_name": user.full_name,
@@ -75,7 +83,7 @@ def user_json(user: User, cooperative: Optional[Cooperative] = None, db: Optiona
     return data
 
 
-def account_conflict(db: Session, *, email: Optional[str], phone: Optional[str], exclude_id: Optional[UUID] = None):
+def account_conflict(db: Session, *, email: str | None, phone: str | None, exclude_id: UUID | None = None):
     def taken(column, value) -> bool:
         query = db.query(User.id).filter(column == value)
         if exclude_id:
@@ -89,12 +97,12 @@ def account_conflict(db: Session, *, email: Optional[str], phone: Optional[str],
     return None
 
 
-def require_email(role: str, email: Optional[str]) -> None:
+def require_email(role: str, email: str | None) -> None:
     if role in EMAIL_REQUIRED_ROLES and not email:
         raise field_error("email", "Administrators and managers need an email address.")
 
 
-def _cooperative(db: Session, cooperative_id: Optional[UUID]) -> Cooperative:
+def _cooperative(db: Session, cooperative_id: UUID | None) -> Cooperative:
     if cooperative_id is None:
         raise field_error("cooperative_id", "Choose the cooperative this account belongs to.")
     cooperative = db.get(Cooperative, cooperative_id)
@@ -103,7 +111,7 @@ def _cooperative(db: Session, cooperative_id: Optional[UUID]) -> Cooperative:
     return cooperative
 
 
-def _save(db: Session, email: Optional[str], phone: Optional[str], exclude_id: Optional[UUID] = None) -> None:
+def _save(db: Session, email: str | None, phone: str | None, exclude_id: UUID | None = None) -> None:
     try:
         db.commit()
     except IntegrityError:
@@ -112,7 +120,7 @@ def _save(db: Session, email: Optional[str], phone: Optional[str], exclude_id: O
         raise conflict(*(found or (None, "These details clash with another account.")))
 
 
-def create(db: Session, principal: Principal, payload: UserCreate) -> tuple[User, Optional[accounts.PendingSms]]:
+def create(db: Session, principal: Principal, payload: UserCreate) -> tuple[User, accounts.PendingSms | None]:
     """Create a PENDING_ACTIVATION account and queue its activation SMS. Returns (user, sms to dispatch)."""
     role = payload.role.value
     require_email(role, payload.email)
@@ -162,7 +170,7 @@ def create(db: Session, principal: Principal, payload: UserCreate) -> tuple[User
     return user, pending
 
 
-def update(db: Session, principal: Principal, user: User, payload: UserUpdate) -> tuple[User, Optional[accounts.PendingSms]]:
+def update(db: Session, principal: Principal, user: User, payload: UserUpdate) -> tuple[User, accounts.PendingSms | None]:
     data = payload.model_dump(exclude_unset=True)
     reject_nulls(data, "full_name", "email", "phone", "role")
     current_role = user.role_value
@@ -227,7 +235,7 @@ def update(db: Session, principal: Principal, user: User, payload: UserUpdate) -
     return user, pending
 
 
-def change_status(db: Session, principal: Principal, user: User, new_status: str, reason: Optional[str]):
+def change_status(db: Session, principal: Principal, user: User, new_status: str, reason: str | None):
     """ACTIVE / SUSPENDED / DISABLED with an audit entry; collectors' profiles follow their account."""
     before = user.status_value
     user, pending = accounts.change_status(db, principal, user, new_status, reason)
@@ -247,6 +255,6 @@ def change_status(db: Session, principal: Principal, user: User, new_status: str
     return user, pending
 
 
-def set_active(db: Session, principal: Principal, user: User, is_active: bool, reason: Optional[str]):
+def set_active(db: Session, principal: Principal, user: User, is_active: bool, reason: str | None):
     """The original on/off switch: on = ACTIVE (or a fresh activation link if no password was ever set), off = DISABLED."""
     return change_status(db, principal, user, AccountStatus.ACTIVE if is_active else AccountStatus.DISABLED, reason)

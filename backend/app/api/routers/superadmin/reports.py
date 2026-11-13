@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,9 +14,9 @@ router = APIRouter(prefix="/reports")
 
 @router.get("/collections")
 def collections_report(
-    cooperative_id: Optional[str] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
+    cooperative_id: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
 ):

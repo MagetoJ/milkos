@@ -32,7 +32,6 @@ export default function FarmerLayout({ children }: { children: ReactNode }) {
       setState({ status: 'ok', name: boot.mode === 'online' ? boot.me.full_name : boot.session.user.full_name });
     });
     // Only on first load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (state.status === 'checking') {

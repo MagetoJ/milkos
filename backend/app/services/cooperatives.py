@@ -1,6 +1,5 @@
 """Cooperatives as managed by the superadmin."""
 import datetime
-from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import case, func, or_
@@ -14,7 +13,11 @@ from app.domain.schemas.platform import CooperativeCreate, CooperativeUpdate
 from app.infrastructure.db.models.admin import Cooler, CoolerStatus
 from app.infrastructure.db.models.cooperative import Cooperative, CooperativeStatus
 from app.infrastructure.db.models.farmer import Farmer
-from app.infrastructure.db.models.operations import Collector, MilkCollection, QualityStatus
+from app.infrastructure.db.models.operations import (
+    Collector,
+    MilkCollection,
+    QualityStatus,
+)
 from app.infrastructure.db.models.user import User
 from app.services import audit
 from app.services.onboarding import generate_cooperative_code
@@ -27,7 +30,7 @@ AUDITED = (
 )
 
 
-def cooperative_json(coop: Cooperative, counts: Optional[dict] = None) -> dict:
+def cooperative_json(coop: Cooperative, counts: dict | None = None) -> dict:
     data = {
         "id": str(coop.id),
         "name": coop.name,
@@ -96,7 +99,7 @@ def counts_for(db: Session, coop_ids: list[UUID]) -> dict[UUID, dict]:
     return out
 
 
-def milk_volumes(db: Session, cooperative_id: Optional[UUID] = None) -> dict:
+def milk_volumes(db: Session, cooperative_id: UUID | None = None) -> dict:
     """Accepted litres today, in the last 7 days and the last 30 days, in one query."""
     today = datetime.datetime.utcnow().date()
     week, month = today - datetime.timedelta(days=6), today - datetime.timedelta(days=29)
@@ -214,7 +217,7 @@ def update(db: Session, principal: Principal, coop: Cooperative, payload: Cooper
     return coop
 
 
-def set_status(db: Session, principal: Principal, coop_id: UUID, new_status: str, reason: Optional[str]) -> Cooperative:
+def set_status(db: Session, principal: Principal, coop_id: UUID, new_status: str, reason: str | None) -> Cooperative:
     # Row lock (Postgres) so two superadmins changing the status at once are serialised.
     coop = db.get(Cooperative, coop_id, with_for_update=True)
     if coop is None:
@@ -262,7 +265,7 @@ def adjust_sms_credits(db: Session, principal: Principal, coop_id: UUID, delta: 
     return coop
 
 
-def search_filter(query, search: Optional[str]):
+def search_filter(query, search: str | None):
     from app.core.utils import like
 
     for term in (search or "").split():

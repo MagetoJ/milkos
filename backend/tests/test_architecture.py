@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 
 from app.api.errors import detail_for, register_error_handlers, status_code_for
 from app.domain.exceptions import (
-    Conflict, NotFound, PermissionDenied, RateLimited, Unauthenticated, ValidationFailed,
+    Conflict,
+    NotFound,
+    PermissionDenied,
+    RateLimited,
+    Unauthenticated,
+    ValidationFailed,
 )
 from app.infrastructure import tasks
 from app.infrastructure.db.models.centre import CollectionCentre

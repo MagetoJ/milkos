@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -17,26 +16,26 @@ router = APIRouter(prefix="/collections")
 
 @router.get("")
 def list_collections(
-    search: Optional[str] = Query(None, max_length=100),
-    cooperative_id: Optional[str] = None,
-    farmer_id: Optional[str] = None,
-    collector_id: Optional[str] = None,
-    cooler_id: Optional[str] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
-    quality_status: Optional[str] = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
-    min_litres: Optional[float] = Query(None, ge=0),
-    max_litres: Optional[float] = Query(None, ge=0),
+    search: str | None = Query(None, max_length=100),
+    cooperative_id: str | None = None,
+    farmer_id: str | None = None,
+    collector_id: str | None = None,
+    cooler_id: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    quality_status: str | None = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
+    min_litres: float | None = Query(None, ge=0),
+    max_litres: float | None = Query(None, ge=0),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     admin: Principal = Depends(require_superadmin),
 ):
-    filters = dict(
-        farmer_id=optional_uuid(farmer_id, "Farmer"), collector_id=optional_uuid(collector_id, "Collector"),
-        cooler_id=optional_uuid(cooler_id, "Cooler"),
-        date_from=date_from, date_to=date_to, quality_status=quality_status,
-        min_litres=min_litres, max_litres=max_litres, search=search,
-    )
+    filters = {
+        "farmer_id": optional_uuid(farmer_id, "Farmer"), "collector_id": optional_uuid(collector_id, "Collector"),
+        "cooler_id": optional_uuid(cooler_id, "Cooler"),
+        "date_from": date_from, "date_to": date_to, "quality_status": quality_status,
+        "min_litres": min_litres, "max_litres": max_litres, "search": search,
+    }
     coop = optional_uuid(cooperative_id, "Cooperative")
     return collections.list_page(db, admin, coop, filters, params, sorts=collections.PLATFORM_SORTS)
 

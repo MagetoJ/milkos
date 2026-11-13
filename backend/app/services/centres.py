@@ -1,5 +1,4 @@
 """Collection centres: one implementation for the cooperative workspace and offline sync."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func
@@ -19,7 +18,7 @@ from app.services.principal import Principal
 CODE_TAKEN = "Another centre in your cooperative already uses this code."
 
 
-def centre_json(centre: CollectionCentre, farmer_count: int = 0, manager_name: Optional[str] = None) -> dict:
+def centre_json(centre: CollectionCentre, farmer_count: int = 0, manager_name: str | None = None) -> dict:
     return {
         "id": str(centre.id),
         "name": centre.name,
@@ -44,7 +43,7 @@ def manager_names(db: Session, ids: set) -> dict:
     return {u.id: u.full_name for u in db.query(User).filter(User.id.in_(ids)).all()}
 
 
-def farmer_counts(db: Session, cooperative_id: UUID, centre_ids: Optional[list[UUID]] = None) -> dict:
+def farmer_counts(db: Session, cooperative_id: UUID, centre_ids: list[UUID] | None = None) -> dict:
     query = db.query(Farmer.centre_id, func.count(Farmer.id)).filter(
         Farmer.cooperative_id == cooperative_id, Farmer.status == "ACTIVE", Farmer.centre_id.isnot(None)
     )
@@ -61,7 +60,7 @@ def serialize(db: Session, centres: list[CollectionCentre]) -> list[dict]:
     return [centre_json(c, counts.get(c.id, 0), names.get(c.manager_user_id)) for c in centres]
 
 
-def check_manager(db: Session, cooperative_id: UUID, manager_user_id: Optional[UUID]) -> None:
+def check_manager(db: Session, cooperative_id: UUID, manager_user_id: UUID | None) -> None:
     if manager_user_id is None:
         return
     manager = db.get(User, manager_user_id)
@@ -74,7 +73,7 @@ def check_manager(db: Session, cooperative_id: UUID, manager_user_id: Optional[U
         raise field_error("manager_user_id", "Choose an active manager from your team.")
 
 
-def code_taken(db: Session, cooperative_id: UUID, code: str, exclude_id: Optional[UUID] = None) -> bool:
+def code_taken(db: Session, cooperative_id: UUID, code: str, exclude_id: UUID | None = None) -> bool:
     query = db.query(CollectionCentre.id).filter(
         CollectionCentre.cooperative_id == cooperative_id, CollectionCentre.code == code
     )
@@ -84,7 +83,7 @@ def code_taken(db: Session, cooperative_id: UUID, code: str, exclude_id: Optiona
 
 
 def create(
-    db: Session, principal: Principal, payload: CentreCreate, origin: Optional[SyncOrigin] = None,
+    db: Session, principal: Principal, payload: CentreCreate, origin: SyncOrigin | None = None,
 ) -> CollectionCentre:
     cooperative = principal.cooperative
     check_manager(db, cooperative.id, payload.manager_user_id)

@@ -10,7 +10,6 @@ older screens); it is recomputed from the ledger on every entry.
     reserved  = RESERVED - CONSUMED - REFUNDED     (held by attempts still in flight)
 """
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import case, func
@@ -68,15 +67,15 @@ def _refresh_cache(db: Session, coop: Cooperative) -> None:
         coop.sms_credit_balance = value  # the sync change log picks this up on flush (devices show the balance)
 
 
-def _exists(db: Session, cooperative_id: UUID, kind: str, reference: str) -> Optional[SmsCreditTransaction]:
+def _exists(db: Session, cooperative_id: UUID, kind: str, reference: str) -> SmsCreditTransaction | None:
     return db.query(SmsCreditTransaction).filter(
         SmsCreditTransaction.cooperative_id == cooperative_id, SmsCreditTransaction.transaction_type == kind,
         SmsCreditTransaction.reference == reference,
     ).first()
 
 
-def _append(db: Session, coop: Cooperative, kind: str, amount: int, reference: str, *, reason: Optional[str] = None,
-            actor_user_id: Optional[UUID] = None, details: Optional[dict] = None) -> SmsCreditTransaction:
+def _append(db: Session, coop: Cooperative, kind: str, amount: int, reference: str, *, reason: str | None = None,
+            actor_user_id: UUID | None = None, details: dict | None = None) -> SmsCreditTransaction:
     entry = SmsCreditTransaction(
         cooperative_id=coop.id, transaction_type=kind, amount=amount, reference=reference[:120], reason=reason,
         actor_user_id=actor_user_id, details=details, created_at=datetime.datetime.utcnow(),
@@ -87,7 +86,7 @@ def _append(db: Session, coop: Cooperative, kind: str, amount: int, reference: s
 
 
 def purchase(db: Session, cooperative_id: UUID, credits: int, payment_id: UUID, actor_user_id: UUID,
-             details: Optional[dict] = None) -> SmsCreditTransaction:
+             details: dict | None = None) -> SmsCreditTransaction:
     """Credit a VERIFIED payment (once per payment)."""
     coop = _lock(db, cooperative_id)
     reference = f"payment:{payment_id}"
@@ -167,7 +166,7 @@ def refund(db: Session, cooperative_id: UUID, reference: str, reason: str = "SMS
     return _settle(db, cooperative_id, reference, CreditTxn.REFUNDED, reason)
 
 
-def transaction_json(t: SmsCreditTransaction, actor_email: Optional[str] = None) -> dict:
+def transaction_json(t: SmsCreditTransaction, actor_email: str | None = None) -> dict:
     return {
         "id": str(t.id),
         "cooperative_id": str(t.cooperative_id),

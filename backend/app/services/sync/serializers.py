@@ -9,7 +9,7 @@ The shapes are the same ones the online endpoints return, so screens render eith
 """
 import datetime
 import os
-from typing import Callable
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,11 +22,23 @@ from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.notifications import Notification
-from app.infrastructure.db.models.operations import CollectionBatch, Collector, MilkCollection
+from app.infrastructure.db.models.operations import (
+    CollectionBatch,
+    Collector,
+    MilkCollection,
+)
 from app.infrastructure.db.models.sensors import CoolerReading, SensorDevice
 from app.infrastructure.db.models.user import User
 from app.services import (
-    batches, centres, collections, collectors, cooler_readings, coolers, farmers, notifications, sensors,
+    batches,
+    centres,
+    collections,
+    collectors,
+    cooler_readings,
+    coolers,
+    farmers,
+    notifications,
+    sensors,
 )
 from app.services.principal import Principal
 

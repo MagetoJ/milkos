@@ -12,13 +12,20 @@ from sqlalchemy.orm import Session
 from app.core.permissions import Permission
 from app.core.utils import like, phone_digits
 from app.domain.schemas.auth import UserRole
-from app.infrastructure.db.models.admin import Cooler, CooperativeApplication, SMSCreditPayment
+from app.infrastructure.db.models.admin import (
+    Cooler,
+    CooperativeApplication,
+    SMSCreditPayment,
+)
 from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.finance import FarmerPayment, SmsCreditTransaction
 from app.infrastructure.db.models.operations import (
-    CollectionBatch, CollectionCorrectionRequest, Collector, MilkCollection,
+    CollectionBatch,
+    CollectionCorrectionRequest,
+    Collector,
+    MilkCollection,
 )
 from app.infrastructure.db.models.sync import Device
 from app.infrastructure.db.models.user import User

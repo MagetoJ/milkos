@@ -1,5 +1,4 @@
 """Email provider adapters. Selected and configured through environment variables (see __init__.py)."""
-from typing import Optional
 
 import httpx
 
@@ -18,7 +17,7 @@ class ResendProvider:
     name = "resend"
     URL = "https://api.resend.com/emails"
 
-    def __init__(self, api_key: str, sender: str, client: Optional[httpx.Client] = None):
+    def __init__(self, api_key: str, sender: str, client: httpx.Client | None = None):
         if not api_key or not sender:
             raise GatewayConfigurationError("RESEND_API_KEY and EMAIL_FROM must be set.")
         self.api_key = api_key

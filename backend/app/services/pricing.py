@@ -6,7 +6,6 @@ price that any farmer payment used can't be cancelled. Payment lines store the p
 payments keep their pricing context forever.
 """
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import or_
@@ -15,7 +14,11 @@ from sqlalchemy.orm import Session
 from app.core.utils import field_error, iso, num
 from app.domain.exceptions import Conflict
 from app.domain.schemas.finance import PriceCreate
-from app.infrastructure.db.models.finance import FarmerPaymentLine, MilkPrice, PriceStatus
+from app.infrastructure.db.models.finance import (
+    FarmerPaymentLine,
+    MilkPrice,
+    PriceStatus,
+)
 from app.services import audit, inbox
 from app.services.principal import Principal
 
@@ -44,14 +47,14 @@ def active(db: Session, cooperative_id: UUID):
     return db.query(MilkPrice).filter(MilkPrice.cooperative_id == cooperative_id, MilkPrice.status == PriceStatus.ACTIVE)
 
 
-def overlapping(db: Session, cooperative_id: UUID, start: datetime.date, end: Optional[datetime.date]):
+def overlapping(db: Session, cooperative_id: UUID, start: datetime.date, end: datetime.date | None):
     query = active(db, cooperative_id).filter(or_(MilkPrice.effective_to.is_(None), MilkPrice.effective_to >= start))
     if end is not None:
         query = query.filter(MilkPrice.effective_from <= end)
     return query
 
 
-def applicable(db: Session, cooperative_id: UUID, day: datetime.date) -> Optional[MilkPrice]:
+def applicable(db: Session, cooperative_id: UUID, day: datetime.date) -> MilkPrice | None:
     return (
         active(db, cooperative_id)
         .filter(MilkPrice.effective_from <= day, or_(MilkPrice.effective_to.is_(None), MilkPrice.effective_to >= day))
@@ -64,7 +67,7 @@ def for_range(db: Session, cooperative_id: UUID, start: datetime.date, end: date
     return overlapping(db, cooperative_id, start, end).order_by(MilkPrice.effective_from).all()
 
 
-def pick(prices: list[MilkPrice], day: datetime.date) -> Optional[MilkPrice]:
+def pick(prices: list[MilkPrice], day: datetime.date) -> MilkPrice | None:
     found = None
     for p in prices:
         if p.effective_from <= day and (p.effective_to is None or p.effective_to >= day):
@@ -86,7 +89,7 @@ def create(db: Session, principal: Principal, payload: PriceCreate) -> MilkPrice
     if _paid_from(db, coop_id, payload.effective_from):
         raise Conflict("Milk from that date has already been included in farmer payments. Start the new price after the last paid date.")
     clashes = overlapping(db, coop_id, payload.effective_from, payload.effective_to).all()
-    closed: Optional[MilkPrice] = None
+    closed: MilkPrice | None = None
     for p in clashes:
         # The only overlap allowed: an open-ended earlier price, which the new price closes.
         if p.effective_to is None and p.effective_from < payload.effective_from and closed is None:

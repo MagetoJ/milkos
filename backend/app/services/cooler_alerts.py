@@ -19,7 +19,6 @@ Suspicious readings raise no alerts; simulated readings produce SKIPPED notifica
 import datetime
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -43,7 +42,7 @@ def _local(ts: datetime.datetime) -> str:
     return (ts + datetime.timedelta(hours=offset)).strftime("%d %b %Y %I:%M %p").replace(" 0", " ")
 
 
-def _litres(value: Optional[float]) -> str:
+def _litres(value: float | None) -> str:
     return f"{value:,.0f} L" if value is not None else "unknown"
 
 
@@ -52,7 +51,7 @@ class Alert:
     type: str
     severity: str
     headline: str
-    threshold: Optional[float] = None
+    threshold: float | None = None
 
 
 @dataclass
@@ -62,7 +61,7 @@ class Recipient:
     name: str
 
 
-def recipients(db: Session, cooler: Cooler) -> tuple[list[Recipient], Optional[User], Optional[CollectionCentre]]:
+def recipients(db: Session, cooler: Cooler) -> tuple[list[Recipient], User | None, CollectionCentre | None]:
     centre = db.get(CollectionCentre, cooler.centre_id) if cooler.centre_id else None
     manager_id = cooler.manager_user_id or (centre.manager_user_id if centre else None)
     manager = db.get(User, manager_id) if manager_id else None
@@ -120,7 +119,7 @@ def _recently_alerted(db: Session, cooler: Cooler, alert_type: str, now: datetim
     ).first() is not None
 
 
-def _message(cooler: Cooler, centre, manager, volume: Optional[float], headline: str, at: datetime.datetime) -> str:
+def _message(cooler: Cooler, centre, manager, volume: float | None, headline: str, at: datetime.datetime) -> str:
     lines = ["MilkOS Cooler Alert", "", cooler.name]
     location = centre.name if centre else cooler.location
     if location:
@@ -131,7 +130,7 @@ def _message(cooler: Cooler, centre, manager, volume: Optional[float], headline:
     return "\n".join(lines)
 
 
-def _in_app(db: Session, cooler: Cooler, alert: Alert, skip_reason: Optional[str]) -> None:
+def _in_app(db: Session, cooler: Cooler, alert: Alert, skip_reason: str | None) -> None:
     """In-app alert for the cooperative's staff (independent of SMS settings; not for simulated readings)."""
     if skip_reason is not None:
         return
@@ -146,8 +145,8 @@ def _in_app(db: Session, cooler: Cooler, alert: Alert, skip_reason: Optional[str
 
 
 def _create(
-    db: Session, cooler: Cooler, alert: Alert, *, reading: Optional[CoolerReading], at: datetime.datetime,
-    skip_reason: Optional[str] = None,
+    db: Session, cooler: Cooler, alert: Alert, *, reading: CoolerReading | None, at: datetime.datetime,
+    skip_reason: str | None = None,
 ) -> list[Notification]:
     cooperative = db.get(Cooperative, cooler.cooperative_id)
     if not cooler.alerts_enabled:

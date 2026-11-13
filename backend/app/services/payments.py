@@ -11,7 +11,6 @@ against the till statement. Only VERIFIED adds credits, in the same transaction 
 audit entry; the ledger's unique (payment, PURCHASE) entry means a payment can never be credited twice.
 """
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -38,7 +37,7 @@ def mask_reference(reference: str) -> str:
     return reference[:3] + "•" * (len(reference) - 5) + reference[-2:]
 
 
-def payment_json(payment: SMSCreditPayment, coop: Optional[Cooperative], package: Optional[SMSCreditPackage]) -> dict:
+def payment_json(payment: SMSCreditPayment, coop: Cooperative | None, package: SMSCreditPackage | None) -> dict:
     return {
         "id": str(payment.id),
         "cooperative_id": str(payment.cooperative_id) if payment.cooperative_id else None,
@@ -60,7 +59,7 @@ def payment_json(payment: SMSCreditPayment, coop: Optional[Cooperative], package
     }
 
 
-def decide(db: Session, principal: Principal, payment_id: UUID, action: str, reason: Optional[str]) -> SMSCreditPayment:
+def decide(db: Session, principal: Principal, payment_id: UUID, action: str, reason: str | None) -> SMSCreditPayment:
     payment = db.get(SMSCreditPayment, payment_id, with_for_update=True)
     if not payment:
         raise NotFound("Payment")
@@ -158,7 +157,7 @@ def submit(db: Session, principal: Principal, payload: SmsTopUpCreate) -> SMSCre
     return payment
 
 
-def cancel(db: Session, principal: Principal, payment: SMSCreditPayment, reason: Optional[str]) -> SMSCreditPayment:
+def cancel(db: Session, principal: Principal, payment: SMSCreditPayment, reason: str | None) -> SMSCreditPayment:
     """The cooperative withdraws a payment it submitted that hasn't been reviewed yet."""
     payment = db.get(SMSCreditPayment, payment.id, with_for_update=True)
     if payment.status != PENDING:
@@ -229,7 +228,7 @@ def respond_information(db: Session, principal: Principal, payment: SMSCreditPay
     return payment
 
 
-def with_package_json(db: Session, payment: SMSCreditPayment, coop: Optional[Cooperative]) -> dict:
+def with_package_json(db: Session, payment: SMSCreditPayment, coop: Cooperative | None) -> dict:
     package = db.get(SMSCreditPackage, payment.package_id) if payment.package_id else None
     return payment_json(payment, coop, package)
 
@@ -264,7 +263,7 @@ PAYMENT_INSTRUCTIONS = (
 )
 
 
-def credit_center(db: Session, coop: Cooperative, transaction_type: Optional[str], params: PageParams) -> dict:
+def credit_center(db: Session, coop: Cooperative, transaction_type: str | None, params: PageParams) -> dict:
     """Balances derived from the ledger, recent ledger entries, payments, packages and SMS delivery health."""
     query = (
         db.query(SmsCreditTransaction, User.email)

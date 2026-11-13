@@ -54,7 +54,6 @@ export default function CollectorLayout({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // Only on first load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function signOut() {

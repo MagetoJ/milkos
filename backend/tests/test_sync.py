@@ -5,6 +5,8 @@ import uuid
 
 import pytest
 
+from app.domain.interfaces import SmsResult
+from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import AuditLog, Cooler
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
@@ -12,9 +14,7 @@ from app.infrastructure.db.models.notifications import Notification
 from app.infrastructure.db.models.operations import MilkCollection
 from app.infrastructure.db.models.sensors import CoolerReading
 from app.infrastructure.db.models.user import User
-from app.domain.schemas.auth import UserRole
 from app.infrastructure.gateways import sms
-from app.domain.interfaces import SmsResult
 from tests.test_cooperative_module import headers_for, make_coop, make_user
 
 SYNC = "/api/v1/sync"
@@ -59,7 +59,7 @@ def mutation(entity_type, payload, operation="create", local_id=None, **extra):
     return {
         "mutation_id": str(uuid.uuid4()), "entity_type": entity_type, "operation": operation,
         "local_id": str(local_id or uuid.uuid4()), "payload": payload,
-        "client_timestamp": datetime.datetime.utcnow().isoformat() + "Z", **extra,
+        "client_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"), **extra,
     }
 
 
@@ -374,7 +374,7 @@ def test_collector_pull_is_reduced(client, session, world):
 # ---------------- cooler readings & alerts ----------------
 
 def reading(cooler_id, litres, **extra):
-    return {"cooler_id": cooler_id, "volume_litres": litres, "measured_at": datetime.datetime.utcnow().isoformat() + "Z",
+    return {"cooler_id": cooler_id, "volume_litres": litres, "measured_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
             "source": "MANUAL", **extra}
 
 
@@ -454,7 +454,7 @@ def test_low_volume_alert_sends_sms_to_admins_and_manager(client, session, world
     sent = session.query(Notification).filter_by(type="LOW_VOLUME").all()
     assert {n.recipient_phone for n in sent} == {"+254700000011", "+254700000012"}
     assert all(n.status == "SENT" and n.provider_message_id for n in sent)
-    to, message = fake.sent[0]
+    _to, message = fake.sent[0]
     assert "Kiserian Main Cooler" in message and "1,876 L" in message and "Manager: Manager Person" in message
     session.expire_all()
     assert session.get(Cooperative, world["a"].id).sms_credit_balance == 8
@@ -519,11 +519,11 @@ def test_sensor_disconnect_and_stale_reading_alerts(client, session, world):
         "cooler_id": cooler["id"],
     }, headers=world["admin_a"]).json()
     [res] = push(client, world["admin_a"], world["dev_a"], mutation("sensor_event", {
-        "sensor_id": sensor["id"], "event": "DISCONNECTED", "occurred_at": datetime.datetime.utcnow().isoformat() + "Z"}))
+        "sensor_id": sensor["id"], "event": "DISCONNECTED", "occurred_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")}))
     assert res["status"] == "applied"
     assert session.query(Notification).filter_by(type="SENSOR_DISCONNECTED").count() == 1
 
-    old = (datetime.datetime.utcnow() - datetime.timedelta(hours=2)).isoformat() + "Z"
+    old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)).isoformat().replace("+00:00", "Z")
     push(client, world["admin_a"], world["dev_a"], mutation("cooler_reading", reading(cooler["id"], 100, measured_at=old)))
     client.post(f"{COOP}/coolers/alerts/check", headers=world["admin_a"])
     assert session.query(Notification).filter_by(type="STALE_READING", status="SENT").count() == 1

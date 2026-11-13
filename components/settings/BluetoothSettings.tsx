@@ -61,7 +61,7 @@ export function BluetoothSettings() {
       }
 
       setStatusMessage(`Successfully paired ${deviceConfig.name}!`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err.name !== "NotFoundError") {
         setStatusMessage(`Connection failed: ${err.message}`);
       } else {

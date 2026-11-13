@@ -8,7 +8,7 @@ from app.infrastructure.gateways import email as email_gateway
 from app.infrastructure.gateways.email.providers import ResendProvider
 from app.services import email_notices
 from app.services.applicant_notifications import notify_applicant
-from tests.test_accounts import NEW_PHONE, invite_collector, world  # noqa: F401  (world is a fixture)
+from tests.test_accounts import NEW_PHONE, invite_collector, world
 
 
 def client(handler):

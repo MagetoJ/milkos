@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -29,15 +28,15 @@ def get_activity(
 
 @router.get("/audit-logs")
 def list_audit_logs(
-    search: Optional[str] = Query(None, max_length=100),
-    action: Optional[str] = Query(None, max_length=60, pattern=r"^[A-Z_]+$"),
-    entity_type: Optional[str] = Query(None, max_length=50, pattern=r"^[a-z_]+$"),
-    entity_id: Optional[str] = Query(None, max_length=64),
-    actor_id: Optional[str] = None,
-    actor_role: Optional[str] = Query(None, max_length=50),
-    cooperative_id: Optional[str] = None,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
+    search: str | None = Query(None, max_length=100),
+    action: str | None = Query(None, max_length=60, pattern=r"^[A-Z_]+$"),
+    entity_type: str | None = Query(None, max_length=50, pattern=r"^[a-z_]+$"),
+    entity_id: str | None = Query(None, max_length=64),
+    actor_id: str | None = None,
+    actor_role: str | None = Query(None, max_length=50),
+    cooperative_id: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

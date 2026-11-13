@@ -8,7 +8,7 @@ Administrative settings (cooperative, platform) live in their own routers and pe
 Security operations (password, phone, MFA, sessions) are online-only by nature: they run here, on the server.
 The rules live in app.services.my_account and app.services.accounts.
 """
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -18,7 +18,13 @@ from sqlalchemy.orm import Session
 from app.api.cookies import start_session
 from app.api.dependencies.auth import load_principal
 from app.api.dependencies.db import get_db
-from app.core.validation import clean_text, mask_phone_local, normalize_email, normalize_phone, pydantic_field
+from app.core.validation import (
+    clean_text,
+    mask_phone_local,
+    normalize_email,
+    normalize_phone,
+    pydantic_field,
+)
 from app.domain.schemas.auth import PasswordChange
 from app.services import accounts, my_account, preferences, security_events
 from app.services.principal import Principal
@@ -32,18 +38,18 @@ class _Strict(BaseModel):
 
 
 class ProfileUpdate(_Strict):
-    full_name: Optional[str] = Field(None, min_length=3, max_length=255)
-    email: Optional[EmailStr] = None
+    full_name: str | None = Field(None, min_length=3, max_length=255)
+    email: EmailStr | None = None
     clear_email: bool = False
-    current_password: Optional[str] = Field(None, max_length=128)
+    current_password: str | None = Field(None, max_length=128)
 
     _name = field_validator("full_name")(lambda v: clean_text(v) if v is not None else v)
     _email = field_validator("email")(lambda v: normalize_email(v) if v is not None else v)
 
 
 class PreferencesUpdate(_Strict):
-    notifications: Optional[dict[str, bool]] = None
-    work: Optional[dict[str, Any]] = None
+    notifications: dict[str, bool] | None = None
+    work: dict[str, Any] | None = None
 
 
 class PhoneChange(_Strict):
@@ -55,7 +61,7 @@ class PhoneChange(_Strict):
 class PhoneConfirm(_Strict):
     verification_id: UUID
     code: str = Field(..., min_length=4, max_length=10)
-    device_identifier: Optional[str] = Field(None, max_length=64)
+    device_identifier: str | None = Field(None, max_length=64)
 
 
 class PasswordConfirm(_Strict):
@@ -72,11 +78,11 @@ class MfaSensitive(_Strict):
 
 
 class RevokeOthers(_Strict):
-    device_identifier: Optional[str] = Field(None, max_length=64)
+    device_identifier: str | None = Field(None, max_length=64)
 
 
 class PasswordChangeBody(PasswordChange):
-    device_identifier: Optional[str] = Field(None, max_length=64)
+    device_identifier: str | None = Field(None, max_length=64)
 
 
 @router.get("/me")
@@ -147,7 +153,7 @@ def phone_confirm(body: PhoneConfirm, response: Response, principal: Principal =
 
 @router.get("/sessions")
 def list_sessions(
-    device_identifier: Optional[str] = Query(None, max_length=64),
+    device_identifier: str | None = Query(None, max_length=64),
     principal: Principal = Depends(load_principal), db: Session = Depends(get_db),
 ):
     """This account's signed-in devices. Location is not shown: MilkOS doesn't resolve addresses to places."""
@@ -155,7 +161,7 @@ def list_sessions(
 
 
 @router.delete("/sessions/{session_id}")
-def revoke_session(session_id: UUID, response: Response, device_identifier: Optional[str] = Query(None, max_length=64),
+def revoke_session(session_id: UUID, response: Response, device_identifier: str | None = Query(None, max_length=64),
                    principal: Principal = Depends(load_principal), db: Session = Depends(get_db)):
     current = my_account.revoke_session(db, principal, session_id, device_identifier)
     return {"revoked": True, "signed_out_here": current, "access_token": None if current else start_session(response, principal.user)}

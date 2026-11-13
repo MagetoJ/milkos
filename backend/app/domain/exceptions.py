@@ -12,18 +12,18 @@ A message tied to a field (or an explicit `loc`) is sent in FastAPI's validation
 next to that field; anything else is a plain message. `code`, when given, is a machine-readable reason the client
 can branch on (sent as the X-Error-Code header, so `detail` stays a message people can read).
 """
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 
 class DomainError(Exception):
     default_kind = "invalid"
 
-    def __init__(self, message: str, field: Optional[str] = None, *, loc: Optional[Sequence[str]] = None,
-                 kind: Optional[str] = None, code: Optional[str] = None):
+    def __init__(self, message: str, field: str | None = None, *, loc: Sequence[str] | None = None,
+                 kind: str | None = None, code: str | None = None):
         super().__init__(message)
         self.message = message
         self.code = code
-        self.loc: Optional[tuple[str, ...]] = tuple(loc) if loc is not None else (("body", field) if field else None)
+        self.loc: tuple[str, ...] | None = tuple(loc) if loc is not None else (("body", field) if field else None)
         self.kind = kind or self.default_kind
 
     @property
@@ -48,7 +48,7 @@ class PermissionDenied(DomainError):
 class NotFound(DomainError):
     """The record doesn't exist, or belongs to another cooperative and must look missing (404)."""
 
-    def __init__(self, what: str, message: Optional[str] = None):
+    def __init__(self, what: str, message: str | None = None):
         super().__init__(message or f"{what} not found")
         self.what = what
 

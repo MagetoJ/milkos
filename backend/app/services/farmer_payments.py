@@ -14,8 +14,8 @@ reference of a transfer a person made and recorded. Nothing here moves money by 
 import datetime
 import secrets
 from collections import defaultdict
+from collections.abc import Iterable
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Iterable, Optional
 from uuid import UUID
 
 from sqlalchemy import and_, exists, func, or_
@@ -25,9 +25,17 @@ from app.core.utils import field_error, iso, like, num
 from app.domain.exceptions import Conflict
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.finance import (
-    AdjustmentStatus, FarmerPayment, FarmerPaymentAdjustment, FarmerPaymentLine, PaymentStatus,
+    AdjustmentStatus,
+    FarmerPayment,
+    FarmerPaymentAdjustment,
+    FarmerPaymentLine,
+    PaymentStatus,
 )
-from app.infrastructure.db.models.operations import LineStatus, MilkCollection, QualityStatus
+from app.infrastructure.db.models.operations import (
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
+)
 from app.infrastructure.db.pagination import PageParams, fetch_page, page_result
 from app.infrastructure.gateways import payouts
 from app.services import audit, inbox, pricing
@@ -48,7 +56,7 @@ def _reference(db: Session, day: datetime.date) -> str:
     return f"FP-{day:%y%m}-{secrets.token_hex(6).upper()}"
 
 
-def eligible_lines(db: Session, cooperative_id: UUID, period_end: datetime.date, farmer_ids: Optional[Iterable[UUID]] = None):
+def eligible_lines(db: Session, cooperative_id: UUID, period_end: datetime.date, farmer_ids: Iterable[UUID] | None = None):
     paid = exists().where(and_(FarmerPaymentLine.collection_id == MilkCollection.id, FarmerPaymentLine.is_active.is_(True)))
     query = db.query(MilkCollection).filter(
         MilkCollection.cooperative_id == cooperative_id,
@@ -71,13 +79,13 @@ def preview(db: Session, cooperative_id: UUID, start: datetime.date, end: dateti
     for line in lines:
         by_farmer[line.farmer_id].append(line)
     adjustments = _pending_adjustments(db, cooperative_id, farmer_ids)
-    total_kg = sum((Decimal(str(l.quantity_kg)) for l in lines), Decimal("0"))
-    gross = Decimal("0")
+    total_kg = sum((Decimal(str(l.quantity_kg)) for l in lines), Decimal(0))
+    gross = Decimal(0)
     for line in lines:
         p = pricing.pick(prices, line.collection_date)
         if p is not None:
             gross += money(Decimal(str(line.quantity_kg)) * Decimal(str(p.price_per_kg)))
-    adj_total = sum((Decimal(str(a.amount)) for rows in adjustments.values() for a in rows), Decimal("0"))
+    adj_total = sum((Decimal(str(a.amount)) for rows in adjustments.values() for a in rows), Decimal(0))
     return {
         "period_start": iso(start), "period_end": iso(end),
         "farmers": len(set(by_farmer) | set(adjustments)),
@@ -137,7 +145,7 @@ def generate(db: Session, principal: Principal, start: datetime.date, end: datet
         )
         db.add(payment)
         db.flush()
-        total_kg, gross = Decimal("0"), Decimal("0")
+        total_kg, gross = Decimal(0), Decimal(0)
         for line in by_farmer.get(farmer_id, []):
             p = pricing.pick(prices, line.collection_date)
             quantity = Decimal(str(line.quantity_kg))
@@ -148,7 +156,7 @@ def generate(db: Session, principal: Principal, start: datetime.date, end: datet
             ))
             total_kg += quantity
             gross += amount
-        adj_total = Decimal("0")
+        adj_total = Decimal(0)
         for a in adjustments.get(farmer_id, []):
             a.status = AdjustmentStatus.APPLIED
             a.applied_payment_id = payment.id
@@ -166,7 +174,7 @@ def generate(db: Session, principal: Principal, start: datetime.date, end: datet
         entity_type="farmer_payment_run", entity_id=f"{iso(start)}:{iso(end)}", cooperative_id=coop_id,
         new_values={
             "payments": [p.reference for p in created], "skipped": len(skipped),
-            "net_total": float(sum((Decimal(str(p.net_amount)) for p in created), Decimal("0"))),
+            "net_total": float(sum((Decimal(str(p.net_amount)) for p in created), Decimal(0))),
         },
     )
     if created:
@@ -180,7 +188,7 @@ def generate(db: Session, principal: Principal, start: datetime.date, end: datet
 
 
 def set_status(db: Session, principal: Principal, payment: FarmerPayment, new_status: str,
-               reference: Optional[str], reason: Optional[str]) -> FarmerPayment:
+               reference: str | None, reason: str | None) -> FarmerPayment:
     payment = db.get(FarmerPayment, payment.id, with_for_update=True)
     old = payment.status
     if new_status not in PaymentStatus.TRANSITIONS.get(old, set()):
@@ -244,7 +252,7 @@ def adjust_for_lines(db: Session, principal: Principal, lines: list[MilkCollecti
     return out
 
 
-def payment_json(p: FarmerPayment, farmer: Optional[Farmer] = None) -> dict:
+def payment_json(p: FarmerPayment, farmer: Farmer | None = None) -> dict:
     return {
         "id": str(p.id),
         "reference": p.reference,
@@ -336,8 +344,8 @@ def initiate(db: Session, principal: Principal, payment: FarmerPayment) -> Farme
     return payment
 
 
-def list_page(db: Session, cooperative_id: UUID, *, search: Optional[str], status: Optional[str],
-              farmer_id: Optional[UUID], period_start, period_end, params: PageParams) -> dict:
+def list_page(db: Session, cooperative_id: UUID, *, search: str | None, status: str | None,
+              farmer_id: UUID | None, period_start, period_end, params: PageParams) -> dict:
     """One page of farmer payments with totals per status, the open adjustments and the payout provider."""
     query = db.query(FarmerPayment, Farmer).join(Farmer, Farmer.id == FarmerPayment.farmer_id).filter(FarmerPayment.cooperative_id == cooperative_id)
     if status:
@@ -355,11 +363,11 @@ def list_page(db: Session, cooperative_id: UUID, *, search: Optional[str], statu
             Farmer.first_name.ilike(pattern, escape="\\"), Farmer.last_name.ilike(pattern, escape="\\"),
             Farmer.farmer_number.ilike(pattern, escape="\\"),
         ))
-    totals = dict(
-        (s, (n, num(amount) or 0.0)) for s, n, amount in query.with_entities(
+    totals = {
+        s: (n, num(amount) or 0.0) for s, n, amount in query.with_entities(
             FarmerPayment.status, func.count(FarmerPayment.id), func.coalesce(func.sum(FarmerPayment.net_amount), 0),
         ).group_by(FarmerPayment.status).order_by(None)
-    )
+    }
     rows, total = fetch_page(query.order_by(FarmerPayment.period_end.desc(), Farmer.last_name, FarmerPayment.id), params)
     result = page_result([payment_json(p, f) for p, f in rows], total, params)
     result["summary"] = {
@@ -373,7 +381,7 @@ def list_page(db: Session, cooperative_id: UUID, *, search: Optional[str], statu
     return result
 
 
-def adjustments_page(db: Session, cooperative_id: UUID, status: Optional[str], params: PageParams) -> dict:
+def adjustments_page(db: Session, cooperative_id: UUID, status: str | None, params: PageParams) -> dict:
     query = db.query(FarmerPaymentAdjustment).filter(FarmerPaymentAdjustment.cooperative_id == cooperative_id)
     if status:
         query = query.filter(FarmerPaymentAdjustment.status == status)

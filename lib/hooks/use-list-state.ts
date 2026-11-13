@@ -38,7 +38,6 @@ export function useListState(initial: { filters?: Filters; sort?: string; pageSi
     setFilters(initial.filters ?? {});
     setSortState(initial.sort ?? '');
     setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isFiltered =

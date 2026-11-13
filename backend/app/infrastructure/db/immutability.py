@@ -29,7 +29,11 @@ def _changed(obj) -> set[str]:
 
 
 def _check(session: Session, _flush_context, _instances) -> None:
-    from app.infrastructure.db.models.operations import CollectionBatch, MilkCollection, QualityStatus
+    from app.infrastructure.db.models.operations import (
+        CollectionBatch,
+        MilkCollection,
+        QualityStatus,
+    )
 
     for obj in session.deleted:
         if isinstance(obj, (CollectionBatch, MilkCollection)):

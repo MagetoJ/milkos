@@ -13,7 +13,6 @@ Tenant isolation rules (enforced here, never by the frontend):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -35,14 +34,14 @@ SUSPENDED = "This cooperative is suspended. Contact the platform administrator."
 @dataclass
 class Principal:
     user: User
-    cooperative: Optional[Cooperative]
+    cooperative: Cooperative | None
     db: Session
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
     # The registered device a sync request came from (set by the sync router); noted in audit entries.
-    device: Optional[object] = None
-    _collector: Optional[Collector] = field(default=None, repr=False)
-    _farmer: Optional[Farmer] = field(default=None, repr=False)
+    device: object | None = None
+    _collector: Collector | None = field(default=None, repr=False)
+    _farmer: Farmer | None = field(default=None, repr=False)
 
     @property
     def role(self) -> str:
@@ -63,7 +62,7 @@ class Principal:
         if not self.can(permission):
             raise PermissionDenied(FORBIDDEN)
 
-    def require_tenant(self, message: str = FORBIDDEN) -> "Principal":
+    def require_tenant(self, message: str = FORBIDDEN) -> Principal:
         """Refuse platform staff: the endpoint works on the caller's own cooperative. (Every other signed-in
         account has one; load_principal refuses accounts without.)"""
         if self.cooperative is None:
@@ -71,7 +70,7 @@ class Principal:
         return self
 
     @property
-    def cooperative_id(self) -> Optional[UUID]:
+    def cooperative_id(self) -> UUID | None:
         return self.cooperative.id if self.cooperative else None
 
     def collector_profile(self) -> Collector:
@@ -95,7 +94,7 @@ class Principal:
         return self._farmer
 
 
-def verify_cooperative_access(principal: Principal, cooperative_id: Optional[UUID]) -> None:
+def verify_cooperative_access(principal: Principal, cooperative_id: UUID | None) -> None:
     """Refuse (403) a request that names a cooperative the caller does not belong to."""
     if principal.is_superadmin or cooperative_id is None:
         return
@@ -103,7 +102,7 @@ def verify_cooperative_access(principal: Principal, cooperative_id: Optional[UUI
         raise PermissionDenied("You can only access your own cooperative.")
 
 
-def cooperative_scope(principal: Principal, requested: Optional[UUID] = None) -> Optional[UUID]:
+def cooperative_scope(principal: Principal, requested: UUID | None = None) -> UUID | None:
     """The cooperative a query must be limited to (None = all, superadmin only).
 
     A non-superadmin naming another cooperative is refused; one naming nothing gets their own.
@@ -112,7 +111,7 @@ def cooperative_scope(principal: Principal, requested: Optional[UUID] = None) ->
     return requested if principal.is_superadmin else principal.cooperative_id
 
 
-def get_or_404(db: Session, model, raw_id, what: str, cooperative_id: Optional[UUID] = None):
+def get_or_404(db: Session, model, raw_id, what: str, cooperative_id: UUID | None = None):
     """The `model` row with id `raw_id`, limited to `cooperative_id` when given. Anything else, including a
     malformed id or another cooperative's row, is 404 "<what> not found"."""
     row = db.get(model, parse_uuid(raw_id, what))

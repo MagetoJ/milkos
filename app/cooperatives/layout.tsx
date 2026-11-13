@@ -62,7 +62,6 @@ export default function CooperativesLayout({ children }: { children: ReactNode }
       await loadOverview(boot);
     })();
     // Only on first load; later refreshes are explicit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (state.status === 'unreachable') {
@@ -127,7 +126,6 @@ function Workspace({
   // Coming back online (or finishing a sync) refreshes the dashboard numbers from the server.
   useEffect(() => {
     if (isOnline && state.overview.offline) void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, sync.lastSyncAt]);
 
   return (

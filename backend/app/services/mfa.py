@@ -12,7 +12,6 @@ import os
 import secrets
 import struct
 import time
-from typing import Optional
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -41,7 +40,7 @@ def encrypt(secret: str) -> str:
     return _fernet().encrypt(secret.encode()).decode()
 
 
-def decrypt(token: Optional[str]) -> Optional[str]:
+def decrypt(token: str | None) -> str | None:
     if not token:
         return None
     try:
@@ -58,11 +57,11 @@ def _code(secret: str, counter: int) -> str:
     return str(value % 10 ** DIGITS).zfill(DIGITS)
 
 
-def totp(secret: str, at: Optional[float] = None) -> str:
+def totp(secret: str, at: float | None = None) -> str:
     return _code(secret, int((at if at is not None else time.time()) // PERIOD))
 
 
-def verify_totp(secret: Optional[str], code: str, at: Optional[float] = None, window: int = 1) -> bool:
+def verify_totp(secret: str | None, code: str, at: float | None = None, window: int = 1) -> bool:
     """True when `code` matches the current 30-second step or one step either side (clock drift)."""
     if not secret or not code or not code.strip().isdigit():
         return False
@@ -82,7 +81,7 @@ def new_recovery_codes() -> tuple[list[str], list[str]]:
     return codes, [hash_token(c) for c in codes]
 
 
-def use_recovery_code(stored: Optional[list], code: str) -> Optional[list]:
+def use_recovery_code(stored: list | None, code: str) -> list | None:
     """The remaining hashes after spending `code`, or None if it isn't one of them."""
     digest = hash_token((code or "").strip().upper())
     remaining = list(stored or [])

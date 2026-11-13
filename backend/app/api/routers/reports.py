@@ -5,7 +5,6 @@
 Some reports need more than REPORT_READ: audit (AUDIT_READ) and payments/pricing (FARMER_PAYMENT_READ / PRICING_READ).
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
@@ -16,7 +15,8 @@ from app.core.permissions import Permission
 from app.core.utils import optional_uuid
 from app.domain.exceptions import NotFound
 from app.infrastructure.exports import xlsx
-from app.services import reporting, reports as legacy_reports
+from app.services import reporting
+from app.services import reports as legacy_reports
 from app.services.principal import Principal, cooperative_scope
 
 router = APIRouter(prefix="/api/v1/reports", tags=["Reports"])
@@ -45,17 +45,17 @@ def catalogue(principal: Principal = Depends(require_permission(Permission.REPOR
 @router.get("/{kind}")
 def run_report(
     kind: str,
-    date_from: Optional[datetime.date] = None,
-    date_to: Optional[datetime.date] = None,
-    cooperative_id: Optional[str] = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    cooperative_id: str | None = None,
     format: str = Query("json", pattern="^(json|csv|xlsx)$"),
-    farmer_id: Optional[str] = None,
-    collector_id: Optional[str] = None,
-    cooler_id: Optional[str] = None,
-    centre_id: Optional[str] = None,
-    quality_status: Optional[str] = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
-    status: Optional[str] = Query(None, max_length=30, pattern="^[A-Z_]+$"),
-    action: Optional[str] = Query(None, max_length=60, pattern="^[A-Z_]+$"),
+    farmer_id: str | None = None,
+    collector_id: str | None = None,
+    cooler_id: str | None = None,
+    centre_id: str | None = None,
+    quality_status: str | None = Query(None, pattern="^(ACCEPTED|REJECTED|PENDING)$"),
+    status: str | None = Query(None, max_length=30, pattern="^[A-Z_]+$"),
+    action: str | None = Query(None, max_length=60, pattern="^[A-Z_]+$"),
     include_history: bool = False,
     principal: Principal = Depends(require_permission(Permission.REPORT_READ)),
     db: Session = Depends(get_db),
