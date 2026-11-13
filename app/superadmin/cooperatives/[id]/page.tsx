@@ -1,11 +1,17 @@
-'use client';
-
 import { Suspense } from 'react';
-import { useParams } from 'next/navigation';
 import { CooperativeDetailView } from '../../_components/views/cooperative-detail';
 
-export default function CooperativePage() {
-  const { id } = useParams<{ id: string }>();
+export function generateStaticParams() {
+  return [];
+}
+
+export default async function CooperativePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
   return (
     <Suspense>
       <CooperativeDetailView key={id} id={id} />

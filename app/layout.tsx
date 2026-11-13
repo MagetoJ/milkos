@@ -27,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased min-h-screen bg-gray-50">
+        <link rel="manifest" href="/manifest.webmanifest" />
         <BluetoothProvider>
           {children}
           <ServiceWorkerRegistrar />

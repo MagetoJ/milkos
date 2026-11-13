@@ -11,10 +11,42 @@ import type { Local, OfflineSessionRecord, QueueItem } from './types';
 
 type Row = Local<Record<string, unknown>> & { id: string };
 
+export type LocalCollection = Local<{
+  id: string;
+  client_tx_id?: string;
+  farmer_id: string;
+  farmer_name: string;
+  member_number: string;
+  weight_kg: number;
+  grade: 'A' | 'B' | 'C';
+  shift: 'MORNING' | 'EVENING';
+  collected_at: string;
+  updated_at: string;
+  sync_status: 'pending' | 'synced' | 'failed';
+  receipt_printed: boolean;
+  [key: string]: unknown;
+}>;
+
 export interface MetaKV {
   key: string;
   value: unknown;
 }
+
+export const db = {
+  get collections() {
+    return userDb().collections;
+  },
+  get farmers() {
+    return userDb().farmers;
+  },
+  get syncQueue() {
+    return userDb().queue;
+  },
+  get syncMeta() {
+    return userDb().meta;
+  },
+  transaction: (...args: Parameters<UserDB['transaction']>) => userDb().transaction(...args),
+};
 
 export class MetaDB extends Dexie {
   kv!: Table<MetaKV, string>;
