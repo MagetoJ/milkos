@@ -1,13 +1,13 @@
 """The SMS gateway contract. services/notifications.py depends only on this."""
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 @dataclass(frozen=True)
 class SmsResult:
     accepted: bool                       # True only when the provider has taken responsibility for delivery
-    provider_message_id: Optional[str] = None
-    error: Optional[str] = None
+    provider_message_id: str | None = None
+    error: str | None = None
     retryable: bool = True               # False for permanent refusals (invalid number, blacklisted...)
 
 

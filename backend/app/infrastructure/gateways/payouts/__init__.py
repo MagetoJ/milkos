@@ -14,7 +14,7 @@ from typing import Optional
 from app.domain.interfaces.payments import PaymentGatewayInterface
 
 
-def get_provider() -> Optional[PaymentGatewayInterface]:
+def get_provider() -> PaymentGatewayInterface | None:
     name = (os.getenv("PAYOUT_PROVIDER") or "").strip().lower()
     if not name:
         return None

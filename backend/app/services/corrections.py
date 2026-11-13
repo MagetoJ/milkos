@@ -13,7 +13,6 @@ REVERSED. Nothing is deleted or overwritten. Lines that were already included in
 negative payment adjustment for that farmer; the corrected lines are paid by the next payment run.
 """
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,11 +21,21 @@ from app.core.permissions import Permission
 from app.core.utils import field_error, iso, parse_uuid
 from app.domain.exceptions import Conflict, NotFound, PermissionDenied
 from app.domain.schemas.auth import UserRole
-from app.domain.schemas.collections import BatchCorrectionProposal, CorrectionRequestCreate, ReversalRequestCreate
+from app.domain.schemas.collections import (
+    BatchCorrectionProposal,
+    CorrectionRequestCreate,
+    ReversalRequestCreate,
+)
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.notifications import Notification, NotificationStatus
 from app.infrastructure.db.models.operations import (
-    BatchStatus, CollectionBatch, CollectionCorrectionRequest, LineStatus, MilkCollection, RequestStatus, RequestType,
+    BatchStatus,
+    CollectionBatch,
+    CollectionCorrectionRequest,
+    LineStatus,
+    MilkCollection,
+    RequestStatus,
+    RequestType,
     WeightSource,
 )
 from app.infrastructure.db.models.user import User
@@ -157,12 +166,12 @@ def _skip_unsent_receipts(db: Session, line_ids: list[UUID], why: str) -> None:
         n.next_attempt_at = None
 
 
-def approve(db: Session, principal: Principal, request: CollectionCorrectionRequest, comment: Optional[str]) -> CollectionCorrectionRequest:
+def approve(db: Session, principal: Principal, request: CollectionCorrectionRequest, comment: str | None) -> CollectionCorrectionRequest:
     request = db.get(CollectionCorrectionRequest, request.id, with_for_update=True)
     batch = _reviewable(db, principal, request)
     lines = _lines(db, batch)
     now = datetime.datetime.utcnow()
-    result: Optional[CollectionBatch] = None
+    result: CollectionBatch | None = None
 
     if request.request_type == RequestType.CORRECTION:
         proposal = BatchCorrectionProposal.model_validate(request.proposed_values)
@@ -225,7 +234,7 @@ def approve(db: Session, principal: Principal, request: CollectionCorrectionRequ
     return request
 
 
-def reject(db: Session, principal: Principal, request: CollectionCorrectionRequest, comment: Optional[str]) -> CollectionCorrectionRequest:
+def reject(db: Session, principal: Principal, request: CollectionCorrectionRequest, comment: str | None) -> CollectionCorrectionRequest:
     request = db.get(CollectionCorrectionRequest, request.id, with_for_update=True)
     batch = _reviewable(db, principal, request)
     if not comment or len(comment) < 3:
@@ -266,7 +275,7 @@ def cancel(db: Session, principal: Principal, request: CollectionCorrectionReque
     return request
 
 
-def _tell_requester(db: Session, request: CollectionCorrectionRequest, batch: CollectionBatch, *, approved: bool, comment: Optional[str]) -> None:
+def _tell_requester(db: Session, request: CollectionCorrectionRequest, batch: CollectionBatch, *, approved: bool, comment: str | None) -> None:
     if request.requested_by is None:
         return
     kind = "Correction" if request.request_type == RequestType.CORRECTION else "Reversal"
@@ -288,7 +297,7 @@ def _farmer_ids(request: CollectionCorrectionRequest) -> set[str]:
 
 
 def request_json(request: CollectionCorrectionRequest, batch: CollectionBatch, names: dict[UUID, str],
-                 resulting_reference: Optional[str] = None, farmer_names: Optional[dict[str, str]] = None) -> dict:
+                 resulting_reference: str | None = None, farmer_names: dict[str, str] | None = None) -> dict:
     return {
         "id": str(request.id),
         "cooperative_id": str(request.cooperative_id),
@@ -354,7 +363,7 @@ def get_scoped(db: Session, principal: Principal, raw_id: str) -> CollectionCorr
     return row
 
 
-def list_page(db: Session, principal: Principal, status: Optional[str], request_type: Optional[str], params: PageParams) -> dict:
+def list_page(db: Session, principal: Principal, status: str | None, request_type: str | None, params: PageParams) -> dict:
     query = _requests_scope(db, principal)
     if status:
         query = query.filter(CollectionCorrectionRequest.status == status)

@@ -1,18 +1,30 @@
 """Collector profiles. A collector is a COLLECTOR user plus this operational profile."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.utils import changed, conflict, field_error, iso, next_sequence, num, reject_nulls, snapshot
+from app.core.utils import (
+    changed,
+    conflict,
+    field_error,
+    iso,
+    next_sequence,
+    num,
+    reject_nulls,
+    snapshot,
+)
 from app.domain.schemas.auth import UserRole
 from app.domain.schemas.platform import CollectorCreate, CollectorUpdate
 from app.infrastructure.db.models.admin import Cooler
 from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
-from app.infrastructure.db.models.operations import Collector, MilkCollection, QualityStatus
+from app.infrastructure.db.models.operations import (
+    Collector,
+    MilkCollection,
+    QualityStatus,
+)
 from app.infrastructure.db.models.user import User
 from app.services import audit
 from app.services.common import check_centre, target_cooperative
@@ -47,7 +59,7 @@ def ensure_profile(db: Session, user: User) -> Collector:
     return profile
 
 
-def check_cooler(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID]) -> Optional[Cooler]:
+def check_cooler(db: Session, cooperative_id: UUID, cooler_id: UUID | None) -> Cooler | None:
     if cooler_id is None:
         return None
     cooler = db.get(Cooler, cooler_id)
@@ -57,8 +69,8 @@ def check_cooler(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID]) -
 
 
 def collector_json(
-    collector: Collector, user: User, *, cooperative: Optional[Cooperative] = None,
-    centre_name: Optional[str] = None, cooler_name: Optional[str] = None, stats: Optional[dict] = None,
+    collector: Collector, user: User, *, cooperative: Cooperative | None = None,
+    centre_name: str | None = None, cooler_name: str | None = None, stats: dict | None = None,
 ) -> dict:
     data = {
         "id": str(collector.id),
@@ -105,7 +117,7 @@ def stats_for(db: Session, collector_ids: list[UUID]) -> dict[UUID, dict]:
     return {cid: {"total_litres": num(l) or 0.0, "collections": c, "last_collection": iso(last)} for cid, l, c, last in rows}
 
 
-def _number_taken(db: Session, cooperative_id: UUID, number: str, exclude_id: Optional[UUID] = None) -> bool:
+def _number_taken(db: Session, cooperative_id: UUID, number: str, exclude_id: UUID | None = None) -> bool:
     query = db.query(Collector.id).filter(Collector.cooperative_id == cooperative_id, Collector.collector_number == number)
     if exclude_id:
         query = query.filter(Collector.id != exclude_id)
@@ -215,7 +227,7 @@ def update(db: Session, principal: Principal, profile: Collector, payload: Colle
     return profile
 
 
-def rows(db: Session, cooperative_id: UUID, collector_id: Optional[UUID] = None) -> list[dict]:
+def rows(db: Session, cooperative_id: UUID, collector_id: UUID | None = None) -> list[dict]:
     """The cooperative's collectors (or one), with their centre, cooler and collection stats."""
     query = (
         db.query(Collector, User, CollectionCentre.name, Cooler.name)

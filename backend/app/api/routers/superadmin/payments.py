@@ -1,5 +1,4 @@
 """SMS credit payments (M-Pesa top-ups) awaiting or past verification."""
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -26,9 +25,9 @@ def get_pending_payments(db: Session = Depends(get_db), _: Principal = Depends(r
 
 @router.get("")
 def list_payments(
-    payment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|AWAITING_INFORMATION|VERIFIED|REJECTED|CANCELLED)$"),
-    cooperative_id: Optional[str] = None,
-    search: Optional[str] = Query(None, max_length=100),
+    payment_status: str | None = Query(None, alias="status", pattern="^(PENDING|AWAITING_INFORMATION|VERIFIED|REJECTED|CANCELLED)$"),
+    cooperative_id: str | None = None,
+    search: str | None = Query(None, max_length=100),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

@@ -2,8 +2,7 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -30,7 +29,7 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
     if not hashed_password:
         return False
     try:
@@ -40,9 +39,9 @@ def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool
         return False
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -59,7 +58,7 @@ def create_purpose_token(subject: str, purpose: str, minutes: int, **extra) -> s
     return create_access_token({"sub": subject, "purpose": purpose, **extra}, timedelta(minutes=minutes))
 
 
-def decode_purpose_token(token: str, purpose: str) -> Optional[dict]:
+def decode_purpose_token(token: str, purpose: str) -> dict | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:

@@ -5,7 +5,8 @@ for report exports without adding a dependency.
 """
 import io
 import zipfile
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 from xml.sax.saxutils import escape
 
 _CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

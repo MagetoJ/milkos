@@ -1,13 +1,21 @@
 """Coolers (bulk milk tanks / collection devices)."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.utils import changed, conflict, field_error, iso, next_sequence, num, reject_nulls, snapshot
+from app.core.utils import (
+    changed,
+    conflict,
+    field_error,
+    iso,
+    next_sequence,
+    num,
+    reject_nulls,
+    snapshot,
+)
 from app.domain.schemas.auth import UserRole
 from app.domain.schemas.platform import CoolerCreate, CoolerUpdate
 from app.infrastructure.db.models.admin import Cooler, CoolerStatus
@@ -31,9 +39,9 @@ ALERT_FIELDS = (
 
 
 def cooler_json(
-    cooler: Cooler, *, cooperative: Optional[Cooperative] = None, centre_name: Optional[str] = None,
-    litres_today: float = 0.0, manager_name: Optional[str] = None, sensors: Optional[list[dict]] = None,
-    context: Optional[dict] = None,
+    cooler: Cooler, *, cooperative: Cooperative | None = None, centre_name: str | None = None,
+    litres_today: float = 0.0, manager_name: str | None = None, sensors: list[dict] | None = None,
+    context: dict | None = None,
 ) -> dict:
     data = {
         "id": str(cooler.id),
@@ -76,10 +84,14 @@ def cooler_json(
     return data
 
 
-def context_for(db: Session, coolers: list[Cooler], sensors_by_cooler: Optional[dict] = None) -> dict[UUID, dict]:
+def context_for(db: Session, coolers: list[Cooler], sensors_by_cooler: dict | None = None) -> dict[UUID, dict]:
     """Operational context for cooler cards, one grouped query per source."""
     from app.infrastructure.db.models.inbox import InboxNotification
-    from app.infrastructure.db.models.operations import BatchStatus, CollectionBatch, Collector
+    from app.infrastructure.db.models.operations import (
+        BatchStatus,
+        CollectionBatch,
+        Collector,
+    )
     from app.infrastructure.db.models.sensors import CoolerReading
 
     ids = [c.id for c in coolers]
@@ -115,11 +127,11 @@ def context_for(db: Session, coolers: list[Cooler], sensors_by_cooler: Optional[
     ):
         battery.setdefault(r.cooler_id, r.battery_percent)
     since = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
-    alerts = dict(
-        (str(eid), n) for eid, n in db.query(InboxNotification.entity_id, func.count(InboxNotification.id))
+    alerts = {
+        str(eid): n for eid, n in db.query(InboxNotification.entity_id, func.count(InboxNotification.id))
         .filter(InboxNotification.entity_type == "cooler", InboxNotification.entity_id.in_([str(i) for i in ids]),
                 InboxNotification.created_at >= since).group_by(InboxNotification.entity_id)
-    )
+    }
     out = {}
     for c in coolers:
         bound = (sensors_by_cooler or {}).get(c.id) or []
@@ -149,14 +161,14 @@ def litres_today(db: Session, cooler_ids: list[UUID]) -> dict[UUID, float]:
     return {cid: num(total) or 0.0 for cid, total in rows}
 
 
-def _code_taken(db: Session, cooperative_id: UUID, code: str, exclude_id: Optional[UUID] = None) -> bool:
+def _code_taken(db: Session, cooperative_id: UUID, code: str, exclude_id: UUID | None = None) -> bool:
     query = db.query(Cooler.id).filter(Cooler.cooperative_id == cooperative_id, Cooler.code == code)
     if exclude_id:
         query = query.filter(Cooler.id != exclude_id)
     return query.first() is not None
 
 
-def check_manager(db: Session, cooperative_id: UUID, manager_user_id: Optional[UUID]) -> None:
+def check_manager(db: Session, cooperative_id: UUID, manager_user_id: UUID | None) -> None:
     """The person in charge must be an active admin or manager of the same cooperative."""
     if manager_user_id is None:
         return
@@ -254,9 +266,12 @@ def update(db: Session, principal: Principal, cooler: Cooler, payload: CoolerUpd
     return cooler
 
 
-def rows(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID] = None) -> list[dict]:
+def rows(db: Session, cooperative_id: UUID, cooler_id: UUID | None = None) -> list[dict]:
     """The cooperative's coolers (or one) with centre, manager, today's litres, sensors and context."""
-    from app.services import centres, sensors  # local: sensors -> cooler_alerts, kept off this module's import path
+    from app.services import (  # local: sensors -> cooler_alerts, kept off this module's import path
+        centres,
+        sensors,
+    )
 
     query = (
         db.query(Cooler, CollectionCentre.name)

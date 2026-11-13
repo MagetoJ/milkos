@@ -1,5 +1,5 @@
 """Cooperative onboarding applications: the review queue and approve/reject decisions."""
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ router = APIRouter()
 
 class ApplicationAction(BaseModel):
     action: Literal["APPROVE", "REJECT"]
-    reason: Optional[str] = Field(default=None, max_length=500)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 @router.get("/applications/pending")
@@ -27,8 +27,8 @@ def get_pending_applications(db: Session = Depends(get_db), _: Principal = Depen
 
 @router.get("/applications")
 def list_applications(
-    application_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|APPROVED|REJECTED)$"),
-    search: Optional[str] = Query(None, max_length=100),
+    application_status: str | None = Query(None, alias="status", pattern="^(PENDING|APPROVED|REJECTED)$"),
+    search: str | None = Query(None, max_length=100),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

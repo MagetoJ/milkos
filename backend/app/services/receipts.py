@@ -6,7 +6,6 @@ reported SENT only when the provider accepted it. Each receipt has the idempoten
 "receipt:<allocation line id>", so a batch resent after a reconnection can never produce a second receipt.
 """
 import os
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -24,7 +23,7 @@ def _date(batch: CollectionBatch) -> str:
     return batch.collection_date.strftime("%d/%m/%Y")
 
 
-def message(db: Session, template: Optional[str], *, cooperative: Cooperative, batch: CollectionBatch,
+def message(db: Session, template: str | None, *, cooperative: Cooperative, batch: CollectionBatch,
             line: MilkCollection, farmer) -> str:
     centre = db.get(CollectionCentre, batch.centre_id) if batch.centre_id else None
     cooler = db.get(Cooler, batch.cooler_id) if batch.cooler_id else None

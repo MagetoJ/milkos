@@ -1,7 +1,12 @@
 import pytest
 
 from app.core.validation import (
-    KENYA_COUNTIES, names_similar, normalize_county, normalize_kra_pin, normalize_national_id, normalize_phone,
+    KENYA_COUNTIES,
+    names_similar,
+    normalize_county,
+    normalize_kra_pin,
+    normalize_national_id,
+    normalize_phone,
 )
 
 

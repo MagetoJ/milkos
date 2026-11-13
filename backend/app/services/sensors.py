@@ -1,6 +1,5 @@
 """Cooler sensor registry: registering a sensor, binding it to a cooler, and connection reports."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -16,7 +15,7 @@ from app.services.principal import Principal
 IDENTIFIER_TAKEN = "This sensor is already registered in your cooperative."
 
 
-def sensor_json(sensor: SensorDevice, cooler_name: Optional[str] = None) -> dict:
+def sensor_json(sensor: SensorDevice, cooler_name: str | None = None) -> dict:
     return {
         "id": str(sensor.id),
         "cooperative_id": str(sensor.cooperative_id),
@@ -50,7 +49,7 @@ def for_coolers(db: Session, cooler_ids: list[UUID]) -> dict[UUID, list[dict]]:
     return out
 
 
-def _own_cooler(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID]) -> Optional[Cooler]:
+def _own_cooler(db: Session, cooperative_id: UUID, cooler_id: UUID | None) -> Cooler | None:
     if cooler_id is None:
         return None
     cooler = db.get(Cooler, cooler_id)

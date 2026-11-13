@@ -8,15 +8,15 @@ Revision ID: 0001_baseline
 Revises:
 Create Date: 2026-09-29
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import context, op
 import sqlalchemy as sa
+from alembic import context, op
 
 revision: str = "0001_baseline"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 USER_ROLES = ("ADMIN", "MANAGER", "COLLECTOR", "FARMER", "SUPER_ADMIN", "COOP_ADMIN")
 

@@ -1,14 +1,15 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime
 
-from app.infrastructure.db.database import AsyncSessionLocal
-from app.models.tenant import Cooperative
 from app.models.centre import CollectionCentre, CoolingUnit
 from app.models.pricing import BasePricing, QualityDeduction
+from app.models.tenant import Cooperative
 from app.models.user import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.security import get_password_hash
+from app.infrastructure.db.database import AsyncSessionLocal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ async def seed_database(db: AsyncSession):
     pricing = BasePricing(
         cooperative_id=test_coop.id,
         price_per_liter=52.00,  # KES 52.00 / Liter base price
-        effective_from=datetime.now(timezone.utc),
+        effective_from=datetime.now(UTC),
         is_active=True,
     )
     db.add(pricing)

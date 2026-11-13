@@ -1,5 +1,4 @@
 """Every sign-in account, farmer and collector on the platform: lists and details."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import or_
@@ -14,7 +13,13 @@ from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.operations import Collector, MilkCollection
 from app.infrastructure.db.models.user import User
-from app.infrastructure.db.pagination import PageParams, apply_sort, fetch_page, page_result, paginate
+from app.infrastructure.db.pagination import (
+    PageParams,
+    apply_sort,
+    fetch_page,
+    page_result,
+    paginate,
+)
 from app.services import accounts, audit, collections, collectors, farmers, users
 from app.services.platform_admin import overview
 from app.services.principal import Principal, get_or_404
@@ -40,8 +45,8 @@ def user_json(db: Session, user: User, sms=None) -> dict:
     return data
 
 
-def users_page(db: Session, *, search: Optional[str], role: Optional[UserRole], cooperative_id: Optional[str],
-               is_active: Optional[bool], account_status: Optional[str], params: PageParams) -> dict:
+def users_page(db: Session, *, search: str | None, role: UserRole | None, cooperative_id: str | None,
+               is_active: bool | None, account_status: str | None, params: PageParams) -> dict:
     """`cooperative_id` is an id, or 'none' for platform accounts."""
     query = db.query(User, Cooperative).outerjoin(Cooperative, Cooperative.id == User.cooperative_id)
     if role:
@@ -97,8 +102,8 @@ def farmer_json(db: Session, farmer: Farmer) -> dict:
     return data
 
 
-def farmers_page(db: Session, *, search: Optional[str], cooperative_id: Optional[UUID], centre_id: Optional[UUID],
-                 status: Optional[str], params: PageParams) -> dict:
+def farmers_page(db: Session, *, search: str | None, cooperative_id: UUID | None, centre_id: UUID | None,
+                 status: str | None, params: PageParams) -> dict:
     query = (
         db.query(Farmer, CollectionCentre.name, Cooperative)
         .join(Cooperative, Cooperative.id == Farmer.cooperative_id)
@@ -172,8 +177,8 @@ def collector_json(db: Session, profile: Collector) -> dict:
     return _collector_rows(db, [_collector_query(db).filter(Collector.id == profile.id).one()])[0]
 
 
-def collectors_page(db: Session, *, search: Optional[str], cooperative_id: Optional[UUID], cooler_id: Optional[UUID],
-                    status: Optional[str], params: PageParams) -> dict:
+def collectors_page(db: Session, *, search: str | None, cooperative_id: UUID | None, cooler_id: UUID | None,
+                    status: str | None, params: PageParams) -> dict:
     query = _collector_query(db)
     if cooperative_id:
         query = query.filter(Collector.cooperative_id == cooperative_id)

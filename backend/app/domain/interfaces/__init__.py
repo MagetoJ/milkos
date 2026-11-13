@@ -5,7 +5,11 @@ without inheriting from it. That keeps test fakes like tests.conftest.RecordingS
 """
 from app.domain.interfaces.email import EmailGatewayInterface, EmailResult
 from app.domain.interfaces.payments import PaymentGatewayInterface, PayoutResult
-from app.domain.interfaces.sms import GatewayConfigurationError, SMSGatewayInterface, SmsResult
+from app.domain.interfaces.sms import (
+    GatewayConfigurationError,
+    SMSGatewayInterface,
+    SmsResult,
+)
 from app.domain.interfaces.tasks import TaskDispatcher
 
 __all__ = [

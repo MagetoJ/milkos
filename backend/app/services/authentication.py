@@ -6,16 +6,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.permissions import permission_names
 from app.core.security import (
-    access_token_for, create_purpose_token, decode_access_token, decode_purpose_token, hash_password, verify_password,
+    access_token_for,
+    create_purpose_token,
+    decode_access_token,
+    decode_purpose_token,
+    hash_password,
+    verify_password,
 )
-from app.domain.exceptions import DomainError, InvalidRequest, PermissionDenied, RateLimited, Unauthenticated
+from app.domain.exceptions import (
+    DomainError,
+    InvalidRequest,
+    PermissionDenied,
+    RateLimited,
+    Unauthenticated,
+)
 from app.infrastructure.db.models.user import AccountStatus, User
 from app.services import accounts, mfa, security_events
 
@@ -27,8 +37,8 @@ _DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
 class SignIn:
     """A finished sign-in (`token` set) or one that still needs the second factor (`token` None)."""
     user: User
-    token: Optional[str] = None
-    mfa_token: Optional[str] = None
+    token: str | None = None
+    mfa_token: str | None = None
 
     def json(self) -> dict:
         if self.mfa_token:
@@ -46,7 +56,7 @@ class SignIn:
         }
 
 
-def _user_for(db: Session, claims: Optional[dict]) -> Optional[User]:
+def _user_for(db: Session, claims: dict | None) -> User | None:
     """The account a token's subject names, or None (missing or malformed subject, deleted account)."""
     try:
         return db.get(User, UUID(claims["sub"])) if claims else None
@@ -68,7 +78,7 @@ def _finish(db: Session, user: User, ip, ua, method: str) -> SignIn:
     return SignIn(user=user, token=access_token_for(user))
 
 
-def password_login(db: Session, identifier: Optional[str], password: str, ip=None, ua=None) -> SignIn:
+def password_login(db: Session, identifier: str | None, password: str, ip=None, ua=None) -> SignIn:
     """Email or phone number plus password. Accounts with two-step verification get an mfa_token instead."""
     user = accounts.find_by_identifier(db, identifier) if identifier else None
     if user is None:
@@ -167,7 +177,7 @@ def profile(db: Session, claims: dict) -> dict:
     }
 
 
-def logout(db: Session, token: Optional[str], ip=None, ua=None) -> None:
+def logout(db: Session, token: str | None, ip=None, ua=None) -> None:
     """Note the sign-out of whoever `token` belongs to. A missing or invalid token is not an error."""
     if not token:
         return

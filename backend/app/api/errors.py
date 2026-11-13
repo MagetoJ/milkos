@@ -3,8 +3,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.domain.exceptions import (
-    Conflict, DomainError, Gone, InvalidRequest, NotFound, OperationFailed, PermissionDenied, RateLimited,
-    ServiceUnavailable, Unauthenticated, ValidationFailed,
+    Conflict,
+    DomainError,
+    Gone,
+    InvalidRequest,
+    NotFound,
+    OperationFailed,
+    PermissionDenied,
+    RateLimited,
+    ServiceUnavailable,
+    Unauthenticated,
+    ValidationFailed,
 )
 
 STATUS_CODES: dict[type[DomainError], int] = {

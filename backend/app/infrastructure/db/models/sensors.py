@@ -7,7 +7,19 @@ append-only measurement events; a correction is a new reading, never an edit.
 import datetime
 import uuid
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Uuid, true
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Uuid,
+    true,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.infrastructure.db.database import Base

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from google.oauth2 import id_token
-from google.auth.transport import requests
 import os
+
+from fastapi import APIRouter, HTTPException
+from google.auth.transport import requests
+from google.oauth2 import id_token
+from pydantic import BaseModel
 
 router = APIRouter()
 

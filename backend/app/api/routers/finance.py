@@ -7,7 +7,6 @@ balances are computed from sms_credit_transactions; nothing here lets a client s
   MANAGER     read the credit center, prices and payments
 """
 import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -18,7 +17,11 @@ from app.api.dependencies.pagination import page_params
 from app.core.permissions import Permission
 from app.core.utils import iso, optional_uuid
 from app.domain.schemas.finance import (
-    Cancellation, PaymentGenerate, PaymentStatusChange, PriceCreate, SmsSettingsUpdate,
+    Cancellation,
+    PaymentGenerate,
+    PaymentStatusChange,
+    PriceCreate,
+    SmsSettingsUpdate,
 )
 from app.infrastructure.db.models.admin import SMSCreditPayment
 from app.infrastructure.db.models.finance import FarmerPayment, MilkPrice
@@ -34,7 +37,7 @@ router = APIRouter(prefix="/api/v1/cooperative", tags=["Cooperative finance"])
 @router.get("/sms-credits/center")
 def sms_credit_center(
     params: PageParams = Depends(page_params),
-    transaction_type: Optional[str] = Query(None, alias="type", pattern="^(PURCHASE|ADJUSTMENT|RESERVED|CONSUMED|REFUNDED|EXPIRY)$"),
+    transaction_type: str | None = Query(None, alias="type", pattern="^(PURCHASE|ADJUSTMENT|RESERVED|CONSUMED|REFUNDED|EXPIRY)$"),
     principal: Principal = Depends(require_permission(Permission.SMS_CREDIT_READ)),
     db: Session = Depends(get_db),
 ):
@@ -68,8 +71,8 @@ def update_sms_settings(
 @router.get("/sms-messages")
 def list_sms_messages(
     params: PageParams = Depends(page_params),
-    message_type: Optional[str] = Query(None, alias="type", max_length=40),
-    message_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|PENDING_PROVIDER|RESERVED|SENDING|SENT|FAILED|REFUNDED|SKIPPED)$"),
+    message_type: str | None = Query(None, alias="type", max_length=40),
+    message_status: str | None = Query(None, alias="status", pattern="^(PENDING|PENDING_PROVIDER|RESERVED|SENDING|SENT|FAILED|REFUNDED|SKIPPED)$"),
     principal: Principal = Depends(require_permission(Permission.SMS_CREDIT_READ)),
     db: Session = Depends(get_db),
 ):
@@ -122,11 +125,11 @@ PAYMENT_STATUSES = "^(PENDING|PROCESSING|PAID|FAILED|CANCELLED)$"
 
 @router.get("/farmer-payments")
 def list_farmer_payments(
-    search: Optional[str] = Query(None, max_length=100),
-    payment_status: Optional[str] = Query(None, alias="status", pattern=PAYMENT_STATUSES),
-    farmer_id: Optional[str] = None,
-    period_start: Optional[datetime.date] = None,
-    period_end: Optional[datetime.date] = None,
+    search: str | None = Query(None, max_length=100),
+    payment_status: str | None = Query(None, alias="status", pattern=PAYMENT_STATUSES),
+    farmer_id: str | None = None,
+    period_start: datetime.date | None = None,
+    period_end: datetime.date | None = None,
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.FARMER_PAYMENT_READ)),
     db: Session = Depends(get_db),
@@ -160,7 +163,7 @@ def generate_farmer_payments(
 
 @router.get("/farmer-payments/adjustments")
 def list_adjustments(
-    adjustment_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|APPLIED|CANCELLED)$"),
+    adjustment_status: str | None = Query(None, alias="status", pattern="^(PENDING|APPLIED|CANCELLED)$"),
     params: PageParams = Depends(page_params),
     principal: Principal = Depends(require_permission(Permission.FARMER_PAYMENT_READ)), db: Session = Depends(get_db),
 ):

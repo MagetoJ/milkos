@@ -16,17 +16,17 @@ Create Date: 2026-10-04
 """
 import datetime
 import uuid
+from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Sequence, Union
 
-from alembic import context, op
 import sqlalchemy as sa
+from alembic import context, op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0007_batches_finance"
-down_revision: Union[str, Sequence[str], None] = "0006_offline_sync"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0006_offline_sync"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 JSON_TYPE = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 NOW = sa.text("CURRENT_TIMESTAMP")

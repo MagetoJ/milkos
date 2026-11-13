@@ -10,7 +10,7 @@ cannot read or change another's data. Access is checked by app.api.dependencies.
               cannot change the team or decommission equipment
 """
 import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
@@ -22,9 +22,20 @@ from app.api.dependencies.pagination import page_params
 from app.core.permissions import Permission
 from app.domain.schemas.auth import UserRole
 from app.domain.schemas.cooperative_module import (
-    CentreCreate, CentreUpdate, FarmerCreate, FarmerUpdate, TeamCreate, TeamUpdate,
+    CentreCreate,
+    CentreUpdate,
+    FarmerCreate,
+    FarmerUpdate,
+    TeamCreate,
+    TeamUpdate,
 )
-from app.domain.schemas.platform import CollectorCreate, CollectorUpdate, CoolerCreate, CoolerUpdate, SmsTopUpCreate
+from app.domain.schemas.platform import (
+    CollectorCreate,
+    CollectorUpdate,
+    CoolerCreate,
+    CoolerUpdate,
+    SmsTopUpCreate,
+)
 from app.domain.schemas.sync import DeviceUpdate, SensorCreate, SensorUpdate
 from app.infrastructure.db.models.admin import Cooler, SMSCreditPayment
 from app.infrastructure.db.models.centre import CollectionCentre
@@ -36,8 +47,18 @@ from app.infrastructure.db.models.sync import Device
 from app.infrastructure.db.models.user import User
 from app.infrastructure.db.pagination import PageParams
 from app.services import (
-    accounts, audit, centres, collectors, cooler_readings, coolers, coop_dashboard, farmers, notifications, payments,
-    sensors, team,
+    accounts,
+    audit,
+    centres,
+    collectors,
+    cooler_readings,
+    coolers,
+    coop_dashboard,
+    farmers,
+    notifications,
+    payments,
+    sensors,
+    team,
 )
 from app.services.principal import Principal, own
 from app.services.sync import devices
@@ -90,9 +111,9 @@ def update_centre(centre_id: str, payload: CentreUpdate, principal: Principal = 
 
 @router.get("/farmers")
 def list_farmers(
-    search: Optional[str] = Query(None, max_length=100),
-    centre_id: Optional[str] = Query(None, description="A centre id, or 'none' for farmers without a centre"),
-    farmer_status: Optional[str] = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
+    search: str | None = Query(None, max_length=100),
+    centre_id: str | None = Query(None, description="A centre id, or 'none' for farmers without a centre"),
+    farmer_status: str | None = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     principal: Principal = Depends(staff),
@@ -135,8 +156,8 @@ def list_team(principal: Principal = Depends(staff), db: Session = Depends(get_d
 
 @router.get("/accounts")
 def list_accounts(
-    role: Optional[UserRole] = None, account_status: Optional[str] = Query(None, max_length=30),
-    search: Optional[str] = Query(None, max_length=100),
+    role: UserRole | None = None, account_status: str | None = Query(None, max_length=30),
+    search: str | None = Query(None, max_length=100),
     principal: Principal = Depends(_staff_with(Permission.USER_READ)), db: Session = Depends(get_db),
 ):
     """Every sign-in account of this cooperative (staff and farmers) with its activation state."""
@@ -157,11 +178,11 @@ def update_team_member(member_id: str, payload: TeamUpdate, principal: Principal
 
 class _StatusBody(BaseModel):
     status: Literal["ACTIVE", "SUSPENDED", "DISABLED"]
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 class _ReasonBody(BaseModel):
-    reason: Optional[str] = Field(None, max_length=500)
+    reason: str | None = Field(None, max_length=500)
 
 
 @router.post("/accounts/{account_id}/resend-activation")
@@ -172,7 +193,7 @@ def resend_account_activation(account_id: str, principal: Principal = Depends(ad
 
 
 @router.post("/accounts/{account_id}/revoke-invitation")
-def revoke_account_invitation(account_id: str, body: Optional[_ReasonBody] = None, principal: Principal = Depends(admin_only), db: Session = Depends(get_db)):
+def revoke_account_invitation(account_id: str, body: _ReasonBody | None = None, principal: Principal = Depends(admin_only), db: Session = Depends(get_db)):
     user = accounts.revoke_invitation(db, principal, team.own_account(db, principal, account_id), body.reason if body else None)
     return team.member_json(db, user, principal.user)
 
@@ -257,7 +278,7 @@ def update_cooler(
 @router.get("/trends")
 def trends(
     range: str = Query("30d", pattern="^(today|7d|30d|3m|custom)$"),
-    date_from: Optional[datetime.date] = None, date_to: Optional[datetime.date] = None,
+    date_from: datetime.date | None = None, date_to: datetime.date | None = None,
     principal: Principal = Depends(staff), db: Session = Depends(get_db),
 ):
     """Collection, farmer and SMS trend per day for the dashboard: today, 7 days, 30 days, 3 months or a custom
@@ -343,7 +364,7 @@ def update_sensor(
 @router.get("/notifications")
 def list_notifications(
     params: PageParams = Depends(page_params),
-    notification_status: Optional[str] = Query(
+    notification_status: str | None = Query(
         None, alias="status", pattern="^(PENDING|PENDING_PROVIDER|RESERVED|SENDING|SENT|FAILED|REFUNDED|SKIPPED)$",
     ),
     principal: Principal = Depends(staff),

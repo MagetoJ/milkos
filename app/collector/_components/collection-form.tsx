@@ -11,7 +11,7 @@ export function IntakeCollectionAction({ currentEntry }: { currentEntry: Collect
       const bytes = buildCollectionReceiptBytes(currentEntry);
       await printToBluetoothPrinter(bytes);
       alert('Receipt printed successfully!');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Print Error:', err);
       alert(`Printing failed: ${err.message}`);
     } finally {

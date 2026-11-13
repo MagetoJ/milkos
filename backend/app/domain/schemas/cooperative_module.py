@@ -1,12 +1,17 @@
 """Request bodies for the cooperative module (app/api/routers/cooperative.py)."""
 import re
-from typing import Literal, Optional
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.validation import (
-    clean_text, normalize_county, normalize_email, normalize_national_id, normalize_phone, pydantic_field,
+    clean_text,
+    normalize_county,
+    normalize_email,
+    normalize_national_id,
+    normalize_phone,
+    pydantic_field,
 )
 
 _CODE = re.compile(r"^[A-Z0-9][A-Z0-9\-_/]{1,49}$")
@@ -31,7 +36,7 @@ def _optional(normalizer, error_type: str):
     return validate
 
 
-def _blank_to_none(value: Optional[str]) -> Optional[str]:
+def _blank_to_none(value: str | None) -> str | None:
     return clean_text(value) or None if value is not None else None
 
 
@@ -46,12 +51,12 @@ CentreStatus = Literal["ACTIVE", "INACTIVE"]
 
 class CentreCreate(_Body):
     name: str = Field(..., min_length=2, max_length=255)
-    code: Optional[str] = None  # generated (CTR-001, CTR-002, ...) when left out
-    county: Optional[str] = None  # defaults to the cooperative's county
-    location_description: Optional[str] = Field(None, max_length=1000)
-    manager_user_id: Optional[UUID] = None
+    code: str | None = None  # generated (CTR-001, CTR-002, ...) when left out
+    county: str | None = None  # defaults to the cooperative's county
+    location_description: str | None = Field(None, max_length=1000)
+    manager_user_id: UUID | None = None
     has_cooler: bool = False
-    cooler_capacity_litres: Optional[float] = Field(None, gt=0, le=1_000_000)
+    cooler_capacity_litres: float | None = Field(None, gt=0, le=1_000_000)
 
     _name = field_validator("name")(clean_text)
     _code = field_validator("code")(_optional(normalize_code, "code"))
@@ -60,14 +65,14 @@ class CentreCreate(_Body):
 
 
 class CentreUpdate(_Body):
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    code: Optional[str] = None
-    county: Optional[str] = None
-    location_description: Optional[str] = Field(None, max_length=1000)
-    manager_user_id: Optional[UUID] = None
-    has_cooler: Optional[bool] = None
-    cooler_capacity_litres: Optional[float] = Field(None, gt=0, le=1_000_000)
-    status: Optional[CentreStatus] = None
+    name: str | None = Field(None, min_length=2, max_length=255)
+    code: str | None = None
+    county: str | None = None
+    location_description: str | None = Field(None, max_length=1000)
+    manager_user_id: UUID | None = None
+    has_cooler: bool | None = None
+    cooler_capacity_litres: float | None = Field(None, gt=0, le=1_000_000)
+    status: CentreStatus | None = None
 
     _name = field_validator("name")(lambda v: clean_text(v) if v is not None else v)
     _code = field_validator("code")(_optional(normalize_code, "code"))
@@ -83,10 +88,10 @@ PaymentMethod = Literal["MPESA", "BANK"]
 
 class _FarmerExtras(_Body):
     """Farm and payout details shared by create and update."""
-    number_of_cows: Optional[int] = Field(None, ge=0, le=100_000)
-    payment_method: Optional[PaymentMethod] = None
-    payment_account: Optional[str] = Field(None, max_length=100)  # M-Pesa number or bank account
-    bank_name: Optional[str] = Field(None, max_length=100)
+    number_of_cows: int | None = Field(None, ge=0, le=100_000)
+    payment_method: PaymentMethod | None = None
+    payment_account: str | None = Field(None, max_length=100)  # M-Pesa number or bank account
+    bank_name: str | None = Field(None, max_length=100)
 
     _bank = field_validator("bank_name", "payment_account")(_blank_to_none)
 
@@ -95,12 +100,12 @@ class FarmerCreate(_FarmerExtras):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     phone: str
-    national_id: Optional[str] = None
-    village: Optional[str] = Field(None, max_length=150)
-    centre_id: Optional[UUID] = None
-    farmer_number: Optional[str] = None  # generated (F-0001, F-0002, ...) when left out
+    national_id: str | None = None
+    village: str | None = Field(None, max_length=150)
+    centre_id: UUID | None = None
+    farmer_number: str | None = None  # generated (F-0001, F-0002, ...) when left out
     # Only a superadmin chooses the cooperative; anyone else naming a different one is refused.
-    cooperative_id: Optional[UUID] = None
+    cooperative_id: UUID | None = None
 
     _names = field_validator("first_name", "last_name")(clean_text)
     _phone = field_validator("phone")(pydantic_field(normalize_phone, "phone"))
@@ -110,14 +115,14 @@ class FarmerCreate(_FarmerExtras):
 
 
 class FarmerUpdate(_FarmerExtras):
-    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    phone: Optional[str] = None
-    national_id: Optional[str] = None
-    village: Optional[str] = Field(None, max_length=150)
-    centre_id: Optional[UUID] = None
-    farmer_number: Optional[str] = None
-    status: Optional[FarmerStatus] = None
+    first_name: str | None = Field(None, min_length=1, max_length=100)
+    last_name: str | None = Field(None, min_length=1, max_length=100)
+    phone: str | None = None
+    national_id: str | None = None
+    village: str | None = Field(None, max_length=150)
+    centre_id: UUID | None = None
+    farmer_number: str | None = None
+    status: FarmerStatus | None = None
 
     _names = field_validator("first_name", "last_name")(lambda v: clean_text(v) if v is not None else v)
     _phone = field_validator("phone")(_optional(normalize_phone, "phone"))
@@ -133,7 +138,7 @@ TeamRole = Literal["MANAGER", "COLLECTOR"]
 
 class TeamCreate(_Body):
     full_name: str = Field(..., min_length=3, max_length=255)
-    email: Optional[EmailStr] = None  # required for managers; collectors may sign in with their phone
+    email: EmailStr | None = None  # required for managers; collectors may sign in with their phone
     phone: str
     role: TeamRole
     # No password: the person sets their own from the SMS activation link (services/accounts).
@@ -144,10 +149,10 @@ class TeamCreate(_Body):
 
 
 class TeamUpdate(_Body):
-    full_name: Optional[str] = Field(None, min_length=3, max_length=255)
-    phone: Optional[str] = None
-    role: Optional[TeamRole] = None
-    is_active: Optional[bool] = None
+    full_name: str | None = Field(None, min_length=3, max_length=255)
+    phone: str | None = None
+    role: TeamRole | None = None
+    is_active: bool | None = None
     # Administrators never set passwords: use POST /team/{id}/send-password-reset (a link to the person's phone).
 
     _name = field_validator("full_name")(lambda v: clean_text(v) if v is not None else v)

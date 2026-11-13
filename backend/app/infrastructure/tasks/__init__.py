@@ -11,7 +11,8 @@ broker, and a worker that calls run(task, payload). Callers don't change: they o
 """
 import json
 import logging
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session

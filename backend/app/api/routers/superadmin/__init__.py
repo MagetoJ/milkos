@@ -8,8 +8,19 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies.auth import require_superadmin
 from app.api.routers.superadmin import (
-    applications, audit, collections, collectors, coolers, cooperatives, dashboard, farmers, payments, reports,
-    settings, sync, users,
+    applications,
+    audit,
+    collections,
+    collectors,
+    coolers,
+    cooperatives,
+    dashboard,
+    farmers,
+    payments,
+    reports,
+    settings,
+    sync,
+    users,
 )
 
 router = APIRouter(prefix="/api/v1/superadmin", tags=["Super Admin"], dependencies=[Depends(require_superadmin)])

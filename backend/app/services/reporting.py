@@ -7,8 +7,9 @@ functions here filter every query by it. Exports are capped at MAX_ROWS rows.
 import csv
 import datetime
 import io
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, case, distinct, func
@@ -22,8 +23,15 @@ from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.finance import FarmerPayment, MilkPrice
 from app.infrastructure.db.models.notifications import Notification, NotificationStatus
 from app.infrastructure.db.models.operations import (
-    BatchStatus, CollectionBatch, CollectionCorrectionRequest, Collector, LineStatus, MilkCollection, QualityStatus,
-    RequestType, WeightSource,
+    BatchStatus,
+    CollectionBatch,
+    CollectionCorrectionRequest,
+    Collector,
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
+    RequestType,
+    WeightSource,
 )
 from app.infrastructure.db.models.sensors import CoolerReading
 from app.infrastructure.db.models.sync import Device, SyncMutation
@@ -46,7 +54,7 @@ class Report:
     summary: dict = field(default_factory=dict)
     truncated: bool = False
 
-    def as_json(self, start: datetime.date, end: datetime.date, cooperative_id: Optional[UUID]) -> dict:
+    def as_json(self, start: datetime.date, end: datetime.date, cooperative_id: UUID | None) -> dict:
         return {
             "kind": self.kind, "title": self.title,
             "range": {"from": iso(start), "to": iso(end)},
@@ -81,7 +89,7 @@ def _limit(query) -> tuple[list, bool]:
     return rows[:MAX_ROWS], len(rows) > MAX_ROWS
 
 
-def _scope(query, column, cooperative_id: Optional[UUID]):
+def _scope(query, column, cooperative_id: UUID | None):
     return query.filter(column == cooperative_id) if cooperative_id is not None else query
 
 
@@ -90,7 +98,7 @@ CollectorUser = aliased(User, name="report_collector_user")
 
 # ---------------- reports ----------------
 
-def collections_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def collections_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     q = (
         db.query(MilkCollection, Farmer, CollectionBatch, Cooler.name, CollectionCentre.name, CollectorUser.full_name, Cooperative.name)
         .join(Farmer, Farmer.id == MilkCollection.farmer_id)
@@ -134,7 +142,7 @@ def collections_report(db: Session, coop: Optional[UUID], start, end, f: dict) -
     }, truncated)
 
 
-def farmers_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def farmers_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     in_range = and_(MilkCollection.collection_date >= start, MilkCollection.collection_date <= end)
     q = (
         db.query(
@@ -164,7 +172,7 @@ def farmers_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Re
              "accepted_kg": round(sum(r["accepted_kg"] for r in out), 2)}, truncated)
 
 
-def collectors_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def collectors_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     in_range = and_(CollectionBatch.collection_date >= start, CollectionBatch.collection_date <= end, EFFECTIVE_BATCH)
     q = (
         db.query(
@@ -194,30 +202,30 @@ def collectors_report(db: Session, coop: Optional[UUID], start, end, f: dict) ->
     ], out, {"collectors": len(out), "captured_kg": round(sum(r["captured_kg"] for r in out), 2)}, truncated)
 
 
-def coolers_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def coolers_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     start_dt = datetime.datetime.combine(start, datetime.time.min)
     end_dt = datetime.datetime.combine(end, datetime.time.max)
-    batch_totals = dict(
-        (cid, (n, kg)) for cid, n, kg in _scope(
+    batch_totals = {
+        cid: (n, kg) for cid, n, kg in _scope(
             db.query(CollectionBatch.cooler_id, func.count(CollectionBatch.id), func.coalesce(func.sum(CollectionBatch.allocated_weight_kg), 0))
             .filter(CollectionBatch.collection_date >= start, CollectionBatch.collection_date <= end, EFFECTIVE_BATCH),
             CollectionBatch.cooperative_id, coop,
         ).group_by(CollectionBatch.cooler_id)
-    )
-    readings = dict(
-        (cid, (n, avg_t)) for cid, n, avg_t in _scope(
+    }
+    readings = {
+        cid: (n, avg_t) for cid, n, avg_t in _scope(
             db.query(CoolerReading.cooler_id, func.count(CoolerReading.id), func.avg(CoolerReading.temperature_celsius))
             .filter(CoolerReading.measured_at >= start_dt, CoolerReading.measured_at <= end_dt),
             CoolerReading.cooperative_id, coop,
         ).group_by(CoolerReading.cooler_id)
-    )
-    alerts = dict(
-        (cid, n) for cid, n in _scope(
+    }
+    alerts = {
+        cid: n for cid, n in _scope(
             db.query(Notification.cooler_id, func.count(distinct(Notification.created_at)))
             .filter(Notification.created_at >= start_dt, Notification.created_at <= end_dt, Notification.type != "COLLECTION_RECEIPT"),
             Notification.cooperative_id, coop,
         ).group_by(Notification.cooler_id)
-    )
+    }
     q = _scope(db.query(Cooler, CollectionCentre.name).outerjoin(CollectionCentre, CollectionCentre.id == Cooler.centre_id), Cooler.cooperative_id, coop)
     rows, truncated = _limit(q.order_by(Cooler.code))
     out = []
@@ -239,7 +247,7 @@ def coolers_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Re
     ], out, {"coolers": len(out), "kg": round(sum(r["kg"] for r in out), 2)}, truncated)
 
 
-def centres_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def centres_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     in_range = and_(MilkCollection.collection_date >= start, MilkCollection.collection_date <= end, ACCEPTED_LINE)
     q = (
         db.query(
@@ -264,7 +272,7 @@ def centres_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Re
     ], out, {"centres": len(out), "accepted_kg": round(sum(r["accepted_kg"] for r in out), 2)}, truncated)
 
 
-def sms_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def sms_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     start_dt = datetime.datetime.combine(start, datetime.time.min)
     end_dt = datetime.datetime.combine(end, datetime.time.max)
     q = _scope(db.query(Notification).filter(Notification.created_at >= start_dt, Notification.created_at <= end_dt),
@@ -286,7 +294,7 @@ def sms_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report
              "success_rate": round(sent / (sent + failed) * 100, 1) if (sent + failed) else None}, truncated)
 
 
-def payments_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def payments_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     q = (
         db.query(FarmerPayment, Farmer).join(Farmer, Farmer.id == FarmerPayment.farmer_id)
         .filter(FarmerPayment.period_end >= start, FarmerPayment.period_start <= end)
@@ -310,7 +318,7 @@ def payments_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> R
              "paid_total": round(sum(r["net"] or 0 for r in out if r["status"] == "PAID"), 2)}, truncated)
 
 
-def pricing_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def pricing_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     q = _scope(db.query(MilkPrice, User.full_name).outerjoin(User, User.id == MilkPrice.created_by), MilkPrice.cooperative_id, coop)
     q = q.filter(MilkPrice.effective_from <= end, (MilkPrice.effective_to.is_(None)) | (MilkPrice.effective_to >= start))
     rows, truncated = _limit(q.order_by(MilkPrice.effective_from.desc()))
@@ -326,7 +334,7 @@ def pricing_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Re
 
 
 def _requests_report(kind: str, request_type: str, title: str):
-    def build(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+    def build(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
         Requester = aliased(User, name="requester")
         Reviewer = aliased(User, name="reviewer")
         start_dt = datetime.datetime.combine(start, datetime.time.min)
@@ -359,7 +367,7 @@ def _requests_report(kind: str, request_type: str, title: str):
     return build
 
 
-def audit_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def audit_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     start_dt = datetime.datetime.combine(start, datetime.time.min)
     end_dt = datetime.datetime.combine(end, datetime.time.max)
     q = _scope(db.query(AuditLog).filter(AuditLog.created_at >= start_dt, AuditLog.created_at <= end_dt), AuditLog.cooperative_id, coop)
@@ -377,7 +385,7 @@ def audit_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Repo
     ], out, {"entries": len(out)}, truncated)
 
 
-def sync_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def sync_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     start_dt = datetime.datetime.combine(start, datetime.time.min)
     end_dt = datetime.datetime.combine(end, datetime.time.max)
     q = (
@@ -404,7 +412,7 @@ def sync_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Repor
              "conflicts": sum(1 for r in out if r["status"] == "CONFLICT")}, truncated)
 
 
-def summary_report(db: Session, coop: Optional[UUID], start, end, f: dict) -> Report:
+def summary_report(db: Session, coop: UUID | None, start, end, f: dict) -> Report:
     lines = _scope(db.query(MilkCollection).filter(MilkCollection.collection_date >= start, MilkCollection.collection_date <= end),
                    MilkCollection.cooperative_id, coop)
     accepted_kg, rejected_kg, farmers, line_count = lines.with_entities(
@@ -454,7 +462,7 @@ REPORTS: dict[str, Callable[..., Report]] = {
 }
 
 
-def record_export(db: Session, actor, kind: str, report: Report, start, end, fmt: str, cooperative_id: Optional[UUID],
+def record_export(db: Session, actor, kind: str, report: Report, start, end, fmt: str, cooperative_id: UUID | None,
                   filters: dict) -> None:
     """Audit a file export (on-screen reports aren't logged). Commits."""
     audit.record(

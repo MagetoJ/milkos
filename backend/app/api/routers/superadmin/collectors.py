@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
@@ -18,10 +17,10 @@ router = APIRouter(prefix="/collectors")
 
 @router.get("")
 def list_collectors(
-    search: Optional[str] = Query(None, max_length=100),
-    cooperative_id: Optional[str] = None,
-    cooler_id: Optional[str] = None,
-    collector_status: Optional[str] = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
+    search: str | None = Query(None, max_length=100),
+    cooperative_id: str | None = None,
+    cooler_id: str | None = None,
+    collector_status: str | None = Query(None, alias="status", pattern="^(ACTIVE|INACTIVE)$"),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

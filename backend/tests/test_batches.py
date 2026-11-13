@@ -5,12 +5,16 @@ import uuid
 
 import pytest
 
+from app.domain.schemas.auth import UserRole
+from app.infrastructure.db.immutability import ImmutableRecordError
 from app.infrastructure.db.models.admin import AuditLog
 from app.infrastructure.db.models.notifications import Notification
-from app.infrastructure.db.models.operations import CollectionBatch, LineStatus, MilkCollection
-from app.domain.schemas.auth import UserRole
+from app.infrastructure.db.models.operations import (
+    CollectionBatch,
+    LineStatus,
+    MilkCollection,
+)
 from app.infrastructure.gateways import sms
-from app.infrastructure.db.immutability import ImmutableRecordError
 from tests.test_cooperative_module import headers_for, make_coop, make_user
 from tests.test_sync import FakeSms, grant_credits, mutation, push, register
 

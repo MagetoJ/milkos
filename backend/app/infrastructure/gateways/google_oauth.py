@@ -1,6 +1,5 @@
 """Google sign-in (OAuth 2.0 authorisation-code flow): the consent URL and the code -> verified email exchange."""
 import os
-from typing import Optional
 
 import httpx
 
@@ -28,7 +27,7 @@ def consent_url() -> str:
     )
 
 
-async def email_for_code(code: str, client: Optional[httpx.AsyncClient] = None) -> str:
+async def email_for_code(code: str, client: httpx.AsyncClient | None = None) -> str:
     """Exchange the authorisation code and return the account's email address (lower case)."""
     data = {
         "code": code,

@@ -12,8 +12,22 @@ import datetime
 import uuid
 
 from sqlalchemy import (
-    JSON, Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Time,
-    Uuid, text, true,
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Time,
+    Uuid,
+    text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship

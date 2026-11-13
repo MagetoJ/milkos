@@ -2,7 +2,7 @@
 
 Unknown keys are refused, values are validated against their type, and every change is audited.
 """
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -146,8 +146,8 @@ def update(db: Session, principal: Principal, values: dict[str, Any]) -> list[di
         raise field_error(unknown[0], "Unknown setting.")
     clean = {key: _validate(key, value) for key, value in values.items()}
 
-    old: dict[str, Optional[Any]] = {}
-    new: dict[str, Optional[Any]] = {}
+    old: dict[str, Any | None] = {}
+    new: dict[str, Any | None] = {}
     for key, value in clean.items():
         current = get(db, key)
         if current == value:

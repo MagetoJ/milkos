@@ -8,7 +8,6 @@ import logging
 import re
 import secrets
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import or_
@@ -48,7 +47,7 @@ def _account_conflict(db: Session, user: User, what: str) -> str:
     return f"This {what} belongs to an inactive account. Contact support."
 
 
-def find_conflict(db: Session, data: CooperativeRegisterRequest) -> Optional[tuple[str, str]]:
+def find_conflict(db: Session, data: CooperativeRegisterRequest) -> tuple[str, str] | None:
     """(field, message) for the first reason this application must be refused, else None."""
     coop = (
         db.query(Cooperative)

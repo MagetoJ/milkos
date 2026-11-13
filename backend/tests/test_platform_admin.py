@@ -8,12 +8,12 @@ from uuid import UUID
 
 import pytest
 
+from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import AuditLog, SMSCreditPayment
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.operations import Collector
 from app.infrastructure.db.models.user import User
-from app.domain.schemas.auth import UserRole
 from tests.conftest import SUPERADMIN_EMAIL, activate, fund
 from tests.test_cooperative_module import PASSWORD, headers_for, make_coop, make_user
 
@@ -422,7 +422,7 @@ def test_cooperative_operations_are_visible_to_the_superadmin(client, session, p
     log = client.get(f"{SA}/audit-logs?cooperative_id={a}", headers=sa).json()
     actions = [e["action"] for e in log["items"]]
     assert {"FARMER_CREATED", "COOLER_CREATED", "COLLECTOR_CREATED", "COLLECTION_RECORDED"} <= set(actions)
-    by_collector = [e for e in log["items"] if e["action"] == "COLLECTION_RECORDED"][0]
+    by_collector = next(e for e in log["items"] if e["action"] == "COLLECTION_RECORDED")
     assert by_collector["actor_role"] == "COLLECTOR" and by_collector["actor_email"] == "col@a.coop"
     assert client.get(f"{SA}/audit-logs?action=FARMER_CREATED", headers=sa).json()["total"] == 1
 
@@ -446,10 +446,10 @@ def test_cooperative_operations_are_visible_to_the_superadmin(client, session, p
 def test_collection_date_filters_and_validation(client, platform):
     admin = platform["admin_a"]
     farmer = new_farmer(client, admin)
-    yesterday = (datetime.datetime.utcnow().date() - datetime.timedelta(days=1)).isoformat()
+    yesterday = (datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=1)).isoformat()
     client.post(COLL, headers=admin, json={"farmer_id": farmer["id"], "quantity_litres": 5, "collection_date": yesterday})
     client.post(COLL, headers=admin, json={"farmer_id": farmer["id"], "quantity_litres": 7})
-    future = (datetime.datetime.utcnow().date() + datetime.timedelta(days=5)).isoformat()
+    future = (datetime.datetime.now(datetime.UTC).date() + datetime.timedelta(days=5)).isoformat()
     assert client.post(COLL, headers=admin, json={"farmer_id": farmer["id"], "quantity_litres": 7, "collection_date": future}).status_code == 422
     assert client.post(COLL, headers=admin, json={"farmer_id": farmer["id"], "quantity_litres": 0}).status_code == 422
 

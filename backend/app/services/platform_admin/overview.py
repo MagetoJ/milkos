@@ -1,13 +1,17 @@
 """Platform headline numbers and the activity feed."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.utils import like
-from app.infrastructure.db.models.admin import AuditLog, Cooler, CooperativeApplication, SMSCreditPayment
+from app.infrastructure.db.models.admin import (
+    AuditLog,
+    Cooler,
+    CooperativeApplication,
+    SMSCreditPayment,
+)
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.pagination import PageParams, paginate
@@ -42,9 +46,9 @@ def activity_feed(db: Session, limit: int, include_security: bool) -> list[dict]
     return [audit.entry_json(entry, name) for entry, name in rows]
 
 
-def audit_page(db: Session, *, search: Optional[str], action: Optional[str], entity_type: Optional[str],
-               entity_id: Optional[str], actor_id: Optional[UUID], actor_role: Optional[str],
-               cooperative_id: Optional[UUID], date_from: Optional[datetime.date], date_to: Optional[datetime.date],
+def audit_page(db: Session, *, search: str | None, action: str | None, entity_type: str | None,
+               entity_id: str | None, actor_id: UUID | None, actor_role: str | None,
+               cooperative_id: UUID | None, date_from: datetime.date | None, date_to: datetime.date | None,
                params: PageParams) -> dict:
     """The full audit log, filtered, plus every action name (for the filter list)."""
     query = _with_cooperative(db)
@@ -76,7 +80,7 @@ def audit_page(db: Session, *, search: Optional[str], action: Optional[str], ent
     return result
 
 
-def entity_history(db: Session, entity_type: str, entity_id, limit: Optional[int] = None) -> list[dict]:
+def entity_history(db: Session, entity_type: str, entity_id, limit: int | None = None) -> list[dict]:
     """Audit entries about one record, newest first."""
     query = (
         db.query(AuditLog)

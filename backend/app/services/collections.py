@@ -5,7 +5,6 @@ confirmed: the only change a line accepts is completing a PENDING lab test (reco
 and reversals go through services/corrections.py and leave the original line in place, marked SUPERSEDED or
 REVERSED. Totals (summaries, dashboards, reports, payments) count only ACTIVE lines.
 """
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import and_, case, func, or_
@@ -22,7 +21,12 @@ from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.operations import (
-    CollectionBatch, Collector, LineStatus, MilkCollection, QualityStatus, WeightSource,
+    CollectionBatch,
+    Collector,
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
+    WeightSource,
 )
 from app.infrastructure.db.models.user import User
 from app.infrastructure.db.pagination import apply_sort, paginate
@@ -52,7 +56,7 @@ def base_query(db: Session):
     )
 
 
-def scope(query, principal: Principal, cooperative_id: Optional[UUID] = None):
+def scope(query, principal: Principal, cooperative_id: UUID | None = None):
     """Limit to the caller's tenant: superadmin all (or one cooperative), staff their cooperative,
     a collector what they recorded, a farmer their own deliveries."""
     scoped_coop = cooperative_scope(principal, cooperative_id)
@@ -173,7 +177,7 @@ def load_row(db: Session, collection_id: UUID):
 
 
 def create(
-    db: Session, principal: Principal, payload: CollectionCreate, origin: Optional[SyncOrigin] = None,
+    db: Session, principal: Principal, payload: CollectionCreate, origin: SyncOrigin | None = None,
 ) -> MilkCollection:
     """A single farmer's delivery entered in litres (the original recording form and API).
 
@@ -205,7 +209,7 @@ def create(
             "quantity_litres": payload.quantity_litres,  # kept exactly as entered
         }],
     }
-    batch, lines, farmers = batches.persist(
+    batch, lines, _farmers = batches.persist(
         db, principal, cooperative=cooperative, content=content, weight_source=WeightSource.LITRES,
         collector=collector, cooler=cooler, centre=None, origin=origin, factor=factor,
         extra={"send_receipts": False},
@@ -252,7 +256,7 @@ def record_lab_result(db: Session, principal: Principal, collection: MilkCollect
     return collection
 
 
-def lab_result_from_update(data: dict) -> Optional[LabResult]:
+def lab_result_from_update(data: dict) -> LabResult | None:
     """An old-style PATCH body that only completes a lab test, as a LabResult (None if it changes anything else)."""
     if not data or set(data) - set(LAB_FIELDS) or data.get("quality_status") not in ("ACCEPTED", "REJECTED"):
         return None
@@ -270,8 +274,8 @@ PLATFORM_SORTS = {
 DEFAULT_ORDER = [MilkCollection.collection_date.desc(), MilkCollection.collection_time.desc(), MilkCollection.id]
 
 
-def list_page(db: Session, principal: Principal, cooperative_id: Optional[UUID], filters: dict, params,
-              sorts: Optional[dict] = None) -> dict:
+def list_page(db: Session, principal: Principal, cooperative_id: UUID | None, filters: dict, params,
+              sorts: dict | None = None) -> dict:
     """One page of the collections the caller may see. A cooperative_id other than their own is refused (403)."""
     query = apply_filters(scope(base_query(db), principal, cooperative_id), **filters)
     result = paginate(apply_sort(query, params.sort, sorts or SORTS, DEFAULT_ORDER), params, collection_json)
@@ -304,7 +308,7 @@ def complete_lab_result(db: Session, principal: Principal, raw_id: str, changes:
     return collection_json(load_row(db, collection.id))
 
 
-def recording_options(db: Session, principal: Principal, search: Optional[str]) -> dict:
+def recording_options(db: Session, principal: Principal, search: str | None) -> dict:
     """Active farmers (searchable), coolers, centres and collectors to choose from when recording milk."""
     coop_id = principal.cooperative_id
     staff_view = principal.role in (UserRole.COOP_ADMIN.value, UserRole.MANAGER.value)

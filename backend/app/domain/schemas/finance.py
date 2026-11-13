@@ -1,6 +1,6 @@
 """Request bodies for milk pricing, farmer payments and the SMS credit center."""
 import datetime as dt
-from typing import Literal, Optional
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -15,9 +15,9 @@ class _Body(BaseModel):
 
 class PriceCreate(_Body):
     effective_from: dt.date
-    effective_to: Optional[dt.date] = None  # empty = until the next price
+    effective_to: dt.date | None = None  # empty = until the next price
     price_per_kg: float = Field(..., gt=0, le=100_000)
-    notes: Optional[str] = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=500)
 
     _notes = field_validator("notes")(_blank_to_none)
 
@@ -40,7 +40,7 @@ class Cancellation(_Body):
 class PaymentGenerate(_Body):
     period_start: dt.date
     period_end: dt.date
-    farmer_ids: Optional[list[UUID]] = Field(None, max_length=1000)
+    farmer_ids: list[UUID] | None = Field(None, max_length=1000)
 
     @model_validator(mode="after")
     def period(self):
@@ -55,12 +55,12 @@ class PaymentGenerate(_Body):
 
 class PaymentStatusChange(_Body):
     status: Literal["PROCESSING", "PAID", "FAILED", "CANCELLED"]
-    payment_reference: Optional[str] = Field(None, min_length=4, max_length=100)
-    reason: Optional[str] = Field(None, max_length=500)
+    payment_reference: str | None = Field(None, min_length=4, max_length=100)
+    reason: str | None = Field(None, max_length=500)
 
     _reason = field_validator("reason")(_blank_to_none)
 
 
 class SmsSettingsUpdate(_Body):
-    receipt_sms_enabled: Optional[bool] = None
-    alert_sms_enabled: Optional[bool] = None
+    receipt_sms_enabled: bool | None = None
+    alert_sms_enabled: bool | None = None

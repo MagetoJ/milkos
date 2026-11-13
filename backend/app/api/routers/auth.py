@@ -18,8 +18,15 @@ from app.core.config import get_settings
 from app.core.security import constant_time_equals
 from app.domain.exceptions import InvalidRequest, NotFound, ValidationFailed
 from app.domain.schemas.auth import (
-    ActivationOtpVerify, CooperativeRegisterRequest, CooperativeRegisterResponse, MfaLogin, PasswordSet,
-    ResendActivation, ResetRequest, TokenBody, UserLogin,
+    ActivationOtpVerify,
+    CooperativeRegisterRequest,
+    CooperativeRegisterResponse,
+    MfaLogin,
+    PasswordSet,
+    ResendActivation,
+    ResetRequest,
+    TokenBody,
+    UserLogin,
 )
 from app.infrastructure.gateways import google_oauth
 from app.services import accounts, authentication, notifications, onboarding

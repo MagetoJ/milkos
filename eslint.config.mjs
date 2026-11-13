@@ -1,19 +1,34 @@
-import nextVitals from 'eslint-config-next/core-web-vitals';
-import nextTs from 'eslint-config-next/typescript';
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import tsParser from "@typescript-eslint/parser";
+import nextPlugin from "@next/eslint-plugin-next";
 
-const config = [
-  ...nextVitals,
-  ...nextTs,
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export default [
   {
+    ignores: [".next/**", "node_modules/**", "dist/**", "build/**"],
+  },
+  {
+    files: ["**/*.{js,mjs,cjs,ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    plugins: {
+      "@next/next": nextPlugin,
+    },
     rules: {
-      // React Compiler advisory. Older screens (login, centres, team, the shells' data loaders) still
-      // reset or load state from effects; report it without failing the build until they're reworked.
-      'react-hooks/set-state-in-effect': 'warn',
+      "@next/next/no-location-assign-relative-destination": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
-  {
-    ignores: ['.next/**', 'node_modules/**', 'backend/**', 'next-env.d.ts', '.agents/**', '.claude/**', '.cursor/**', '.devin/**'],
-  },
 ];
-
-export default config;

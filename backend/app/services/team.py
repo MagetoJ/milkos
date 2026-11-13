@@ -6,7 +6,6 @@ never anyone outside the cooperative) and helps people back in with a reset link
 
 Functions that text someone return the Notification of that SMS (or None): the caller reports whether it went.
 """
-from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -58,8 +57,8 @@ def list_team(db: Session, principal: Principal) -> list[User]:
     return members
 
 
-def list_accounts(db: Session, principal: Principal, role: Optional[UserRole], account_status: Optional[str],
-                  search: Optional[str]) -> list[User]:
+def list_accounts(db: Session, principal: Principal, role: UserRole | None, account_status: str | None,
+                  search: str | None) -> list[User]:
     """Every sign-in account of the caller's cooperative (staff and farmers)."""
     query = db.query(User).filter(User.cooperative_id == principal.cooperative_id)
     if role:
@@ -100,7 +99,7 @@ def _sync_collector_profile(db: Session, user: User) -> None:
         profile.status = "INACTIVE"
 
 
-def create_member(db: Session, principal: Principal, payload: TeamCreate) -> tuple[User, Optional[Notification]]:
+def create_member(db: Session, principal: Principal, payload: TeamCreate) -> tuple[User, Notification | None]:
     """Invite a manager or collector. Commits, then texts the activation link."""
     require_email(payload.role, payload.email)
     clash = account_conflict(db, email=payload.email, phone=payload.phone)
@@ -132,7 +131,7 @@ def create_member(db: Session, principal: Principal, payload: TeamCreate) -> tup
     return member, sms
 
 
-def update_member(db: Session, principal: Principal, member: User, payload: TeamUpdate) -> tuple[User, Optional[Notification]]:
+def update_member(db: Session, principal: Principal, member: User, payload: TeamUpdate) -> tuple[User, Notification | None]:
     """Name, phone, role (manager <-> collector) and active flag. Commits; texts the new number if it changed."""
     data = payload.model_dump(exclude_unset=True)
     reject_nulls(data, "full_name", "phone", "role", "is_active")
@@ -186,13 +185,13 @@ def update_member(db: Session, principal: Principal, member: User, payload: Team
     return member, sms
 
 
-def resend_activation(db: Session, principal: Principal, user: User) -> Optional[Notification]:
+def resend_activation(db: Session, principal: Principal, user: User) -> Notification | None:
     sms = accounts.dispatch(db, accounts.resend_activation(db, principal, user))
     db.refresh(user)
     return sms
 
 
-def set_status(db: Session, principal: Principal, user: User, status: str, reason: Optional[str]) -> tuple[User, Optional[Notification]]:
+def set_status(db: Session, principal: Principal, user: User, status: str, reason: str | None) -> tuple[User, Notification | None]:
     user, pending = accounts.change_status(db, principal, user, status, reason)
     if user.role_value == UserRole.COLLECTOR.value:
         profile = db.query(Collector).filter(Collector.user_id == user.id).first()
@@ -204,12 +203,12 @@ def set_status(db: Session, principal: Principal, user: User, status: str, reaso
     return user, sms
 
 
-def send_password_reset(db: Session, principal: Principal, user: User) -> Optional[Notification]:
+def send_password_reset(db: Session, principal: Principal, user: User) -> Notification | None:
     """Text the person a password reset link. The admin never sets, sees or receives the password."""
     return accounts.dispatch(db, accounts.admin_password_reset(db, principal, user))
 
 
-def invite_farmer(db: Session, principal: Principal, farmer: Farmer) -> tuple[User, Optional[Notification]]:
+def invite_farmer(db: Session, principal: Principal, farmer: Farmer) -> tuple[User, Notification | None]:
     """Give a farmer the MilkOS app: a FARMER account on the farmer's registered phone, activated by SMS link."""
     taken = "This farmer's phone number already belongs to another MilkOS account."
     if farmer.user_id is not None:

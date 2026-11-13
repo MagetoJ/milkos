@@ -6,7 +6,6 @@ The one-time links are sent but never logged or stored.
 """
 import logging
 from html import escape
-from typing import Optional
 
 from app.domain.interfaces.email import EmailResult
 from app.domain.interfaces.sms import GatewayConfigurationError
@@ -33,7 +32,7 @@ def _wrap(title: str, body_html: str) -> str:
     )
 
 
-def activation_email(full_name: str, cooperative: Optional[str], link: str, expiry: str) -> dict:
+def activation_email(full_name: str, cooperative: str | None, link: str, expiry: str) -> dict:
     where = f" for {cooperative}" if cooperative else ""
     subject = f"Activate your MilkOS account{where}"
     text = (f"Hello {full_name},\n\nYour MilkOS account{where} has been created. Activate it here: {link}\n"
@@ -56,18 +55,18 @@ def reset_email(full_name: str, link: str, minutes: int) -> dict:
 
 _APPLICANT = {
     "APPLICATION_RECEIVED": ("We received your MilkOS application",
-                             "Thank you for applying. We received your application and will review it shortly. "
-                             "You can check its status any time with your reference and this email address."),
+                             ("Thank you for applying. We received your application and will review it shortly. "
+                             "You can check its status any time with your reference and this email address.")),
     "APPLICATION_APPROVED": ("Your MilkOS application was approved",
-                             "Good news: your application has been approved. The account administrator will receive an SMS "
-                             "with a link to activate their account."),
+                             ("Good news: your application has been approved. The account administrator will receive an SMS "
+                             "with a link to activate their account.")),
     "APPLICATION_REJECTED": ("Update on your MilkOS application",
-                             "We reviewed your application and are not able to approve it at this time. "
-                             "Sign in to the application status page for details."),
+                             ("We reviewed your application and are not able to approve it at this time. "
+                             "Sign in to the application status page for details.")),
 }
 
 
-def applicant_email(event: str, org_name: str) -> Optional[dict]:
+def applicant_email(event: str, org_name: str) -> dict | None:
     if event not in _APPLICANT:
         return None
     subject, message = _APPLICANT[event]
@@ -76,7 +75,7 @@ def applicant_email(event: str, org_name: str) -> Optional[dict]:
     return {"subject": subject, "text": text, "html": html}
 
 
-def send(to: Optional[str], message: Optional[dict], *, kind: str) -> Optional[EmailResult]:
+def send(to: str | None, message: dict | None, *, kind: str) -> EmailResult | None:
     """Send one prepared email. Returns None when nothing was attempted (no address, no message, no provider)."""
     if not to or not message:
         return None

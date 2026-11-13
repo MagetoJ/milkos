@@ -10,8 +10,8 @@ Each allocation line is a MilkCollection, so existing reports, farmer statements
 """
 import datetime
 import secrets
+from collections.abc import Iterable
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Iterable, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import case, func, or_, select
@@ -26,10 +26,21 @@ from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.farmer import Farmer
 from app.infrastructure.db.models.notifications import Notification
 from app.infrastructure.db.models.operations import (
-    BatchStatus, CollectionBatch, Collector, LineStatus, MilkCollection, QualityStatus, WeightSource,
+    BatchStatus,
+    CollectionBatch,
+    Collector,
+    LineStatus,
+    MilkCollection,
+    QualityStatus,
+    WeightSource,
 )
 from app.infrastructure.db.models.user import User
-from app.infrastructure.db.pagination import PageParams, apply_sort, fetch_page, page_result
+from app.infrastructure.db.pagination import (
+    PageParams,
+    apply_sort,
+    fetch_page,
+    page_result,
+)
 from app.services import audit, settings
 from app.services.common import SyncOrigin, target_cooperative
 from app.services.principal import Principal, cooperative_scope
@@ -58,7 +69,7 @@ def reference(db: Session, model, prefix: str, day: datetime.date) -> str:
     return f"{prefix}-{day:%y%m%d}-{secrets.token_hex(6).upper()}"
 
 
-def automatic_quality(db: Session, temperature: Optional[float], fat: Optional[float]) -> Optional[str]:
+def automatic_quality(db: Session, temperature: float | None, fat: float | None) -> str | None:
     """Reason to reject under the platform's quality thresholds, if any applies."""
     max_temp = settings.get(db, "collection.max_temperature_c")
     min_fat = settings.get(db, "collection.min_fat_percentage")
@@ -69,7 +80,7 @@ def automatic_quality(db: Session, temperature: Optional[float], fat: Optional[f
     return None
 
 
-def resolve_quality(db: Session, quality_status: Optional[str], reason: Optional[str], temperature, fat):
+def resolve_quality(db: Session, quality_status: str | None, reason: str | None, temperature, fat):
     if quality_status is None:
         auto = automatic_quality(db, temperature, fat)
         quality_status, reason = (QualityStatus.REJECTED, auto) if auto else (QualityStatus.ACCEPTED, None)
@@ -80,7 +91,7 @@ def resolve_quality(db: Session, quality_status: Optional[str], reason: Optional
 
 # ---------------- validation of references (tenant isolation) ----------------
 
-def resolve_collector(db: Session, principal: Principal, cooperative_id: UUID, collector_id: Optional[UUID]) -> Optional[Collector]:
+def resolve_collector(db: Session, principal: Principal, cooperative_id: UUID, collector_id: UUID | None) -> Collector | None:
     """A collector records under their own profile; staff may name any active collector of the cooperative."""
     if principal.role == UserRole.COLLECTOR.value:
         collector = principal.collector_profile()
@@ -97,7 +108,7 @@ def resolve_collector(db: Session, principal: Principal, cooperative_id: UUID, c
     return collector
 
 
-def resolve_cooler(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID]) -> Optional[Cooler]:
+def resolve_cooler(db: Session, cooperative_id: UUID, cooler_id: UUID | None) -> Cooler | None:
     if cooler_id is None:
         return None
     cooler = db.get(Cooler, cooler_id)
@@ -108,7 +119,7 @@ def resolve_cooler(db: Session, cooperative_id: UUID, cooler_id: Optional[UUID])
     return cooler
 
 
-def resolve_centre(db: Session, cooperative_id: UUID, centre_id: Optional[UUID]) -> Optional[CollectionCentre]:
+def resolve_centre(db: Session, cooperative_id: UUID, centre_id: UUID | None) -> CollectionCentre | None:
     if centre_id is None:
         return None
     centre = db.get(CollectionCentre, centre_id)
@@ -138,7 +149,7 @@ def check_allocation(captured, allocations: list[tuple[UUID, Decimal]]) -> Decim
     no farmer twice, nothing left over (under-allocation) and nothing extra (over-allocation). Decimal arithmetic at
     the stored precision (0.01 KG), so float rounding can neither block a valid batch nor let a wrong one through."""
     seen: set[UUID] = set()
-    total = Decimal("0")
+    total = Decimal(0)
     for index, (farmer_id, amount) in enumerate(allocations):
         if amount <= 0:
             raise field_error(f"allocations.{index}.quantity_kg", "Allocate more than 0 KG.")
@@ -161,7 +172,7 @@ def check_allocation(captured, allocations: list[tuple[UUID, Decimal]]) -> Decim
 
 # ---------------- persistence ----------------
 
-def _free_line_id(db: Session, wanted: Optional[UUID], cooperative_id: UUID) -> UUID:
+def _free_line_id(db: Session, wanted: UUID | None, cooperative_id: UUID) -> UUID:
     if wanted is None:
         return uuid4()
     existing = db.get(MilkCollection, wanted)
@@ -170,9 +181,9 @@ def _free_line_id(db: Session, wanted: Optional[UUID], cooperative_id: UUID) -> 
 
 def persist(
     db: Session, principal: Principal, *, cooperative: Cooperative, content: dict, weight_source: str,
-    collector: Optional[Collector], cooler: Optional[Cooler], centre: Optional[CollectionCentre],
-    origin: Optional[SyncOrigin] = None, batch_id: Optional[UUID] = None, supersedes: Optional[CollectionBatch] = None,
-    factor: Optional[Decimal] = None, extra: Optional[dict] = None, allow_inactive_farmers: Iterable[UUID] = (),
+    collector: Collector | None, cooler: Cooler | None, centre: CollectionCentre | None,
+    origin: SyncOrigin | None = None, batch_id: UUID | None = None, supersedes: CollectionBatch | None = None,
+    factor: Decimal | None = None, extra: dict | None = None, allow_inactive_farmers: Iterable[UUID] = (),
 ) -> tuple[CollectionBatch, list[MilkCollection], dict[UUID, Farmer]]:
     """Validate and add (flush, no commit) a batch and its lines. `content` uses the BatchCreate field names."""
     allocations = [(a["farmer_id"], kg(a["quantity_kg"])) for a in content["allocations"]]
@@ -256,7 +267,7 @@ def persist(
     return batch, lines, farmers
 
 
-def create(db: Session, principal: Principal, payload, origin: Optional[SyncOrigin] = None) -> tuple[CollectionBatch, list]:
+def create(db: Session, principal: Principal, payload, origin: SyncOrigin | None = None) -> tuple[CollectionBatch, list]:
     """Confirm a new batch (schemas.collections.BatchCreate). Commits. Returns (batch, receipt notifications)."""
     from app.services import receipts  # local: receipts imports this module
 
@@ -297,7 +308,9 @@ def create(db: Session, principal: Principal, payload, origin: Optional[SyncOrig
         new_values=audit_snapshot(batch, lines, farmers),
     )
     created = receipts.create_for_batch(db, cooperative, batch, lines, farmers)
-    from app.services import inbox  # local import: inbox is optional for the confirmation itself
+    from app.services import (
+        inbox,  # local import: inbox is optional for the confirmation itself
+    )
 
     if batch.weight_source == WeightSource.MANUAL and principal.role == UserRole.COLLECTOR.value:
         inbox.notify(
@@ -368,7 +381,7 @@ def content_of(batch: CollectionBatch, lines: list[MilkCollection]) -> dict:
 
 # ---------------- reading ----------------
 
-def scope(query, principal: Principal, cooperative_id: Optional[UUID] = None):
+def scope(query, principal: Principal, cooperative_id: UUID | None = None):
     """Staff: their cooperative; a collector: batches they recorded; a farmer: batches with a line of theirs."""
     scoped = cooperative_scope(principal, cooperative_id)
     if scoped is not None:
@@ -402,8 +415,8 @@ def receipts_for(db: Session, line_ids: list[UUID]) -> dict[UUID, Notification]:
     return {n.collection_id: n for n in rows}
 
 
-def batch_json(db: Session, batch: CollectionBatch, *, lines=None, names: Optional[dict] = None, receipts=None,
-               pending_request: Optional[dict] = None) -> dict:
+def batch_json(db: Session, batch: CollectionBatch, *, lines=None, names: dict | None = None, receipts=None,
+               pending_request: dict | None = None) -> dict:
     lines = lines if lines is not None else lines_for(db, [batch.id]).get(batch.id, [])
     receipts = receipts if receipts is not None else receipts_for(db, [line.id for line, _ in lines])
     names = names if names is not None else names_for(db, [batch])
@@ -506,7 +519,10 @@ def names_for(db: Session, batches: list[CollectionBatch]) -> dict[UUID, dict]:
 
 
 def serialize_many(db: Session, batches: list[CollectionBatch]) -> list[dict]:
-    from app.infrastructure.db.models.operations import CollectionCorrectionRequest, RequestStatus
+    from app.infrastructure.db.models.operations import (
+        CollectionCorrectionRequest,
+        RequestStatus,
+    )
 
     ids = [b.id for b in batches]
     lines = lines_for(db, ids)
@@ -557,9 +573,9 @@ def get_scoped(db: Session, principal: Principal, raw_id: str) -> CollectionBatc
     return row
 
 
-def list_page(db: Session, principal: Principal, *, status: Optional[str], include_history: bool,
-              cooler_id: Optional[UUID], centre_id: Optional[UUID], collector_id: Optional[UUID],
-              farmer_id: Optional[UUID], date_from, date_to, search: Optional[str], params: PageParams) -> dict:
+def list_page(db: Session, principal: Principal, *, status: str | None, include_history: bool,
+              cooler_id: UUID | None, centre_id: UUID | None, collector_id: UUID | None,
+              farmer_id: UUID | None, date_from, date_to, search: str | None, params: PageParams) -> dict:
     query = scope(db.query(CollectionBatch), principal)
     if status:
         query = query.filter(CollectionBatch.status == status)

@@ -6,7 +6,18 @@ from fastapi import FastAPI
 
 from app.api.errors import register_error_handlers
 from app.api.routers import (
-    account, auth, batches, collections, cooperative, devices, farmer, finance, inbox, reports, superadmin, sync,
+    account,
+    auth,
+    batches,
+    collections,
+    cooperative,
+    devices,
+    farmer,
+    finance,
+    inbox,
+    reports,
+    superadmin,
+    sync,
     workspace,
 )
 from app.core import config

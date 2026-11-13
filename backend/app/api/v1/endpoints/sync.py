@@ -1,20 +1,20 @@
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
+
+from app.api.deps import get_current_user, get_db
+from app.models.farmer import Farmer
+from app.models.user import User
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
 from app.models.collection import MilkCollection
-from app.models.farmer import Farmer
-from app.models.user import User
 from app.schemas.sync import (
-    SyncPushRequest,
-    SyncPushResponse,
     SyncMutationResult,
     SyncPullResponse,
+    SyncPushRequest,
+    SyncPushResponse,
 )
 
 router = APIRouter()
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.head("/health")
 @router.get("/health")
 async def health_check():
-    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+    return {"status": "ok", "time": datetime.now(UTC).isoformat()}
 
 @router.post("/sync/push", response_model=SyncPushResponse)
 async def sync_push(
@@ -46,8 +46,8 @@ async def sync_push(
                         weight_kg=p["weight_kg"],
                         grade=p.get("grade", "A"),
                         shift=p.get("shift", "MORNING"),
-                        collected_at=datetime.fromisoformat(p["collected_at"].replace("Z", "+00:00")),
-                        updated_at=datetime.fromisoformat(p["updated_at"].replace("Z", "+00:00")),
+                        collected_at=datetime.fromisoformat(p["collected_at"]),
+                        updated_at=datetime.fromisoformat(p["updated_at"]),
                     )
                     .on_conflict_do_nothing(index_elements=["client_tx_id"])
                     .returning(MilkCollection.id)
@@ -85,7 +85,7 @@ async def sync_push(
                 if not record:
                     raise ValueError("Target collection record not found on server")
 
-                client_updated = datetime.fromisoformat(p["updated_at"].replace("Z", "+00:00"))
+                client_updated = datetime.fromisoformat(p["updated_at"])
                 if client_updated >= record.updated_at:
                     record.weight_kg = p.get("weight_kg", record.weight_kg)
                     record.grade = p.get("grade", record.grade)
@@ -117,11 +117,11 @@ async def sync_push(
 
 @router.get("/sync/pull", response_model=SyncPullResponse)
 async def sync_pull(
-    since: Optional[datetime] = Query(None),
+    since: datetime | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    server_now = datetime.now(timezone.utc)
+    server_now = datetime.now(UTC)
     stmt = select(Farmer).where(Farmer.cooperative_id == current_user.cooperative_id)
     if since:
         stmt = stmt.where(Farmer.updated_at > since)

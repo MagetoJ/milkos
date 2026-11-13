@@ -1,5 +1,4 @@
 """SMS credit payments awaiting or past verification, and the SMS credit packages on sale."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -41,7 +40,7 @@ def pending_payments(db: Session) -> list[dict]:
     return [_payment_row(row) for row in rows]
 
 
-def payments_page(db: Session, status: Optional[str], cooperative_id: Optional[UUID], search: Optional[str],
+def payments_page(db: Session, status: str | None, cooperative_id: UUID | None, search: str | None,
                   params: PageParams) -> dict:
     query = _payments(db)
     if status:
@@ -56,12 +55,12 @@ def payments_page(db: Session, status: Optional[str], cooperative_id: Optional[U
             # A full M-Pesa code finds its payment without ever echoing the stored code back.
             SMSCreditPayment.mpesa_reference == term.upper(),
         ))
-    totals = dict(
-        (s, (n, num(kes) or 0.0))
+    totals = {
+        s: (n, num(kes) or 0.0)
         for s, n, kes in db.query(
             SMSCreditPayment.status, func.count(SMSCreditPayment.id), func.coalesce(func.sum(SMSCreditPayment.amount_kes), 0)
         ).group_by(SMSCreditPayment.status)
-    )
+    }
     result = paginate(
         apply_sort(query, params.sort, PAYMENT_SORTS, [SMSCreditPayment.submitted_at.desc(), SMSCreditPayment.id]),
         params, _payment_row,
@@ -81,7 +80,7 @@ def payment_detail(db: Session, payment_id: str) -> dict:
     return {**_payment_row(row), "activity": overview.entity_history(db, "payment", pid)}
 
 
-def decide_payment(db: Session, admin: Principal, payment_id: str, action: str, reason: Optional[str]) -> SMSCreditPayment:
+def decide_payment(db: Session, admin: Principal, payment_id: str, action: str, reason: str | None) -> SMSCreditPayment:
     reason = (reason or "").strip() or None
     if action == "REJECT" and (reason is None or len(reason) < 5):
         raise ValidationFailed("Give a reason (at least 5 characters) when rejecting.")

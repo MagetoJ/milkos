@@ -1,9 +1,9 @@
 """Collector phone masking, payment 'request information', the farmer's own view and cross-cooperative isolation."""
 import uuid
 
+from app.domain.schemas.auth import UserRole
 from app.infrastructure.db.models.admin import AuditLog
 from app.infrastructure.db.models.user import User
-from app.domain.schemas.auth import UserRole
 from tests.test_batches import BATCHES, batch_body, confirm, world  # noqa: F401  (fixture)
 from tests.test_cooperative_module import headers_for, make_user
 from tests.test_sync import pull_all, register

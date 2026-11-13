@@ -5,16 +5,12 @@ Revises: 0008_account_security
 Create Date: 2026-11-12 12:23:18.496449
 
 """
-from typing import Sequence, Union
-
-from alembic import op
-import sqlalchemy as sa
-
+from collections.abc import Sequence
 
 revision: str = 'a74ed1a07e42'
-down_revision: Union[str, Sequence[str], None] = '0008_account_security'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = '0008_account_security'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

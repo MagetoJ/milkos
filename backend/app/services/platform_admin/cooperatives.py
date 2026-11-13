@@ -1,5 +1,4 @@
 """Every cooperative: list, detail and SMS ledger."""
-from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -11,7 +10,12 @@ from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.finance import SmsCreditTransaction
 from app.infrastructure.db.models.user import User
-from app.infrastructure.db.pagination import PageParams, apply_sort, fetch_page, page_result
+from app.infrastructure.db.pagination import (
+    PageParams,
+    apply_sort,
+    fetch_page,
+    page_result,
+)
 from app.services import audit, cooperatives, sms_credits
 from app.services.principal import get_or_404
 
@@ -30,7 +34,7 @@ def summary_json(db: Session, coop: Cooperative) -> dict:
     return cooperatives.cooperative_json(coop, cooperatives.counts_for(db, [coop.id])[coop.id])
 
 
-def list_page(db: Session, search: Optional[str], status: Optional[str], county: Optional[str], params: PageParams) -> dict:
+def list_page(db: Session, search: str | None, status: str | None, county: str | None, params: PageParams) -> dict:
     query = cooperatives.search_filter(db.query(Cooperative), search)
     if status:
         query = query.filter(Cooperative.status == status)

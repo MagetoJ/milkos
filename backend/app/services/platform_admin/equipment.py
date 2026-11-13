@@ -1,6 +1,5 @@
 """Every cooler, sensor, device and reading on the platform, and offline-sync health per cooperative."""
 import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import case, func, or_
@@ -12,8 +11,18 @@ from app.infrastructure.db.models.centre import CollectionCentre
 from app.infrastructure.db.models.cooperative import Cooperative
 from app.infrastructure.db.models.notifications import Notification, NotificationStatus
 from app.infrastructure.db.models.sensors import CoolerReading, SensorDevice
-from app.infrastructure.db.models.sync import Device, DeviceSession, MutationStatus, SyncMutation
-from app.infrastructure.db.pagination import PageParams, apply_sort, fetch_page, page_result
+from app.infrastructure.db.models.sync import (
+    Device,
+    DeviceSession,
+    MutationStatus,
+    SyncMutation,
+)
+from app.infrastructure.db.pagination import (
+    PageParams,
+    apply_sort,
+    fetch_page,
+    page_result,
+)
 from app.services import cooler_readings, coolers, notifications, sensors
 from app.services.principal import Principal, get_or_404
 from app.services.sync import devices
@@ -50,8 +59,8 @@ def cooler_json(db: Session, cooler: Cooler) -> dict:
     return _cooler_rows(db, [_cooler_query(db).filter(Cooler.id == cooler.id).one()])[0]
 
 
-def coolers_page(db: Session, *, search: Optional[str], cooperative_id: Optional[UUID], status: Optional[str],
-                 operational: Optional[bool], params: PageParams) -> dict:
+def coolers_page(db: Session, *, search: str | None, cooperative_id: UUID | None, status: str | None,
+                 operational: bool | None, params: PageParams) -> dict:
     query = _cooler_query(db)
     if cooperative_id:
         query = query.filter(Cooler.cooperative_id == cooperative_id)
@@ -72,7 +81,7 @@ def coolers_page(db: Session, *, search: Optional[str], cooperative_id: Optional
 
 # ---------------- offline operations ----------------
 
-def _coop_filter(query, column, cooperative_id: Optional[UUID]):
+def _coop_filter(query, column, cooperative_id: UUID | None):
     return query.filter(column == cooperative_id) if cooperative_id else query
 
 
@@ -134,7 +143,7 @@ def sync_health(db: Session) -> dict:
     }
 
 
-def devices_page(db: Session, cooperative_id: Optional[UUID], params: PageParams) -> dict:
+def devices_page(db: Session, cooperative_id: UUID | None, params: PageParams) -> dict:
     query = db.query(Device, Cooperative.name).outerjoin(Cooperative, Cooperative.id == Device.cooperative_id)
     query = _coop_filter(query, Device.cooperative_id, cooperative_id)
     query = query.order_by(Device.last_seen_at.desc().nullslast(), Device.id)
@@ -142,8 +151,8 @@ def devices_page(db: Session, cooperative_id: Optional[UUID], params: PageParams
     return page_result([devices.device_json(d, name) for d, name in rows], total, params)
 
 
-def update_device(db: Session, admin: Principal, device_id: str, release: bool, is_active: Optional[bool],
-                  label: Optional[str]) -> dict:
+def update_device(db: Session, admin: Principal, device_id: str, release: bool, is_active: bool | None,
+                  label: str | None) -> dict:
     """Release a device from its cooperative and/or rename / (de)activate it."""
     device = get_or_404(db, Device, device_id, "Device")
     if release:
@@ -154,7 +163,7 @@ def update_device(db: Session, admin: Principal, device_id: str, release: bool, 
     return devices.device_json(device, coop.name if coop else None)
 
 
-def sensors_page(db: Session, cooperative_id: Optional[UUID], params: PageParams) -> dict:
+def sensors_page(db: Session, cooperative_id: UUID | None, params: PageParams) -> dict:
     query = (
         db.query(SensorDevice, Cooler.name, Cooperative.name)
         .join(Cooperative, Cooperative.id == SensorDevice.cooperative_id)
@@ -168,7 +177,7 @@ def sensors_page(db: Session, cooperative_id: Optional[UUID], params: PageParams
     )
 
 
-def readings_page(db: Session, cooperative_id: Optional[UUID], cooler_id: Optional[UUID], quality: Optional[str],
+def readings_page(db: Session, cooperative_id: UUID | None, cooler_id: UUID | None, quality: str | None,
                   params: PageParams) -> dict:
     query = (
         db.query(CoolerReading, Cooler.name, Cooler.code, Cooperative.name)
@@ -189,7 +198,7 @@ def readings_page(db: Session, cooperative_id: Optional[UUID], cooler_id: Option
     )
 
 
-def notifications_page(db: Session, cooperative_id: Optional[UUID], status: Optional[str], params: PageParams) -> dict:
+def notifications_page(db: Session, cooperative_id: UUID | None, status: str | None, params: PageParams) -> dict:
     query = db.query(Notification, Cooperative.name).join(Cooperative, Cooperative.id == Notification.cooperative_id)
     query = _coop_filter(query, Notification.cooperative_id, cooperative_id)
     if status:

@@ -6,7 +6,7 @@ without a signed-in actor (a failed sign-in, a public activation step).
 
 Never pass a password, code, token or JWT in `details`; the keys below are refused outright.
 """
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -57,9 +57,9 @@ LABELS = {
 
 
 def record(
-    db: Session, action: str, *, user: Optional[User], actor: Optional[User] = None,
-    ip_address: Optional[str] = None, user_agent: Optional[str] = None, details: Optional[dict[str, Any]] = None,
-    target: Optional[str] = None,
+    db: Session, action: str, *, user: User | None, actor: User | None = None,
+    ip_address: str | None = None, user_agent: str | None = None, details: dict[str, Any] | None = None,
+    target: str | None = None,
 ) -> AuditLog:
     """Add (not commit) one security event about `user`, done by `actor` (default: the user themself)."""
     clean = {k: v for k, v in (details or {}).items() if k.lower() not in _FORBIDDEN_KEYS}
@@ -81,7 +81,7 @@ def record(
     return entry
 
 
-def from_principal(db: Session, principal, action: str, *, user: Optional[User] = None, details: Optional[dict] = None) -> AuditLog:
+def from_principal(db: Session, principal, action: str, *, user: User | None = None, details: dict | None = None) -> AuditLog:
     return record(
         db, action, user=user or principal.user, actor=principal.user, ip_address=principal.ip_address,
         user_agent=principal.user_agent, details=details,

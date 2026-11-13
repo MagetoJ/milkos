@@ -1,6 +1,6 @@
 """Audit trail. Call `record` inside the same transaction as the change, before commit,
 so a change and its audit entry are saved together or not at all."""
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import or_
@@ -14,7 +14,7 @@ from app.infrastructure.db.pagination import PageParams, paginate
 _SECRET_FIELDS = {"password", "password_hash", "mpesa_reference"}
 
 
-def _clean(values: Optional[dict]) -> Optional[dict]:
+def _clean(values: dict | None) -> dict | None:
     if values is None:
         return None
     return {k: ("[redacted]" if k in _SECRET_FIELDS else v) for k, v in values.items()}
@@ -26,12 +26,12 @@ def record(
     action: str,
     *,
     target: str,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[Any] = None,
-    cooperative_id: Optional[UUID] = None,
-    old_values: Optional[dict] = None,
-    new_values: Optional[dict] = None,
-    reason: Optional[str] = None,
+    entity_type: str | None = None,
+    entity_id: Any | None = None,
+    cooperative_id: UUID | None = None,
+    old_values: dict | None = None,
+    new_values: dict | None = None,
+    reason: str | None = None,
 ) -> AuditLog:
     """`actor` is a app.services.principal.Principal (or anything with .user, .ip_address, .user_agent)."""
     user = actor.user
@@ -58,7 +58,7 @@ def record(
     return entry
 
 
-def entry_json(entry: AuditLog, cooperative_name: Optional[str] = None) -> dict:
+def entry_json(entry: AuditLog, cooperative_name: str | None = None) -> dict:
     return {
         "id": str(entry.id),
         "actor_id": str(entry.admin_id) if entry.admin_id else None,

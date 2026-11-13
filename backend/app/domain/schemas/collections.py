@@ -1,6 +1,6 @@
 """Request bodies for collection batches, their allocation lines, corrections and reversals."""
 import datetime as dt
-from typing import Literal, Optional
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -19,15 +19,15 @@ class _Body(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
-def _naive_utc(value: Optional[dt.datetime]) -> Optional[dt.datetime]:
+def _naive_utc(value: dt.datetime | None) -> dt.datetime | None:
     if value is not None and value.tzinfo is not None:
-        value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
+        value = value.astimezone(dt.UTC).replace(tzinfo=None)
     return value
 
 
 class AllocationIn(_Body):
     # Device-generated id of the allocation line (reused as the server id, like every offline create).
-    id: Optional[UUID] = None
+    id: UUID | None = None
     farmer_id: UUID
     quantity_kg: float = Field(..., gt=0, le=MAX_BATCH_KG)
 
@@ -39,18 +39,18 @@ class AllocationIn(_Body):
 
 class _BatchContent(_Body):
     """What a batch says about the milk: shared by creation and by a correction's proposed values."""
-    cooler_id: Optional[UUID] = None
-    centre_id: Optional[UUID] = None
-    collection_date: Optional[dt.date] = None
-    collection_time: Optional[dt.time] = None
+    cooler_id: UUID | None = None
+    centre_id: UUID | None = None
+    collection_date: dt.date | None = None
+    collection_time: dt.time | None = None
     captured_weight_kg: float = Field(..., gt=0, le=MAX_BATCH_KG)
-    tare_weight_kg: Optional[float] = Field(None, ge=0, le=MAX_BATCH_KG)
-    temperature_c: Optional[float] = Field(None, ge=-5, le=60)
-    fat_percentage: Optional[float] = Field(None, ge=0, le=20)
-    snf_percentage: Optional[float] = Field(None, ge=0, le=20)
-    quality_status: Optional[QualityStatusIn] = None
-    rejection_reason: Optional[str] = Field(None, max_length=500)
-    notes: Optional[str] = Field(None, max_length=1000)
+    tare_weight_kg: float | None = Field(None, ge=0, le=MAX_BATCH_KG)
+    temperature_c: float | None = Field(None, ge=-5, le=60)
+    fat_percentage: float | None = Field(None, ge=0, le=20)
+    snf_percentage: float | None = Field(None, ge=0, le=20)
+    quality_status: QualityStatusIn | None = None
+    rejection_reason: str | None = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=1000)
     allocations: list[AllocationIn] = Field(..., min_length=1, max_length=MAX_LINES)
 
     _text = field_validator("rejection_reason", "notes")(_blank_to_none)
@@ -62,7 +62,7 @@ class _BatchContent(_Body):
 
     @field_validator("collection_date")
     @classmethod
-    def not_in_future(cls, v: Optional[dt.date]) -> Optional[dt.date]:
+    def not_in_future(cls, v: dt.date | None) -> dt.date | None:
         if v is not None and v > dt.datetime.utcnow().date() + dt.timedelta(days=1):
             raise PydanticCustomError("collection_date", "A collection can't be dated in the future.")
         return v
@@ -86,15 +86,15 @@ class _BatchContent(_Body):
 class BatchCreate(_BatchContent):
     """A confirmed collection: the captured weight and its allocation to farmers, saved in one step."""
     # Client-generated id: resending the same batch (double tap, lost response) returns the original.
-    id: Optional[UUID] = None
-    collector_id: Optional[UUID] = None  # staff may record for a collector; collectors always record as themselves
-    cooperative_id: Optional[UUID] = None  # never trusted: must be the caller's own when given
+    id: UUID | None = None
+    collector_id: UUID | None = None  # staff may record for a collector; collectors always record as themselves
+    cooperative_id: UUID | None = None  # never trusted: must be the caller's own when given
     weight_source: WeightSourceIn
-    scale_name: Optional[str] = Field(None, max_length=255)
-    scale_identifier: Optional[str] = Field(None, max_length=255)
-    started_at: Optional[dt.datetime] = None
-    captured_at: Optional[dt.datetime] = None
-    confirmed_at: Optional[dt.datetime] = None
+    scale_name: str | None = Field(None, max_length=255)
+    scale_identifier: str | None = Field(None, max_length=255)
+    started_at: dt.datetime | None = None
+    captured_at: dt.datetime | None = None
+    confirmed_at: dt.datetime | None = None
     send_receipts: bool = True
 
     _names = field_validator("scale_name", "scale_identifier")(_blank_to_none)
@@ -122,7 +122,7 @@ class ReversalRequestCreate(_Body):
 
 
 class RequestReview(_Body):
-    comment: Optional[str] = Field(None, max_length=1000)
+    comment: str | None = Field(None, max_length=1000)
 
     _comment = field_validator("comment")(_blank_to_none)
 
@@ -130,8 +130,8 @@ class RequestReview(_Body):
 class LabResult(_Body):
     """Completing a PENDING lab test on one allocation line (the only in-place change a line accepts)."""
     quality_status: Literal["ACCEPTED", "REJECTED"]
-    fat_percentage: Optional[float] = Field(None, ge=0, le=20)
-    snf_percentage: Optional[float] = Field(None, ge=0, le=20)
-    rejection_reason: Optional[str] = Field(None, max_length=500)
+    fat_percentage: float | None = Field(None, ge=0, le=20)
+    snf_percentage: float | None = Field(None, ge=0, le=20)
+    rejection_reason: str | None = Field(None, max_length=500)
 
     _text = field_validator("rejection_reason")(_blank_to_none)

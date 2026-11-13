@@ -23,13 +23,17 @@ import hashlib
 import logging
 import os
 import secrets
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.permissions import permission_names
 from app.core.utils import iso
-from app.domain.exceptions import Conflict, InvalidRequest, PermissionDenied, Unauthenticated
+from app.domain.exceptions import (
+    Conflict,
+    InvalidRequest,
+    PermissionDenied,
+    Unauthenticated,
+)
 from app.domain.schemas.auth import UserRole
 from app.domain.schemas.sync import DeviceRegister
 from app.infrastructure.db.models.cooperative import Cooperative, CooperativeStatus
@@ -52,7 +56,7 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def device_json(device: Device, cooperative_name: Optional[str] = None) -> dict:
+def device_json(device: Device, cooperative_name: str | None = None) -> dict:
     return {
         "id": str(device.id),
         "device_identifier": device.device_identifier,
@@ -159,7 +163,7 @@ def register(db: Session, principal: Principal, payload: DeviceRegister) -> tupl
     return device, session, token
 
 
-def _find_session(db: Session, device_identifier: str, token: str) -> tuple[Optional[Device], Optional[DeviceSession]]:
+def _find_session(db: Session, device_identifier: str, token: str) -> tuple[Device | None, DeviceSession | None]:
     device = db.query(Device).filter(Device.device_identifier == device_identifier).first()
     if device is None:
         return None, None
@@ -210,7 +214,7 @@ def revoke(db: Session, device_identifier: str, token: str) -> bool:
     return True
 
 
-def authorize(db: Session, principal: Principal, device_identifier: Optional[str]) -> tuple[Device, DeviceSession]:
+def authorize(db: Session, principal: Principal, device_identifier: str | None) -> tuple[Device, DeviceSession]:
     """The registered, active device a sync request comes from, with this user's live session on it."""
     forbidden = PermissionDenied(UNAUTHORIZED_DEVICE)
     if not device_identifier:
@@ -236,7 +240,7 @@ def authorize(db: Session, principal: Principal, device_identifier: Optional[str
     return device, session
 
 
-def set_active(db: Session, principal: Principal, device: Device, active: bool, label: Optional[str] = None) -> Device:
+def set_active(db: Session, principal: Principal, device: Device, active: bool, label: str | None = None) -> Device:
     now = datetime.datetime.utcnow()
     if label is not None:
         device.label = label
@@ -281,7 +285,7 @@ def list_for(db: Session, cooperative: Cooperative) -> list[dict]:
     return [device_json(d, cooperative.name) for d in found]
 
 
-def authorize_request(db: Session, principal: Principal, device_identifier: Optional[str]) -> tuple[Device, DeviceSession]:
+def authorize_request(db: Session, principal: Principal, device_identifier: str | None) -> tuple[Device, DeviceSession]:
     """authorize() for one sync request, saving the device's last-seen time. Farmers aren't offline-enabled."""
     if principal.role == UserRole.FARMER.value:
         raise PermissionDenied("Offline sync isn't available for farmer accounts.")

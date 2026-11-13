@@ -16,7 +16,7 @@ by exactly one CONSUMED or REFUNDED entry, so a retry or a crash can never doubl
 """
 import datetime
 import logging
-from typing import Iterable, Optional
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import func
@@ -42,7 +42,7 @@ SECRET_NOT_RESENDABLE = "This message contained a one-time link or code and can'
 STUCK_AFTER = datetime.timedelta(minutes=10)
 
 
-def mask_phone(phone: Optional[str]) -> str:
+def mask_phone(phone: str | None) -> str:
     if not phone or len(phone) < 8:
         return "****"
     return f"{phone[:5]}{'*' * (len(phone) - 8)}{phone[-3:]}"
@@ -93,7 +93,7 @@ def _platform_billed(n: Notification) -> bool:
     return n.billed_to == "PLATFORM" or n.cooperative_id is None
 
 
-def deliver(db: Session, notification: Notification, actor=None, text: Optional[str] = None) -> Notification:
+def deliver(db: Session, notification: Notification, actor=None, text: str | None = None) -> Notification:
     """Try to send one notification now. Commits; never raises for delivery problems.
 
     `text` is the real message for SECRET_TYPES (whose stored message is redacted); it is never stored or logged.
@@ -187,7 +187,7 @@ def _tell_staff(db: Session, n: Notification) -> None:
     )
 
 
-def recover_stuck(db: Session, cooperative_id: Optional[UUID]) -> int:
+def recover_stuck(db: Session, cooperative_id: UUID | None) -> int:
     """Attempts interrupted between reserving a credit and the provider's answer. The outcome is unknown, so
     the credit is refunded and the SMS is NOT resent automatically (that could duplicate it); staff may retry."""
     cutoff = datetime.datetime.utcnow() - STUCK_AFTER
@@ -224,7 +224,7 @@ def dispatch(db: Session, notification_ids: Iterable[UUID], actor=None) -> list[
     return out
 
 
-def dispatch_due(db: Session, cooperative_id: Optional[UUID], actor=None, limit: int = 20) -> list[Notification]:
+def dispatch_due(db: Session, cooperative_id: UUID | None, actor=None, limit: int = 20) -> list[Notification]:
     """Retry failed notifications whose backoff has elapsed (and any left PENDING)."""
     now = datetime.datetime.utcnow()
     recover_stuck(db, cooperative_id)
@@ -256,7 +256,7 @@ def retry(db: Session, actor, notification: Notification) -> Notification:
     return deliver(db, notification, actor)
 
 
-def record_delivery_report(db: Session, provider_message_id: str, delivered: bool, detail: Optional[str]) -> bool:
+def record_delivery_report(db: Session, provider_message_id: str, delivered: bool, detail: str | None) -> bool:
     """Apply a provider delivery report. Only a report moves SENT to DELIVERED; nothing else claims delivery."""
     n = db.query(Notification).filter(Notification.provider_message_id == provider_message_id).first()
     if n is None:
@@ -273,8 +273,8 @@ def record_delivery_report(db: Session, provider_message_id: str, delivered: boo
     return True
 
 
-def list_page(db: Session, cooperative_id: UUID, status: Optional[str], params: PageParams,
-              type: Optional[str] = None) -> dict:
+def list_page(db: Session, cooperative_id: UUID, status: str | None, params: PageParams,
+              type: str | None = None) -> dict:
     """One page of a cooperative's SMS notifications and their delivery state, newest first."""
     query = db.query(Notification).filter(Notification.cooperative_id == cooperative_id)
     if type:

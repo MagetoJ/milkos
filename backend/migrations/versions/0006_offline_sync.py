@@ -17,16 +17,16 @@ Revises: 0005_platform_admin
 Create Date: 2026-10-04
 """
 import datetime
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import context, op
 import sqlalchemy as sa
+from alembic import context, op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0006_offline_sync"
-down_revision: Union[str, Sequence[str], None] = "0005_platform_admin"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0005_platform_admin"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 JSON_TYPE = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 NOW = sa.text("CURRENT_TIMESTAMP")
@@ -51,8 +51,8 @@ def _backfill_change_log() -> None:
         ("centre", "SELECT id, cooperative_id FROM collection_centres"),
         ("cooler", "SELECT id, cooperative_id FROM coolers"),
         ("farmer", "SELECT id, cooperative_id FROM farmers"),
-        ("team_member", "SELECT id, cooperative_id FROM users WHERE cooperative_id IS NOT NULL "
-                        "AND role IN ('COOP_ADMIN', 'MANAGER', 'COLLECTOR')"),
+        ("team_member", ("SELECT id, cooperative_id FROM users WHERE cooperative_id IS NOT NULL "
+                        "AND role IN ('COOP_ADMIN', 'MANAGER', 'COLLECTOR')")),
         ("collector", "SELECT id, cooperative_id FROM collectors"),
         ("collection", "SELECT id, cooperative_id FROM milk_collections"),
     )

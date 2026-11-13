@@ -2,7 +2,6 @@
 
 These read the same rows the cooperatives' devices synchronised; nothing is copied for the superadmin.
 """
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -27,7 +26,7 @@ def sync_health(db: Session = Depends(get_db), _: Principal = Depends(require_su
 
 @router.get("/sync/devices")
 def list_devices(
-    cooperative_id: Optional[str] = None,
+    cooperative_id: str | None = None,
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
@@ -45,7 +44,7 @@ def update_device(
 
 @router.get("/sensors")
 def list_sensors(
-    cooperative_id: Optional[str] = None,
+    cooperative_id: str | None = None,
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
@@ -55,9 +54,9 @@ def list_sensors(
 
 @router.get("/cooler-readings")
 def list_readings(
-    cooperative_id: Optional[str] = None,
-    cooler_id: Optional[str] = None,
-    quality: Optional[str] = Query(None, pattern="^(VALID|SUSPICIOUS|SIMULATED)$"),
+    cooperative_id: str | None = None,
+    cooler_id: str | None = None,
+    quality: str | None = Query(None, pattern="^(VALID|SUSPICIOUS|SIMULATED)$"),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),
@@ -69,8 +68,8 @@ def list_readings(
 
 @router.get("/notifications")
 def list_notifications(
-    cooperative_id: Optional[str] = None,
-    notification_status: Optional[str] = Query(None, alias="status", pattern="^(PENDING|SENT|FAILED|SKIPPED)$"),
+    cooperative_id: str | None = None,
+    notification_status: str | None = Query(None, alias="status", pattern="^(PENDING|SENT|FAILED|SKIPPED)$"),
     params: PageParams = Depends(page_params),
     db: Session = Depends(get_db),
     _: Principal = Depends(require_superadmin),

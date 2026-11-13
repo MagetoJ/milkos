@@ -2,7 +2,20 @@ import datetime
 import uuid
 
 from sqlalchemy import (
-    JSON, Boolean, Column, DateTime, Enum as SQLEnum, ForeignKey, Index, Integer, String, Text, Uuid, text,
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Uuid,
+    text,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship

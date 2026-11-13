@@ -6,10 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.core.utils import iso, num
 from app.domain.schemas.auth import UserRole
-from app.infrastructure.db.models.admin import AuditLog, Cooler, CoolerStatus, CooperativeApplication, SMSCreditPayment
+from app.infrastructure.db.models.admin import (
+    AuditLog,
+    Cooler,
+    CoolerStatus,
+    CooperativeApplication,
+    SMSCreditPayment,
+)
 from app.infrastructure.db.models.cooperative import Cooperative, CooperativeStatus
 from app.infrastructure.db.models.farmer import Farmer
-from app.infrastructure.db.models.operations import Collector, MilkCollection, QualityStatus
+from app.infrastructure.db.models.operations import (
+    Collector,
+    MilkCollection,
+    QualityStatus,
+)
 from app.infrastructure.db.models.user import User
 from app.services import audit, cooperatives, settings
 

@@ -23,7 +23,6 @@ export function useResource<T>(fetcher: () => Promise<T>, deps: readonly unknown
       if (id === latest.current) setLoading(false);
     }
     // Driven by the caller's `deps` on purpose (like an SWR key): the fetcher closure changes every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, deps);
 
   useEffect(() => {

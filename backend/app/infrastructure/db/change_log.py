@@ -10,8 +10,8 @@ synchronised tables, and new code must not either.
 """
 import datetime
 import uuid
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
 
 from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
@@ -20,12 +20,12 @@ from sqlalchemy.orm import Session
 @dataclass(frozen=True)
 class Tracked:
     entity_type: str
-    cooperative_of: Callable[[object], Optional[uuid.UUID]]
+    cooperative_of: Callable[[object], uuid.UUID | None]
     # Attribute changes that don't matter to devices (e.g. a login timestamp).
     ignored: frozenset = frozenset({"updated_at"})
     include: Callable[[object], bool] = lambda obj: True
     # Other entities whose serialised form embeds this one (a collector shows its user's name).
-    related: Optional[Callable[[Session, object], Iterable[tuple[str, uuid.UUID, uuid.UUID]]]] = None
+    related: Callable[[Session, object], Iterable[tuple[str, uuid.UUID, uuid.UUID]]] | None = None
 
 
 _REGISTRY: dict[type, Tracked] = {}
@@ -76,11 +76,15 @@ def _registry() -> dict[type, Tracked]:
     from app.infrastructure.db.models.cooperative import Cooperative
     from app.infrastructure.db.models.farmer import Farmer
     from app.infrastructure.db.models.notifications import Notification
-    from app.infrastructure.db.models.operations import CollectionBatch, Collector, MilkCollection
+    from app.infrastructure.db.models.operations import (
+        CollectionBatch,
+        Collector,
+        MilkCollection,
+    )
     from app.infrastructure.db.models.sensors import CoolerReading, SensorDevice
     from app.infrastructure.db.models.user import User
 
-    by_coop = lambda obj: obj.cooperative_id  # noqa: E731
+    by_coop = lambda obj: obj.cooperative_id
     _REGISTRY.update({
         Cooperative: Tracked("cooperative", lambda obj: obj.id),
         Farmer: Tracked("farmer", by_coop),
