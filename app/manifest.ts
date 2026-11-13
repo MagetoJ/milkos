@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+export const dynamic = 'force-static';
+
 /** Web app manifest: makes MilkOS installable (Android, desktop Chrome/Edge) and start in its own window. */
 export default function manifest(): MetadataRoute.Manifest {
   return {

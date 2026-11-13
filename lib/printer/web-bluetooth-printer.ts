@@ -1,57 +1,93 @@
-// lib/printer/web-bluetooth-printer.ts
+// Sends ESC/POS bytes to the paired Bluetooth receipt printer.
+//
+// The printer is chosen once (see printer-session.ts) and reused for every print: no pairing dialog each time.
+// Bytes go out in small, paced chunks: Bluetooth Low Energy carries about 20 bytes per write, and cheap printers
+// have tiny buffers, so writing as fast as possible garbles or truncates receipts.
+import { choosePrinter, dropCachedCharacteristic, ensureConnected, findPrinter, writableCharacteristic } from '@/lib/printer/printer-session';
 
-// Common Bluetooth GATT Service UUIDs used by standard 58mm/80mm ESC/POS printers
-const COMMON_PRINTER_SERVICES = [
-  '000018f0-0000-1000-8000-00805f9b34fb', // Serial Port Profile over BLE
-  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-];
+export interface ChunkOptions {
+  /** Bytes per write. 20 is safe on every BLE device. */
+  chunkSize?: number;
+  /** Pause between writes so the printer can empty its buffer. */
+  delayMs?: number;
+  /** Extra attempts for a write that fails only because the previous one is still in progress. */
+  retries?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
 
-export async function printToBluetoothPrinter(escposBytes: Uint8Array): Promise<boolean> {
-  if (!navigator.bluetooth) {
+const DEFAULTS = { chunkSize: 20, delayMs: 20, retries: 3 };
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const isBusyError = (e: unknown) => /already in progress|busy/i.test(e instanceof Error ? e.message : String(e));
+
+type Writable = Pick<BluetoothRemoteGATTCharacteristic, 'properties' | 'writeValueWithResponse' | 'writeValueWithoutResponse'>;
+
+/** Write `bytes` to a characteristic in order, in paced chunks. Resolves when the last chunk is written. */
+export async function writeInChunks(characteristic: Writable, bytes: Uint8Array, options: ChunkOptions = {}): Promise<void> {
+  const chunkSize = Math.max(1, Math.floor(options.chunkSize ?? DEFAULTS.chunkSize));
+  const delayMs = Math.max(0, options.delayMs ?? DEFAULTS.delayMs);
+  const retries = Math.max(0, options.retries ?? DEFAULTS.retries);
+  const sleep = options.sleep ?? defaultSleep;
+  // Acknowledged writes give the printer a chance to push back, so prefer them when it offers both.
+  const acknowledged = !!characteristic.properties.write;
+
+  for (let start = 0; start < bytes.length; start += chunkSize) {
+    const chunk = bytes.slice(start, start + chunkSize);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await (acknowledged ? characteristic.writeValueWithResponse(chunk) : characteristic.writeValueWithoutResponse(chunk));
+        break;
+      } catch (e) {
+        // Only the "still busy" refusal is retried: nothing was written, so no chunk is ever printed twice.
+        if (!isBusyError(e) || attempt >= retries) throw e;
+        await sleep(50 * (attempt + 1));
+      }
+    }
+    if (start + chunkSize < bytes.length && delayMs > 0) await sleep(delayMs);
+  }
+}
+
+async function send(escposBytes: Uint8Array, options: ChunkOptions): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.bluetooth) {
     throw new Error('Web Bluetooth is not supported on this browser.');
   }
 
-  // 1. Prompt browser dialog to pair printer
-  const device = await navigator.bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: COMMON_PRINTER_SERVICES,
-  });
+  // The remembered printer if there is one; otherwise one pairing dialog, after which it is remembered.
+  let device = await findPrinter();
+  const remembered = device !== null;
+  device ??= await choosePrinter();
 
-  const server = await device.gatt?.connect();
-  if (!server) throw new Error('Failed to connect to printer GATT server.');
-
-  // 2. Discover writable service & characteristic
-  let writeCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
-  const services = await server.getPrimaryServices();
-
-  for (const service of services) {
-    const characteristics = await service.getCharacteristics();
-    for (const char of characteristics) {
-      if (char.properties.write || char.properties.writeWithoutResponse) {
-        writeCharacteristic = char;
-        break;
-      }
-    }
-    if (writeCharacteristic) break;
+  let connection: Awaited<ReturnType<typeof ensureConnected>>;
+  try {
+    connection = await ensureConnected(device);
+  } catch {
+    throw new Error(
+      remembered
+        ? `Couldn’t reach the printer${device.name ? ` “${device.name}”` : ''}. Switch it on, bring it close and try again, or pair it again in Hardware settings.`
+        : 'Failed to connect to the printer.',
+    );
   }
 
-  if (!writeCharacteristic) {
-    throw new Error('No writable Bluetooth printer characteristic found.');
+  try {
+    const characteristic = await writableCharacteristic(device, connection.server);
+    await writeInChunks(characteristic, escposBytes, options);
+    return true;
+  } catch (e) {
+    dropCachedCharacteristic(); // the connection may be stale: look the characteristic up afresh next time
+    throw e;
+  } finally {
+    // Leave a connection somebody else opened (the hardware page) as it was; close the one opened for this print.
+    if (connection.openedHere && device.gatt?.connected) device.gatt.disconnect();
   }
+}
 
-  // 3. Send ESC/POS data in chunked packets (20-byte payload limit for BLE compatibility)
-  const CHUNK_SIZE = 20;
-  for (let i = 0; i < escposBytes.length; i += CHUNK_SIZE) {
-    const chunk = escposBytes.slice(i, i + CHUNK_SIZE);
-    if (writeCharacteristic.properties.writeWithoutResponse) {
-      await writeCharacteristic.writeValueWithoutResponse(chunk);
-    } else {
-      await writeCharacteristic.writeValueWithResponse(chunk);
-    }
-  }
+let queue: Promise<unknown> = Promise.resolve();
 
-  // Disconnect after transmission completes
-  device.gatt?.disconnect();
-  return true;
+/** Print the bytes on the paired printer. Prints are queued, so two quick taps never interleave their output. */
+export function printToBluetoothPrinter(escposBytes: Uint8Array, options: ChunkOptions = {}): Promise<boolean> {
+  const run = queue.then(
+    () => send(escposBytes, options),
+    () => send(escposBytes, options),
+  );
+  queue = run.catch(() => undefined);
+  return run;
 }

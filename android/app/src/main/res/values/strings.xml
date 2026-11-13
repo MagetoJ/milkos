@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MilkOS</string>
+    <string name="title_activity_main">MilkOS</string>
+    <string name="package_name">dairyflo.netlify.app</string>
+    <string name="custom_url_scheme">dairyflo.netlify.app</string>
+</resources>
