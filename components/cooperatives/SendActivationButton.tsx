@@ -41,7 +41,8 @@ export function SendActivationButton({
 
       setSent(true);
     } catch (err: unknown) {
-      setError(err.message || "Something went wrong");
+    const errMessage = err instanceof Error ? err.message : "Something went wrong";
+      setError(errMessage || "Something went wrong");
     } finally {
       setLoading(false);
     }

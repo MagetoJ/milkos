@@ -62,8 +62,9 @@ export function BluetoothSettings() {
 
       setStatusMessage(`Successfully paired ${deviceConfig.name}!`);
     } catch (err: unknown) {
-      if (err.name !== "NotFoundError") {
-        setStatusMessage(`Connection failed: ${err.message}`);
+    const errObj = err as { name?: string; message?: string };
+      if (errObj.name !== "NotFoundError") {
+        setStatusMessage(`Connection failed: ${errObj.message || "Unknown error"}`);
       } else {
         setStatusMessage("Scanning cancelled.");
       }
