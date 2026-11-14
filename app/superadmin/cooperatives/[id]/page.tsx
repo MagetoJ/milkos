@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { CooperativeDetailView } from '../../_components/views/cooperative-detail';
 
 export function generateStaticParams() {
-  return [];
+  return [{ id: '_' }];
 }
 
 export default async function CooperativePage({

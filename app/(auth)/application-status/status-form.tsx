@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PublicShell } from '@/components/public/public-shell';
 import { Labeled, Notice, field, primary } from '@/components/settings/settings-ui';
 import { formatDateTime } from '@/lib/format';
@@ -15,8 +16,10 @@ interface Status {
 }
 
 /** An applicant checks their cooperative application with its reference AND the email they applied with. */
-export function StatusForm({ initialReference = '' }: { initialReference?: string }) {
-  const [reference, setReference] = useState(initialReference);
+export function StatusForm() {
+  // `?reference=` is prefilled from the link on the "Application submitted" screen.
+  const ref = useSearchParams().get('reference');
+  const [reference, setReference] = useState(ref ? ref.slice(0, 64) : '');
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<Status | null>(null);
   const [error, setError] = useState('');

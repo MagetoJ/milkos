@@ -1,9 +1,12 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'dairyflo.netlify.app',
+  appId: 'com.milkos.app',
   appName: 'MilkOS',
-  webDir: 'public'
+  webDir: 'out',
+  server: {
+    androidScheme: 'https'
+  }
 };
 
 export default config;
