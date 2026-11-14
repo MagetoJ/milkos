@@ -528,6 +528,9 @@ export function SuccessStep({
           ))}
         </dl>
       </Card>
+      {!saved && syncStatus !== 'failed' && syncStatus !== 'conflict' && (
+        <p className="text-sm text-[#5E6B64]">SMS receipts queued until this collection syncs</p>
+      )}
       <div className="grid gap-3">
         <PrintReceiptsButton
           draft={draft}

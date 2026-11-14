@@ -14,6 +14,7 @@ from tests.test_batches import (
     batch_body,
     confirm,
     correction_body,
+    world,  # noqa: F401  (pytest fixture used by the tests below)
 )
 from tests.test_sync import grant_credits
 

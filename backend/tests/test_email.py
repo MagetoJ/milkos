@@ -59,7 +59,9 @@ def test_resend_network_error_is_retryable():
 
 
 def test_provider_selection(monkeypatch):
-    monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
+    # Ignore anything a developer's local .env put in the environment.
+    for var in ("EMAIL_PROVIDER", "RESEND_API_KEY", "EMAIL_FROM"):
+        monkeypatch.delenv(var, raising=False)
     assert email_gateway.get_provider() is None
     monkeypatch.setenv("EMAIL_PROVIDER", "resend")
     with pytest.raises(GatewayConfigurationError):
