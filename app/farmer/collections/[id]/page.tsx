@@ -1,7 +1,7 @@
 import { FarmerCollectionDetailClient } from './collection-detail-client';
 
 export function generateStaticParams() {
-  return [];
+  return [{ id: '_' }];
 }
 
 export default async function FarmerCollectionDetailPage({

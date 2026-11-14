@@ -1,9 +1,13 @@
+import { Suspense } from 'react';
 import { StatusForm } from './status-form';
 
 export const metadata = { title: 'Application status · MilkOS' };
 
-/** `?reference=` is prefilled from the link on the "Application submitted" screen. */
-export default async function ApplicationStatusPage({ searchParams }: { searchParams: Promise<{ reference?: string | string[] }> }) {
-  const { reference } = await searchParams;
-  return <StatusForm initialReference={typeof reference === 'string' ? reference.slice(0, 64) : ''} />;
+/** Static page: `?reference=` is read in the browser (see StatusForm), so the page also works in a static export. */
+export default function ApplicationStatusPage() {
+  return (
+    <Suspense>
+      <StatusForm />
+    </Suspense>
+  );
 }
