@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: 'MilkOS',
   webDir: 'out',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    url: 'https://milkos.onrender.com',
+    cleartext: true
   }
 };
 
