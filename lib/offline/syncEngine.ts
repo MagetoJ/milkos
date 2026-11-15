@@ -1,23 +1,27 @@
 import { userDb } from './db';
 
 const API_BASE =
-  (globalThis as { process?: { env?: { NEXT_PUBLIC_API_URL?: string } } }).process?.env?.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
   'http://localhost:8000/api/v1';
 
 export async function checkRealConnectivity(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`${API_BASE}/health`, {
-      method: 'HEAD',
+      method: 'GET',
       cache: 'no-store',
       signal: controller.signal,
     });
-    clearTimeout(timeout);
+
     return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

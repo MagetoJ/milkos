@@ -4,6 +4,7 @@
 // Bytes go out in small, paced chunks: Bluetooth Low Energy carries about 20 bytes per write, and cheap printers
 // have tiny buffers, so writing as fast as possible garbles or truncates receipts.
 import { choosePrinter, dropCachedCharacteristic, ensureConnected, findPrinter, writableCharacteristic } from '@/lib/printer/printer-session';
+import { isNative, printNative } from '@/lib/printer/native-printer';
 
 export interface ChunkOptions {
   /** Bytes per write. 20 is safe on every BLE device. */
@@ -47,6 +48,7 @@ export async function writeInChunks(characteristic: Writable, bytes: Uint8Array,
 }
 
 async function send(escposBytes: Uint8Array, options: ChunkOptions): Promise<boolean> {
+  if (isNative()) return printNative(escposBytes, options);
   if (typeof navigator === 'undefined' || !navigator.bluetooth) {
     throw new Error('Web Bluetooth is not supported on this browser.');
   }

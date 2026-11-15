@@ -35,6 +35,10 @@ class Settings:
     COOKIE_SECURE: bool = _flag("COOKIE_SECURE")
     GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+    GOOGLE_NATIVE_REDIRECT_URI: str = os.getenv(
+        "GOOGLE_NATIVE_REDIRECT_URI",
+        f"{APP_URL}/api/v1/auth/google/native/callback",
+    )
 
 
 # Main settings instance
@@ -76,3 +80,4 @@ CORS_ORIGINS = settings.CORS_ORIGINS
 COOKIE_SECURE = settings.COOKIE_SECURE
 GOOGLE_CLIENT_ID = settings.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
+GOOGLE_NATIVE_REDIRECT_URI = settings.GOOGLE_NATIVE_REDIRECT_URI
