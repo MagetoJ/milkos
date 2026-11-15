@@ -1,5 +1,6 @@
 'use client';
 
+import { Capacitor } from '@capacitor/core';
 import { useEffect, useState } from 'react';
 
 const BUILD = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev';
@@ -12,7 +13,7 @@ export function ServiceWorkerRegistrar() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production') return;
+    if (!('serviceWorker' in navigator) || process.env.NODE_ENV !== 'production' || Capacitor.isNativePlatform()) return;
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (reloading) return;

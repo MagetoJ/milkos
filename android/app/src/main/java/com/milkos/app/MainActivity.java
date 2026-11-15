@@ -1,4 +1,4 @@
-package dairyflo.netlify.app;
+package com.milkos.app;
 
 import com.getcapacitor.BridgeActivity;
 
