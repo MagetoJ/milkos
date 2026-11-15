@@ -63,7 +63,7 @@ def root():
     return {"service": "MilkOS API", "status": "ok"}
 
 
-@app.get("/api/v1/health", tags=["Health"])
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"], tags=["Health"])
 def health():
     """Unauthenticated liveness check used by devices to tell 'no network' from 'server unreachable'."""
     return {"status": "ok", "server_time": datetime.datetime.utcnow().isoformat() + "Z"}

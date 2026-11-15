@@ -2,7 +2,7 @@
 # Importing any model imports them all, so every table (and every ForeignKey target)
 # is registered on Base.metadata. Alembic's env.py relies on this too.
 from app.infrastructure.db.models import (  # noqa: F401
-    cooperative, user, admin, centre, farmer, membership, operations, sync, sensors, notifications, finance, inbox,
+    cooperative, user, admin, centre, farmer, membership, operations, sync, sensors, notifications, finance, inbox, native_oauth,
 )
 from app.infrastructure.db import change_log as _change_log, immutability as _immutability
 
