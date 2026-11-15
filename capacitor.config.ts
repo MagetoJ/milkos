@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'out',
   server: {
     androidScheme: 'https',
-    url: 'https://milkos.onrender.com',
+    url: 'https://dairyflo.netlify.app',
     cleartext: true
   }
 };
