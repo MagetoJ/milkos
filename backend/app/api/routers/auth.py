@@ -1,12 +1,13 @@
 """Signing in and out, account activation, password reset and the public cooperative application:
 /api/v1/auth. Rules live in app.services.authentication, accounts and onboarding; this module handles HTTP."""
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.api.cookies import clear_session_cookie, set_session_cookie
@@ -15,7 +16,12 @@ from app.api.dependencies.db import get_db
 from app.core import ratelimit
 from app.core.client import client_ip, user_agent
 from app.core.config import get_settings
-from app.core.security import constant_time_equals
+from app.core.security import (
+    access_token_for,
+    constant_time_equals,
+    generate_token,
+    hash_token,
+)
 from app.domain.exceptions import InvalidRequest, NotFound, ValidationFailed
 from app.domain.schemas.auth import (
     ActivationOtpVerify,
@@ -30,6 +36,9 @@ from app.domain.schemas.auth import (
 )
 from app.infrastructure.gateways import google_oauth
 from app.services import accounts, authentication, notifications, onboarding
+from app.services import mfa as mfa_service
+from app.infrastructure.db.models.native_oauth import NativeOAuthTransaction
+from app.infrastructure.db.models.user import User
 
 settings = get_settings()
 
@@ -204,6 +213,75 @@ async def sms_delivery_report(request: Request, db: Session = Depends(get_db)):
     state = str(form.get("status") or "")
     notifications.record_delivery_report(db, message_id, state == "Success", str(form.get("failureReason") or state) or None)
     return {"ok": True}
+
+
+
+
+# ---------------------------------------------------------------------------
+# Native Android Google OAuth (Authorization Code + PKCE)
+# HTTP handling stays here; OAuth and database operations live in the service.
+
+NATIVE_GOOGLE_CALLBACK = "com.milkos.app://auth/google/callback"
+
+
+class NativeGoogleTicketRequest(BaseModel):
+    ticket: str = Field(min_length=20, max_length=256)
+
+
+def _native_google_redirect(**params: str) -> RedirectResponse:
+    from urllib.parse import urlencode
+
+    query = urlencode(params)
+    return RedirectResponse(
+        url=f"{NATIVE_GOOGLE_CALLBACK}?{query}" if query else NATIVE_GOOGLE_CALLBACK,
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.post("/google/native/start")
+def google_native_start(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Start native Google sign-in."""
+    ratelimit.hit(request, "native-google-start", 10, 60)
+    from app.services import native_google_oauth
+
+    return native_google_oauth.start(db)
+
+
+@router.get("/google/native/callback")
+async def google_native_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Handle Google's callback and redirect to the Android app."""
+    ratelimit.hit(request, "native-google-callback", 20, 60)
+
+    if error:
+        return _native_google_redirect(error="google_signin_cancelled")
+
+    from app.services import native_google_oauth
+
+    result = await native_google_oauth.callback(db, code, state)
+    return _native_google_redirect(**result)
+
+
+@router.post("/google/native/exchange")
+def google_native_exchange(
+    payload: NativeGoogleTicketRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Exchange a one-time native ticket for a MilkOS access token."""
+    ratelimit.hit(request, "native-google-exchange", 20, 60)
+
+    from app.services import native_google_oauth
+
+    return native_google_oauth.exchange(db, payload.ticket)
 
 
 @router.get("/google/login")
