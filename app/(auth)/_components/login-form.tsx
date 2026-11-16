@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import { loginUser } from '../_api/auth-client';
 import { CHANGE_PASSWORD_PATH, getSession, homeFor, postLoginRedirect, saveToken, type UserRole } from '@/lib/auth';
 import { verifyMfaLogin } from '@/lib/account/api';
@@ -12,6 +14,8 @@ import { PasswordInput } from '@/components/ui/password-input';
 const inputClass =
   'h-11 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base sm:text-sm !text-white placeholder-zinc-400 outline-none ' +
   'focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/40 [-webkit-text-fill-color:white]';
+
+const GOOGLE_NEXT_KEY = 'milkos_google_oauth_next';
 
 export function LoginForm() {
   const [identifier, setIdentifier] = useState('');
@@ -34,12 +38,58 @@ export function LoginForm() {
     if (params.get('activated') === '1') setNotice('Your account is active. Sign in with your new password.');
     if (params.get('reset') === '1') setNotice('Your password has been changed. Sign in with the new one.');
     if (params.get('mfa_required') === '1') setNotice('Your account uses two-step verification. Sign in with your password to continue.');
+    if (params.get('google_error') === 'cancelled') setNotice('Google sign-in was cancelled.');
+    if (params.get('google_error') === 'failed') setError('Google sign-in failed. Please try again or sign in with your password.');
   }, []);
+
+  async function handleGoogleSignIn() {
+    setError('');
+    setErrorCode(undefined);
+    setNotice('');
+
+    // Preserve the existing website OAuth flow.
+    if (!Capacitor.isNativePlatform()) {
+      window.location.href = '/api/v1/auth/google/login';
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const next = new URLSearchParams(window.location.search).get('next');
+
+      if (next) {
+        sessionStorage.setItem(GOOGLE_NEXT_KEY, next);
+      } else {
+        sessionStorage.removeItem(GOOGLE_NEXT_KEY);
+      }
+
+      const response = await fetch('/api/v1/auth/google/native/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        authorization_url?: string;
+      };
+
+      if (!response.ok || !result.authorization_url) {
+        throw new Error('Unable to start Google sign-in.');
+      }
+
+      await Browser.open({ url: result.authorization_url });
+    } catch {
+      sessionStorage.removeItem(GOOGLE_NEXT_KEY);
+      setError('Unable to open Google sign-in. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function finish(token: string, role: UserRole, mustChange: boolean) {
     saveToken(token);
-    // Set this device up for offline use (best effort; the workspace retries if it fails).
-    await provisionDevice(token);
+    // Device provisioning is handled by bootSession after the redirect.
+    // Do not block successful login on offline-device registration.
     if (mustChange) return window.location.assign(CHANGE_PASSWORD_PATH);
     const next = new URLSearchParams(window.location.search).get('next');
     window.location.assign(postLoginRedirect(role, next));
@@ -120,7 +170,8 @@ export function LoginForm() {
     <div className="space-y-4 text-white">
       <button
         type="button"
-        onClick={() => { window.location.href = '/api/v1/auth/google/login'; }}
+        onClick={handleGoogleSignIn}
+        disabled={isSubmitting}
         className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-zinc-700 bg-zinc-900 text-sm font-medium text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
       >
         <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
@@ -129,7 +180,7 @@ export function LoginForm() {
           <path fill="#FBBC05" d="M5.6 14.8c-.3-.8-.4-1.8-.4-2.8s.1-2 .4-2.8L1.9 6.3C.7 8.8 0 10.3 0 12s.7 3.2 1.9 5.7l3.7-2.9z" />
           <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.2-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z" />
         </svg>
-        <span>Sign in with Google</span>
+        <span>{isSubmitting ? 'Opening Google…' : 'Sign in with Google'}</span>
       </button>
 
       <div className="relative my-4 flex items-center justify-center">

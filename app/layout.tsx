@@ -4,6 +4,7 @@ import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/offline/service-worker'
 import { BluetoothProvider } from '@/lib/bluetooth/bluetooth-context'
 import NativeApiOrigin from '@/components/native/native-api-origin'
+import NativeGoogleOAuth from '@/components/native/native-google-oauth'
 
 export const metadata: Metadata = {
   title: 'MilkOS — Collection OS',
@@ -35,6 +36,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.webmanifest" />
         <BluetoothProvider>
           <NativeApiOrigin />
+          <NativeGoogleOAuth />
           {children}
           <ServiceWorkerRegistrar />
           {process.env.NODE_ENV === 'production' && <Analytics />}
