@@ -16,8 +16,18 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            storeFile file(providers.gradleProperty("MILKOS_RELEASE_STORE_FILE").get())
+            storePassword providers.gradleProperty("MILKOS_RELEASE_STORE_PASSWORD").get()
+            keyAlias providers.gradleProperty("MILKOS_RELEASE_KEY_ALIAS").get()
+            keyPassword providers.gradleProperty("MILKOS_RELEASE_KEY_PASSWORD").get()
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
