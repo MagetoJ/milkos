@@ -1,82 +1,136 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { BarChart3, CloudOff, MessageSquareText, Milk, ShieldCheck, Snowflake } from 'lucide-react';
-import { getSession, homeFor } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 
-const FEATURES = [
-  { icon: Milk, title: 'Collections that add up', body: 'Weigh once, allocate to every farmer exactly, and send each one an SMS receipt.' },
-  { icon: CloudOff, title: 'Works offline', body: 'Collectors keep recording at the centre with no network; everything syncs when the phone reconnects.' },
-  { icon: Snowflake, title: 'Cooler monitoring', body: 'Temperature and volume alerts before milk is lost.' },
-  { icon: BarChart3, title: 'Payments and reports', body: 'Historical prices, corrections and reversals that never rewrite history.' },
-  { icon: MessageSquareText, title: 'SMS credits you can trust', body: 'One ledger: every credit bought, used or refunded is accounted for.' },
-  { icon: ShieldCheck, title: 'Secure accounts', body: 'Phone-verified activation, two-step verification and full audit trails.' },
-];
+const APK_URL = process.env.NEXT_PUBLIC_APK_URL ?? '/milkos.apk';
 
-/**
- * The public landing page. A signed-in user goes straight to their workspace (each section re-checks the role with
- * the backend); everyone else sees what MilkOS is and how to sign in or apply. No cooperative data is shown here.
- */
-export default function HomePage() {
-  const [checked, setChecked] = useState(false);
+export default function LandingPage() {
+  const router = useRouter();
+  const [isNative, setIsNative] = useState<boolean | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    const session = getSession();
-    if (session) {
-      window.location.replace(homeFor(session.role));
+    const cap = (window as any).Capacitor;
+    const native = cap?.isNativePlatform?.() ?? false;
+    setIsNative(native);
+    if (native) {
+      router.replace('/login');
       return;
     }
-    setChecked(true);
-  }, []);
 
-  if (!checked) {
-    return <div className="flex h-screen items-center justify-center text-sm text-mo-muted" role="status">Loading…</div>;
-  }
+    const ua = navigator.userAgent.toLowerCase();
+    setIsIOS(/iphone|ipad|ipod/.test(ua));
+
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as any).standalone === true;
+    setIsStandalone(standalone);
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, [router]);
+
+  const handleInstallPWA = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === 'accepted') setInstallPrompt(null);
+  };
+
+  if (isNative === null) return null;
 
   return (
-    <div className="min-h-dvh bg-mo-canvas text-mo-ink">
-      <header className="border-b border-mo-line bg-mo-surface">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <span className="inline-flex items-center gap-2 text-lg font-semibold text-mo-brand">
-            <span className="inline-flex size-9 items-center justify-center rounded-lg bg-mo-brand text-white"><Milk aria-hidden className="size-5" /></span>
-            MilkOS
-          </span>
-          <nav aria-label="Account" className="flex items-center gap-2">
-            <Link href="/application-status" className="hidden rounded-lg px-3 py-2 text-sm font-medium text-mo-muted hover:bg-mo-hover sm:inline-flex">Application status</Link>
-            <Link href="/login" className="inline-flex min-h-11 items-center rounded-lg bg-mo-brand px-4 text-sm font-semibold text-white hover:bg-mo-brand-strong">Sign in</Link>
-          </nav>
-        </div>
-      </header>
-      <main>
-        <section className="mx-auto max-w-6xl px-4 py-16 sm:py-24">
-          <p className="text-sm font-semibold uppercase tracking-wide text-mo-brand">The operating system for dairy cooperatives</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">Every litre, every farmer, every shilling accounted for.</h1>
-          <p className="mt-4 max-w-2xl text-lg text-mo-muted">
-            MilkOS runs milk collection, cooler monitoring, farmer payments and SMS receipts for cooperatives across Kenya, online or off.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/register" className="inline-flex min-h-12 items-center rounded-lg bg-mo-brand px-5 font-semibold text-white hover:bg-mo-brand-strong">Apply for your cooperative</Link>
-            <Link href="/login" className="inline-flex min-h-12 items-center rounded-lg border border-mo-line-strong bg-mo-surface px-5 font-semibold hover:bg-mo-hover">Sign in</Link>
-            <Link href="/activate-account" className="inline-flex min-h-12 items-center rounded-lg px-5 font-semibold text-mo-brand underline-offset-2 hover:underline">Activate an account</Link>
-          </div>
-        </section>
-        <section aria-labelledby="features" className="border-t border-mo-line bg-mo-surface">
-          <div className="mx-auto max-w-6xl px-4 py-14">
-            <h2 id="features" className="text-2xl font-semibold">Built for the collection centre and the office</h2>
-            <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map(({ icon: Icon, title, body }) => (
-                <li key={title} className="rounded-xl border border-mo-line p-5">
-                  <Icon aria-hidden className="size-6 text-mo-brand" />
-                  <h3 className="mt-3 font-semibold">{title}</h3>
-                  <p className="mt-1 text-sm text-mo-muted">{body}</p>
-                </li>
-              ))}
+    <main className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+      <div className="mx-auto max-w-4xl">
+        <header className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900">Welcome to MilkOS</h1>
+          <p className="text-gray-600 mt-2">Choose how you want to use MilkOS</p>
+        </header>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+              </svg>
+              <h2 className="text-xl font-semibold text-gray-900">Android App (APK)</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Best for collectors in the field. Full offline support, Bluetooth scale &amp; printer integration.
+            </p>
+            <ul className="text-sm text-gray-700 space-y-1 mb-6">
+              <li>✅ Works fully offline</li>
+              <li>✅ Bluetooth scale + receipt printer</li>
+              <li>✅ Native performance</li>
             </ul>
-          </div>
-        </section>
-      </main>
-      <footer className="mx-auto max-w-6xl px-4 py-8 text-sm text-mo-subtle">© MilkOS</footer>
-    </div>
+            <a
+              href={APK_URL}
+              download
+              className="mt-auto inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-white font-medium hover:bg-green-700 transition"
+            >
+              Download APK
+            </a>
+            <p className="text-xs text-gray-500 mt-3">
+              Requires Android 7.0+. Enable “Install from unknown sources”.
+            </p>
+          </section>
+
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+              </svg>
+              <h2 className="text-xl font-semibold text-gray-900">Web App (PWA)</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              No install required. Works in your browser and can be added to your home screen.
+            </p>
+            <ul className="text-sm text-gray-700 space-y-1 mb-6">
+              <li>✅ No installation needed</li>
+              <li>✅ Works on iOS, Android &amp; desktop</li>
+              <li>✅ Automatic updates</li>
+            </ul>
+
+            {installPrompt ? (
+              <button
+                onClick={handleInstallPWA}
+                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 transition"
+              >
+                Install PWA
+              </button>
+            ) : isIOS ? (
+              <div className="text-sm bg-gray-50 border border-gray-200 p-3 rounded-lg">
+                On iOS: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
+              </div>
+            ) : isStandalone ? (
+              <p className="text-sm text-green-600 flex items-center gap-1">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Already installed
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Open in Chrome or Safari to install this app.
+              </p>
+            )}
+
+            <a
+              href="/login"
+              className="mt-auto inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-800 font-medium hover:bg-gray-50 transition"
+            >
+              Continue in browser →
+            </a>
+          </section>
+        </div>
+      </div>
+    </main>
   );
 }
