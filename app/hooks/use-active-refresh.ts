@@ -1,5 +1,6 @@
 "use client";
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useRef } from "react";
 import { getSession, saveToken, clearSession } from "@/lib/auth";
 
@@ -42,7 +43,7 @@ export function useActiveRefresh() {
             }
           } else if (res.status === 401 || res.status === 403) {
             clearSession();
-            window.location.assign("/login");
+            navigate("/login");
           }
         } catch (error) {
           console.error("Token refresh failed due to network error", error);

@@ -1,6 +1,7 @@
 'use client';
 
 // Password reset from the SMS link (token in the URL fragment, never sent to a server, removed once read).
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { PublicShell } from '@/components/public/public-shell';
@@ -33,7 +34,7 @@ export default function ResetPasswordPage() {
     setError('');
     try {
       await completeReset(token!, password);
-      window.location.assign('/login?reset=1');
+      navigate('/login?reset=1');
     } catch (err) {
       if (err instanceof ApiError && err.status === 410) setState('EXPIRED');
       setError(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Try again in a moment.');

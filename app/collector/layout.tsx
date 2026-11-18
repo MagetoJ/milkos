@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { useActiveRefresh } from '@/app/hooks/use-active-refresh';
@@ -32,8 +33,8 @@ export default function CollectorLayout({ children }: { children: ReactNode }) {
     let cancelled = false;
     void bootSession(ROUTE_ACCESS['/collector']).then((boot) => {
       if (cancelled) return;
-      if (boot.mode === 'login') return window.location.replace(loginUrl(pathname));
-      if (boot.mode === 'wrong-role') return window.location.replace(homeFor(boot.role));
+      if (boot.mode === 'login') return navigate(loginUrl(pathname), 'replace');
+      if (boot.mode === 'wrong-role') return navigate(homeFor(boot.role), 'replace');
       if (boot.mode === 'blocked') return setState({ status: 'unavailable', message: boot.message });
       if (boot.mode === 'unreachable') {
         return setState({ status: 'unavailable', message: `Can't reach the MilkOS server. ${UNREACHABLE[boot.reason ?? 'missing']}` });
@@ -62,7 +63,7 @@ export default function CollectorLayout({ children }: { children: ReactNode }) {
     if (waiting > 0 && !window.confirm(`You have ${waiting} unsynced record${waiting === 1 ? '' : 's'}. They stay on this phone and sync after you sign in again. Sign out?`)) return;
     syncEngine.stop();
     await signOutEverywhere();
-    window.location.assign('/login');
+    navigate('/login');
   }
 
   if (state.status === 'checking') {

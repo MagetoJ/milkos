@@ -2,6 +2,7 @@
 
 // Forced password change. The server refuses every other request from an account flagged must_change_password
 // (backend/app/api/dependencies/auth.py); this page is where such an account lands after signing in.
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { PublicShell } from '@/components/public/public-shell';
 import { Labeled, Notice, PasswordChecklist, field, primary } from '@/components/settings/settings-ui';
@@ -18,7 +19,7 @@ export default function ChangePasswordPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!getSession()) window.location.replace(loginUrl('/change-password'));
+    if (!getSession()) navigate(loginUrl('/change-password'), 'replace');
   }, []);
 
   async function submit(e: FormEvent) {
@@ -29,7 +30,7 @@ export default function ChangePasswordPage() {
     try {
       await changePassword(current, next);
       const session = getSession();
-      window.location.assign(session ? homeFor(session.role) : '/login');
+      navigate(session ? homeFor(session.role) : '/login');
     } catch (err) {
       setError(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Try again in a moment.');
     } finally {

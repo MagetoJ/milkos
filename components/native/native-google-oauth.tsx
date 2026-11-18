@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useRef } from 'react';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
@@ -41,7 +42,7 @@ function redirectToLogin(reason: 'cancelled' | 'failed' | 'mfa') {
     params.set('google_error', reason);
   }
 
-  window.location.replace(`/login?${params.toString()}`);
+  navigate(`/login?${params.toString()}`, 'replace');
 }
 
 export default function NativeGoogleOAuth() {
@@ -137,11 +138,11 @@ export default function NativeGoogleOAuth() {
         sessionStorage.removeItem(NEXT_KEY);
 
         if (result.must_change_password) {
-          window.location.replace(CHANGE_PASSWORD_PATH);
+          navigate(CHANGE_PASSWORD_PATH, 'replace');
           return;
         }
 
-        window.location.replace(postLoginRedirect(result.role, next));
+        navigate(postLoginRedirect(result.role, next), 'replace');
       } catch {
         sessionStorage.removeItem(NEXT_KEY);
         redirectToLogin('failed');

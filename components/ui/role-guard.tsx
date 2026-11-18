@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { homeFor, loginUrl, type UserRole } from '@/lib/auth';
@@ -56,7 +57,7 @@ export function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
     if (waiting > 0 && !window.confirm(`You have ${waiting} unsynchronized record${waiting === 1 ? '' : 's'}. They stay on this device and sync after you sign in again. Sign out?`)) return;
     syncEngine.stop();
     await signOutEverywhere();
-    window.location.assign('/login');
+    navigate('/login');
   }
 
   if (state.status === 'unavailable' || state.status === 'blocked') {

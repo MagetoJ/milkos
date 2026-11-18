@@ -5,6 +5,7 @@
 //   server unreachable + valid      -> offline mode, as that user, until the session expires
 //   offline session
 //   server unreachable + none       -> "can't reach the server" (nobody gets in without having signed in online)
+import { navigate } from '@/lib/navigation';
 import { CHANGE_PASSWORD_PATH, clearSession, getSession, saveToken, TOKEN_KEY, type UserRole } from '@/lib/auth';
 import { reportRequest, probe, startConnectivity } from './connectivity';
 import { closeUserDb, deleteUserDb, openUserDb } from './db';
@@ -149,7 +150,7 @@ export async function bootSession(allowed: UserRole[]): Promise<Boot> {
       const me = result.me;
       if (me.must_change_password) {
         // The server refuses everything else until the password is replaced (backend/app/api/dependencies/auth.py).
-        if (typeof window !== 'undefined') window.location.replace(CHANGE_PASSWORD_PATH);
+        if (typeof window !== 'undefined') navigate(CHANGE_PASSWORD_PATH, 'replace');
         return { mode: 'blocked', message: 'Choose a new password to continue.' };
       }
       if (!allowed.includes(me.role)) return { mode: 'wrong-role', role: me.role };

@@ -1,6 +1,7 @@
 'use client';
 
 // Sync Center: the state of this device's data, what's waiting, what failed and what needs a decision.
+import { navigate } from '@/lib/navigation';
 import { useState } from 'react';
 import { Download, RefreshCw, Trash2 } from 'lucide-react';
 import { ConfirmationDialog, EmptyState, StatusBadge, primaryButton, secondaryButton } from '@/components/admin';
@@ -97,7 +98,7 @@ export function SyncCenter() {
   async function clearLocalData() {
     setConfirmClear(false);
     await signOutEverywhere();
-    window.location.assign('/login');
+    navigate('/login');
   }
 
   return (

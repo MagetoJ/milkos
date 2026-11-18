@@ -6,6 +6,7 @@
 // Each role sees only what applies to it (the server returns the role's notification catalog, the fields it may
 // edit and its work preferences, and re-checks every change). Profile and preferences are cached for offline
 // viewing; security actions are online-only and are disabled, never queued, without a connection.
+import { navigate } from '@/lib/navigation';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Laptop, LogOut, Phone, ShieldCheck, Smartphone } from 'lucide-react';
 import {
@@ -543,7 +544,7 @@ function SessionsSection({ online, deviceId }: { online: boolean; deviceId: stri
     if (!window.confirm(`Sign out ${describeDevice(s)}?`)) return;
     try {
       const r = await revokeSession(s.id, deviceId);
-      if (r.signed_out_here) return window.location.assign('/login');
+      if (r.signed_out_here) return navigate('/login');
       setNotice('That device was signed out.');
       load();
     } catch (e) {

@@ -1,6 +1,7 @@
 'use client';
 
 // The farmer's app: phone-first, simple, read-only for everything the cooperative controls.
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -25,8 +26,8 @@ export default function FarmerLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void bootSession(['FARMER']).then((boot) => {
-      if (boot.mode === 'login') return window.location.replace(loginUrl(pathname));
-      if (boot.mode === 'wrong-role') return window.location.replace(homeFor(boot.role));
+      if (boot.mode === 'login') return navigate(loginUrl(pathname), 'replace');
+      if (boot.mode === 'wrong-role') return navigate(homeFor(boot.role), 'replace');
       if (boot.mode === 'blocked') return setState({ status: 'blocked', message: boot.message });
       if (boot.mode === 'unreachable') return setState({ status: 'blocked', message: "Can't reach MilkOS. Check your connection and try again." });
       setState({ status: 'ok', name: boot.mode === 'online' ? boot.me.full_name : boot.session.user.full_name });
@@ -53,7 +54,7 @@ export default function FarmerLayout({ children }: { children: ReactNode }) {
           <p className="truncate text-sm font-semibold">{state.name}</p>
           <button
             type="button"
-            onClick={async () => { await signOutEverywhere(); window.location.assign('/login'); }}
+            onClick={async () => { await signOutEverywhere(); navigate('/login'); }}
             aria-label="Sign out"
             className="inline-flex size-11 items-center justify-center rounded-full text-mo-muted hover:bg-mo-hover"
           >

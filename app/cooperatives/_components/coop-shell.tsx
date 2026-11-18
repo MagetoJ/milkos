@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -53,7 +54,7 @@ export async function signOut() {
     syncEngine.stop();
     await signOutEverywhere();
   } finally {
-    window.location.assign('/login');
+    navigate('/login');
   }
 }
 
