@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { PublicShell } from '@/components/public/public-shell';
+import { GoogleSignupOnboarding } from '../_components/google-signup-onboarding';
 import { RegisterForm } from '../_components/register-form';
 
 export const metadata = { title: 'Apply · MilkOS' };
@@ -27,6 +28,7 @@ export default function RegisterPage() {
         </ul>
       }
     >
+      <GoogleSignupOnboarding />
       <RegisterForm />
     </PublicShell>
   );

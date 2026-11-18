@@ -246,3 +246,39 @@ def application_status(db: Session, reference: str, email: str) -> dict:
         "reviewed_at": record.reviewed_at.isoformat() + "Z" if record.reviewed_at else None,
         "rejection_reason": record.rejection_reason if record.status == REJECTED else None,
     }
+
+
+def submit_google_application(
+    db: Session,
+    google_email: str,
+    raw_fields: dict,
+) -> CooperativeApplication:
+    """Submit a Cooperative Admin application verified via Google Sign-Up.
+
+    Reuses CooperativeRegisterRequest validation and submit_application() so
+    only COOP_ADMIN accounts can self-register, entering PENDING_APPROVAL until
+    a Superadmin approves the cooperative.
+    """
+    generated_secret = f"Gg!{secrets.token_urlsafe(24)}9a"
+    payload = CooperativeRegisterRequest(
+        cooperative_name=raw_fields.get("cooperative_name", ""),
+        registration_number=raw_fields.get("registration_number", ""),
+        kra_pin=raw_fields.get("kra_pin", ""),
+        county=raw_fields.get("county", ""),
+        location=raw_fields.get("location", ""),
+        admin_full_name=raw_fields.get("admin_full_name", ""),
+        admin_email=google_email,
+        admin_phone=raw_fields.get("admin_phone", ""),
+        admin_id_number=raw_fields.get("admin_id_number", ""),
+        password=generated_secret,
+        estimated_daily_liters=raw_fields.get("estimated_daily_liters"),
+        initial_coolers_count=raw_fields.get("initial_coolers_count", 1),
+        additional_info=raw_fields.get("additional_info"),
+    )
+    application = submit_application(db, payload)
+    if application.admin_user_id:
+        admin = db.get(User, application.admin_user_id)
+        if admin is not None:
+            admin.password_set_at = None
+            db.commit()
+    return application
