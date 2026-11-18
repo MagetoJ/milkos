@@ -238,16 +238,37 @@ def _native_google_redirect(**params: str) -> RedirectResponse:
     )
 
 
+class NativeGoogleStartRequest(BaseModel):
+    intent: str = Field(default="login", pattern="^(login|signup)$")
+
+
+class GoogleCompleteSignupRequest(BaseModel):
+    onboarding_token: str = Field(min_length=20)
+    cooperative_name: str
+    registration_number: str
+    kra_pin: str
+    county: str
+    location: str
+    admin_full_name: str
+    admin_id_number: str
+    admin_phone: str
+    estimated_daily_liters: float | None = None
+    initial_coolers_count: int | None = 1
+    additional_info: str | None = None
+
+
 @router.post("/google/native/start")
 def google_native_start(
     request: Request,
+    payload: NativeGoogleStartRequest | None = None,
     db: Session = Depends(get_db),
 ):
-    """Start native Google sign-in."""
+    """Start native Google sign-in or COOP_ADMIN sign-up."""
     ratelimit.hit(request, "native-google-start", 10, 60)
     from app.services import native_google_oauth
 
-    return native_google_oauth.start(db)
+    intent = payload.intent if payload is not None else "login"
+    return native_google_oauth.start(db, intent=intent)
 
 
 @router.get("/google/native/callback")
@@ -284,6 +305,34 @@ def google_native_exchange(
     return native_google_oauth.exchange(db, payload.ticket)
 
 
+@router.post("/google/complete-signup", status_code=status.HTTP_201_CREATED)
+def google_complete_signup(
+    payload: GoogleCompleteSignupRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Complete Cooperative Administrator application after Google verification."""
+    ratelimit.hit(request, "google-complete-signup", 10, 60)
+    from app.services import native_google_oauth, onboarding
+
+    verified = native_google_oauth.verify_onboarding_token(payload.onboarding_token)
+    application = onboarding.submit_google_application(
+        db=db,
+        google_email=verified["email"],
+        raw_fields=payload.model_dump(exclude={"onboarding_token"}),
+    )
+    return {
+        "application_id": str(application.id),
+        "status": application.status,
+    }
+
+
+@router.get("/google/signup")
+def google_signup():
+    """Redirects prospective Cooperative Administrator to Google OAuth consent screen."""
+    return RedirectResponse(url=google_oauth.consent_url(state="signup"))
+
+
 @router.get("/google/login")
 def google_login():
     """Redirects user to Google OAuth consent screen."""
@@ -291,12 +340,33 @@ def google_login():
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, db: Session = Depends(get_db)):
-    """Handles Google OAuth callback, verifies user, and sets JWT session cookie."""
+async def google_callback(code: str, state: str | None = None, db: Session = Depends(get_db)):
+    """Handles Google OAuth callback for both Sign-In and COOP_ADMIN Sign-Up."""
+    from urllib.parse import quote
+    from app.infrastructure.db.models.user import User
+    from app.services import native_google_oauth
+
     try:
-        email = await google_oauth.email_for_code(code)
+        profile = await google_oauth.profile_for_code(code)
     except google_oauth.GoogleAuthError as exc:
         raise InvalidRequest(str(exc))
+
+    email = profile["email"]
+    existing_user = db.query(User).filter(User.email == email).first()
+
+    if existing_user is None and state == "signup":
+        onboarding_token = native_google_oauth.create_onboarding_token(
+            email=email,
+            name=profile["name"],
+        )
+        redirect_url = (
+            f"{google_oauth.APP_URL}/register?google_onboarding=1"
+            f"&token={quote(onboarding_token)}"
+            f"&email={quote(email)}"
+            f"&name={quote(profile['name'])}"
+        )
+        return RedirectResponse(url=redirect_url)
+
     sign_in = authentication.google_login(db, email)
     if sign_in.token is None:
         # Google proves the email address, not the second factor: finish with password + code instead.

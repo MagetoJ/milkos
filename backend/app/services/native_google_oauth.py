@@ -3,6 +3,7 @@
 Database operations and OAuth business rules live here; the API router
 only handles HTTP requests, rate limits and redirects.
 """
+import json
 import logging
 from datetime import datetime, timedelta
 
@@ -25,11 +26,49 @@ logger = logging.getLogger(__name__)
 
 NATIVE_OAUTH_TTL_SECONDS = 600
 NATIVE_TICKET_TTL_SECONDS = 120
+ONBOARDING_TOKEN_TTL_SECONDS = 1200
 
 
-def start(db: Session) -> dict:
+def create_onboarding_token(email: str, name: str) -> str:
+    """Encrypt a short-lived Google identity payload for COOP_ADMIN onboarding."""
+    payload = {
+        "purpose": "google_coop_admin_signup",
+        "email": email.strip().lower(),
+        "name": name.strip(),
+        "exp": int((datetime.utcnow() + timedelta(seconds=ONBOARDING_TOKEN_TTL_SECONDS)).timestamp()),
+    }
+    return mfa_service.encrypt(json.dumps(payload))
+
+
+def verify_onboarding_token(token: str) -> dict[str, str]:
+    """Decrypt and validate a Google COOP_ADMIN onboarding token."""
+    try:
+        raw = mfa_service.decrypt(token)
+        if not raw:
+            raise InvalidRequest("Google sign-up session is invalid. Please try again.")
+        payload = json.loads(raw)
+    except InvalidRequest:
+        raise
+    except Exception as exc:
+        raise InvalidRequest("Google sign-up session is invalid. Please try again.") from exc
+
+    if payload.get("purpose") != "google_coop_admin_signup" or not payload.get("email"):
+        raise InvalidRequest("Invalid Google sign-up token.")
+
+    exp = int(payload.get("exp") or 0)
+    if datetime.utcnow().timestamp() > exp:
+        raise InvalidRequest("Your Google sign-up session expired. Please click Sign up with Google again.")
+
+    return {
+        "email": str(payload["email"]).strip().lower(),
+        "name": str(payload.get("name") or "").strip(),
+    }
+
+
+def start(db: Session, intent: str = "login") -> dict:
     """Create a short-lived PKCE transaction and return Google's consent URL."""
-    state = google_oauth.generate_state()
+    raw_state = google_oauth.generate_state()
+    state = f"signup.{raw_state}" if intent == "signup" else raw_state
     verifier, challenge = google_oauth.generate_pkce_pair()
 
     # Validate OAuth configuration before persisting a transaction.
@@ -51,10 +90,11 @@ def start(db: Session) -> dict:
 
 
 async def callback(db: Session, code: str | None, state: str | None) -> dict:
-    """Consume OAuth state, verify Google identity and issue a one-time ticket."""
+    """Consume OAuth state, verify Google identity and issue a ticket or onboarding token."""
     if not code or not state:
         return {"error": "google_signin_cancelled"}
 
+    is_signup = state.startswith("signup.")
     state_hash = hash_token(state)
     now = datetime.utcnow()
 
@@ -90,12 +130,23 @@ async def callback(db: Session, code: str | None, state: str | None) -> dict:
         if not verifier:
             return {"error": "google_signin_failed"}
 
-        email = await google_oauth.email_for_native_code(
+        profile = await google_oauth.profile_for_native_code(
             code=code,
             code_verifier=verifier,
         )
+        email = profile["email"]
 
-        # This existing service enforces account status and MFA rules.
+        # New Google account during Cooperative Admin Sign-Up -> route to onboarding form
+        existing_user = db.query(User).filter(User.email == email).first()
+        if existing_user is None and is_signup:
+            onboarding_token = create_onboarding_token(email=email, name=profile["name"])
+            return {
+                "onboarding_token": onboarding_token,
+                "email": email,
+                "name": profile["name"],
+            }
+
+        # Existing account (approved COOP_ADMIN, pending application, or coop-created user)
         sign_in = authentication.google_login(db, email)
 
     except google_oauth.GoogleAuthError:
@@ -103,7 +154,7 @@ async def callback(db: Session, code: str | None, state: str | None) -> dict:
         return {"error": "google_signin_failed"}
     except Exception:
         db.rollback()
-        logger.exception("Native Google OAuth sign-in failed")
+        logger.exception("Native Google OAuth failed")
         return {"error": "google_signin_failed"}
 
     # Google identity does not bypass the account's second factor.

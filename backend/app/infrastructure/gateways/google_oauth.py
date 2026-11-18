@@ -47,14 +47,16 @@ def generate_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def consent_url() -> str:
-    """Existing website OAuth consent URL."""
+def consent_url(state: str | None = None) -> str:
+    """Website OAuth consent URL (supports optional state for sign-up vs sign-in)."""
     params = {
         "response_type": "code",
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "scope": "openid email profile",
     }
+    if state:
+        params["state"] = state
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
@@ -75,12 +77,12 @@ def native_consent_url(state: str, code_challenge: str) -> str:
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
-async def _email_for_code(
+async def _profile_for_code(
     code: str,
     redirect_uri: str,
     code_verifier: str | None = None,
     client: httpx.AsyncClient | None = None,
-) -> str:
+) -> dict[str, str]:
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise GoogleAuthError("Google sign-in is not configured")
 
@@ -126,7 +128,9 @@ async def _email_for_code(
         if not email or not verified:
             raise GoogleAuthError("Google account email is missing or not verified")
 
-        return email
+        full_name = (profile.get("name") or email.split("@")[0]).strip()
+        sub = str(profile.get("id") or profile.get("sub") or "")
+        return {"email": email, "name": full_name, "sub": sub}
 
     except GoogleAuthError:
         raise
@@ -137,16 +141,39 @@ async def _email_for_code(
             await http.aclose()
 
 
+async def profile_for_code(
+    code: str,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, str]:
+    """Exchange website authorization code for verified Google profile."""
+    return await _profile_for_code(
+        code=code,
+        redirect_uri=GOOGLE_REDIRECT_URI,
+        client=client,
+    )
+
+
+async def profile_for_native_code(
+    code: str,
+    code_verifier: str,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, str]:
+    """Exchange native PKCE authorization code for verified Google profile."""
+    return await _profile_for_code(
+        code=code,
+        redirect_uri=GOOGLE_NATIVE_REDIRECT_URI,
+        code_verifier=code_verifier,
+        client=client,
+    )
+
+
 async def email_for_code(
     code: str,
     client: httpx.AsyncClient | None = None,
 ) -> str:
     """Existing website authorization-code exchange."""
-    return await _email_for_code(
-        code=code,
-        redirect_uri=GOOGLE_REDIRECT_URI,
-        client=client,
-    )
+    profile = await profile_for_code(code=code, client=client)
+    return profile["email"]
 
 
 async def email_for_native_code(
@@ -155,9 +182,9 @@ async def email_for_native_code(
     client: httpx.AsyncClient | None = None,
 ) -> str:
     """Exchange a native authorization code using its PKCE verifier."""
-    return await _email_for_code(
+    profile = await profile_for_native_code(
         code=code,
-        redirect_uri=GOOGLE_NATIVE_REDIRECT_URI,
         code_verifier=code_verifier,
         client=client,
     )
+    return profile["email"]

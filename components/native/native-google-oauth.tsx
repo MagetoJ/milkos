@@ -82,6 +82,20 @@ export default function NativeGoogleOAuth() {
 
       const params = callback.searchParams;
 
+      // New COOP_ADMIN Google Sign-Up callback -> route to /register onboarding completion
+      const onboardingToken = params.get('onboarding_token');
+      if (onboardingToken && onboardingToken.length >= 20) {
+        sessionStorage.removeItem(NEXT_KEY);
+        const registerParams = new URLSearchParams({
+          google_onboarding: '1',
+          token: onboardingToken,
+          email: params.get('email') || '',
+          name: params.get('name') || '',
+        });
+        navigate(`/register?${registerParams.toString()}`, 'replace');
+        return;
+      }
+
       if (params.get('mfa_required') === '1') {
         sessionStorage.removeItem(NEXT_KEY);
         redirectToLogin('mfa');
