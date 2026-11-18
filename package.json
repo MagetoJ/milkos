@@ -16,10 +16,10 @@
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@capacitor-community/bluetooth-le": "^8.3.0",
-    "@capacitor/android": "^8.6.0",
+    "@capacitor/android": "^8.6.2",
     "@capacitor/app": "^8.1.2",
     "@capacitor/browser": "^8.0.5",
-    "@capacitor/core": "^8.6.0",
+    "@capacitor/core": "^8.6.2",
     "@capacitor/network": "^8.0.1",
     "@react-email/components": "^1.0.12",
     "@supabase/ssr": "^0.12.7",
@@ -40,7 +40,7 @@
     "uuid": "^14.0.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.0",
+    "@capacitor/cli": "^8.6.2",
     "@next/eslint-plugin-next": "^16.4.6",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24",
