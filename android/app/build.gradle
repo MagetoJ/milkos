@@ -12,22 +12,28 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp\#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    // Release signing is optional so debug builds and CI work without the keystore.
+    // Provide MILKOS_RELEASE_* in ~/.gradle/gradle.properties or as -P flags (see ANDROID.md).
+    def hasReleaseKey = providers.gradleProperty("MILKOS_RELEASE_STORE_FILE").isPresent()
     signingConfigs {
-        release {
-            storeFile file(providers.gradleProperty("MILKOS_RELEASE_STORE_FILE").get())
-            storePassword providers.gradleProperty("MILKOS_RELEASE_STORE_PASSWORD").get()
-            keyAlias providers.gradleProperty("MILKOS_RELEASE_KEY_ALIAS").get()
-            keyPassword providers.gradleProperty("MILKOS_RELEASE_KEY_PASSWORD").get()
+        if (hasReleaseKey) {
+            release {
+                storeFile file(providers.gradleProperty("MILKOS_RELEASE_STORE_FILE").get())
+                storePassword providers.gradleProperty("MILKOS_RELEASE_STORE_PASSWORD").get()
+                keyAlias providers.gradleProperty("MILKOS_RELEASE_KEY_ALIAS").get()
+                keyPassword providers.gradleProperty("MILKOS_RELEASE_KEY_PASSWORD").get()
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (hasReleaseKey) { signingConfig signingConfigs.release }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

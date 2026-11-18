@@ -10,7 +10,8 @@ def _flag(name: str, default: str = "false", true_values: frozenset = frozenset(
 
 
 # Always allowed, even if CORS_ORIGINS is set in the environment.
-_REQUIRED_CORS_ORIGINS = ["https://dairyflo.netlify.app"]
+# https://localhost is the origin of the Android (Capacitor) WebView.
+_REQUIRED_CORS_ORIGINS = ["https://dairyflo.netlify.app", "https://localhost"]
 _DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
 
 
