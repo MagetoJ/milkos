@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Capacitor } from '@capacitor/core';
@@ -30,7 +31,7 @@ export function LoginForm() {
   useEffect(() => {
     const session = getSession();
     if (session) {
-      window.location.replace(homeFor(session.role));
+      navigate(homeFor(session.role), 'replace');
       return;
     }
     const params = new URLSearchParams(window.location.search);
@@ -90,9 +91,9 @@ export function LoginForm() {
     saveToken(token);
     // Device provisioning is handled by bootSession after the redirect.
     // Do not block successful login on offline-device registration.
-    if (mustChange) return window.location.assign(CHANGE_PASSWORD_PATH);
+    if (mustChange) return navigate(CHANGE_PASSWORD_PATH);
     const next = new URLSearchParams(window.location.search).get('next');
-    window.location.assign(postLoginRedirect(role, next));
+    navigate(postLoginRedirect(role, next));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -6,12 +6,12 @@ const config: CapacitorConfig = {
   appId: 'com.milkos.app',
   appName: 'MilkOS',
   webDir: 'out',
-  server: { 
-    androidScheme: local ? 'http' : 'https', 
-    cleartext: true 
+  server: {
+    androidScheme: local ? 'http' : 'https',
+    cleartext: local,
   },
   android: {
-    allowMixedContent: true
+    allowMixedContent: local,
   },
   plugins: {
     CapacitorHttp: {

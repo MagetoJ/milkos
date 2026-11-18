@@ -1,3 +1,4 @@
+import { navigate } from '@/lib/navigation';
 // Single source of truth for sessions and role-based redirects.
 // Every redirect in the app (login form, `/`, route guards, logout) goes through here.
 
@@ -109,5 +110,5 @@ export function loginUrl(returnTo?: string): string {
 
 export function logout() {
   clearSession();
-  window.location.assign(LOGIN_PATH);
+  navigate(LOGIN_PATH);
 }

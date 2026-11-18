@@ -2,6 +2,7 @@
 // Relative URLs go through the Next.js rewrite (same origin), so the HttpOnly session cookie is sent;
 // the bearer token from localStorage is added too. The backend is the authority on every permission:
 // nothing here decides what a user may see or do.
+import { navigate } from '@/lib/navigation';
 import { TOKEN_KEY, clearSession, loginUrl } from '@/lib/auth';
 import { refreshWithDeviceSession } from '@/lib/offline/auth';
 import { reportRequest } from '@/lib/offline/connectivity';
@@ -77,7 +78,7 @@ export function createApi(baseUrl: string) {
 
     if (res.status === 401) {
       clearSession();
-      window.location.replace(loginUrl(window.location.pathname));
+      navigate(loginUrl(window.location.pathname), 'replace');
       throw new ApiError(401, 'Your session has expired. Sign in again.');
     }
 

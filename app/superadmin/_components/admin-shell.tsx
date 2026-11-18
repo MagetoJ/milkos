@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -41,7 +42,7 @@ async function signOut() {
   try {
     await signOutEverywhere(); // also ends this device's offline session and removes cached data
   } finally {
-    window.location.assign('/login');
+    navigate('/login');
   }
 }
 

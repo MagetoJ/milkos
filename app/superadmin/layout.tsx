@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { AdminShell } from './_components/admin-shell';
 import { SuperadminDataProvider } from './_components/superadmin-data';
@@ -33,8 +34,8 @@ export default function SuperadminLayout({ children }: { children: ReactNode }) 
     let cancelled = false;
     void bootSession(['SUPER_ADMIN']).then((boot) => {
       if (cancelled) return;
-      if (boot.mode === 'login' || boot.mode === 'blocked') return window.location.replace(loginUrl(window.location.pathname));
-      if (boot.mode === 'wrong-role') return window.location.replace(homeFor(boot.role));
+      if (boot.mode === 'login' || boot.mode === 'blocked') return navigate(loginUrl(window.location.pathname), 'replace');
+      if (boot.mode === 'wrong-role') return navigate(homeFor(boot.role), 'replace');
       if (boot.mode === 'unreachable') return setState({ status: 'unreachable' });
       if (boot.mode === 'offline') return setState({ status: 'cached', session: boot.session });
       setState({ status: 'ok', email: boot.me.email, userId: boot.offline?.userId ?? null });

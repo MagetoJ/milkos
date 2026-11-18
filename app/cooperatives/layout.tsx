@@ -1,5 +1,6 @@
 'use client';
 
+import { navigate } from '@/lib/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { useActiveRefresh } from '@/app/hooks/use-active-refresh';
@@ -55,8 +56,8 @@ export default function CooperativesLayout({ children }: { children: ReactNode }
   useEffect(() => {
     void (async () => {
       const boot = await bootSession(['COOP_ADMIN', 'MANAGER']);
-      if (boot.mode === 'login') return window.location.replace(loginUrl(pathname));
-      if (boot.mode === 'wrong-role') return window.location.replace(homeFor(boot.role));
+      if (boot.mode === 'login') return navigate(loginUrl(pathname), 'replace');
+      if (boot.mode === 'wrong-role') return navigate(homeFor(boot.role), 'replace');
       if (boot.mode === 'blocked') return setState({ status: 'blocked', message: boot.message });
       if (boot.mode === 'unreachable') return setState({ status: 'unreachable', reason: boot.reason });
       await loadOverview(boot);
