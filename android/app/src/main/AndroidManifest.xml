@@ -1,6 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- Network, Bluetooth (scale/sensor pairing) and notifications -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -19,7 +17,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-
         <activity
             android:name="com.milkos.app.MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
@@ -27,7 +24,6 @@
             android:label="@string/app_name"
             android:launchMode="singleTask"
             android:theme="@style/AppTheme.NoActionBar">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -47,10 +43,7 @@
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.data.providers.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
+            <meta-data android:name="android.data.providers.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
     </application>
-
 </manifest>
