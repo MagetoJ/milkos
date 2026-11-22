@@ -188,3 +188,9 @@ def logout(db: Session, token: str | None, ip=None, ua=None) -> None:
     if user is not None:
         security_events.record(db, "LOGOUT", user=user, ip_address=ip, user_agent=ua)
         db.commit()
+
+
+def get_user_by_email(db: Session, email: str):
+    from app.infrastructure.db.models.user import User
+
+    return db.query(User).filter(User.email == email).first()
