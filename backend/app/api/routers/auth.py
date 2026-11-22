@@ -343,7 +343,6 @@ def google_login():
 async def google_callback(code: str, state: str | None = None, db: Session = Depends(get_db)):
     """Handles Google OAuth callback for both Sign-In and COOP_ADMIN Sign-Up."""
     from urllib.parse import quote
-    from app.infrastructure.db.models.user import User
     from app.services import native_google_oauth
 
     try:
@@ -352,7 +351,7 @@ async def google_callback(code: str, state: str | None = None, db: Session = Dep
         raise InvalidRequest(str(exc))
 
     email = profile["email"]
-    existing_user = db.query(User).filter(User.email == email).first()
+    existing_user = authentication.get_user_by_email(db, email)
 
     if existing_user is None and state == "signup":
         onboarding_token = native_google_oauth.create_onboarding_token(
